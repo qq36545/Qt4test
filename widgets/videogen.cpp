@@ -9,6 +9,8 @@
 #include <QHeaderView>
 #include <QDialog>
 #include <QFormLayout>
+#include <QResizeEvent>
+#include <QTabBar>
 
 // VideoGenWidget 实现
 VideoGenWidget::VideoGenWidget(QWidget *parent)
@@ -41,6 +43,43 @@ void VideoGenWidget::setupUI()
     tabWidget->addTab(historyTab, "生成历史记录");
 
     mainLayout->addWidget(tabWidget);
+
+    // 初始化 tab 宽度
+    updateTabWidths();
+}
+
+void VideoGenWidget::resizeEvent(QResizeEvent *event)
+{
+    QWidget::resizeEvent(event);
+    updateTabWidths();
+}
+
+void VideoGenWidget::updateTabWidths()
+{
+    if (!tabWidget) return;
+
+    // 获取当前窗口宽度
+    int windowWidth = width();
+
+    // 计算所有 tab 的总宽度（窗口宽度的 60%）
+    int totalTabWidth = windowWidth * 0.6;
+
+    // 获取 tab 数量
+    int tabCount = tabWidget->count();
+    if (tabCount == 0) return;
+
+    // 计算每个 tab 的宽度
+    int tabWidth = totalTabWidth / tabCount;
+
+    // 设置 tab 样式
+    QString tabStyle = QString(
+        "QTabBar::tab {"
+        "    width: %1px;"
+        "    text-align: center;"
+        "}"
+    ).arg(tabWidth);
+
+    tabWidget->tabBar()->setStyleSheet(tabStyle);
 }
 
 // VideoSingleTab 实现

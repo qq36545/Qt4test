@@ -9,10 +9,12 @@
 #include <QLabel>
 #include <QApplication>
 #include <QScreen>
+#include <QSettings>
 
 MainWindow::MainWindow(QWidget *parent)
-    : QMainWindow(parent)
+    : QMainWindow(parent), currentTheme(Dark)
 {
+    loadTheme();
     setupFonts();
     setupUI();
     applyStyles();
@@ -90,12 +92,18 @@ void MainWindow::setupSidebar()
     historyButton->setFixedSize(60, 60);
     historyButton->setToolTip("历史记录");
 
+    themeButton = new QPushButton(currentTheme == Dark ? "🌙" : "☀️");
+    themeButton->setObjectName("sidebarButton");
+    themeButton->setFixedSize(60, 60);
+    themeButton->setToolTip("切换主题");
+
     // 连接信号
     connect(videoButton, &QPushButton::clicked, this, &MainWindow::showVideoGen);
     connect(imageButton, &QPushButton::clicked, this, &MainWindow::showImageGen);
     connect(configButton, &QPushButton::clicked, this, &MainWindow::showConfig);
     connect(aboutButton, &QPushButton::clicked, this, &MainWindow::showAbout);
     connect(historyButton, &QPushButton::clicked, this, &MainWindow::showHistory);
+    connect(themeButton, &QPushButton::clicked, this, &MainWindow::toggleTheme);
 
     // 添加到布局
     sidebarLayout->addWidget(videoButton);
@@ -104,6 +112,7 @@ void MainWindow::setupSidebar()
     sidebarLayout->addWidget(aboutButton);
     sidebarLayout->addWidget(historyButton);
     sidebarLayout->addStretch();
+    sidebarLayout->addWidget(themeButton);
 }
 
 void MainWindow::setupContentArea()
@@ -185,13 +194,45 @@ void MainWindow::showHistory()
 
 void MainWindow::applyStyles()
 {
-    // 加载 QSS 样式表
-    QFile styleFile(":/styles/glassmorphism.qss");
-    if (styleFile.open(QFile::ReadOnly)) {
-        QString styleSheet = QLatin1String(styleFile.readAll());
+    // 根据当前主题加载对应的 QSS 文件
+    QString styleFile = (currentTheme == Dark)
+        ? ":/styles/glassmorphism.qss"
+        : ":/styles/light.qss";
+
+    QFile file(styleFile);
+    if (file.open(QFile::ReadOnly)) {
+        QString styleSheet = QLatin1String(file.readAll());
         setStyleSheet(styleSheet);
-        styleFile.close();
+        file.close();
     }
+}
+
+void MainWindow::toggleTheme()
+{
+    // 切换主题
+    currentTheme = (currentTheme == Dark) ? Light : Dark;
+
+    // 更新主题按钮图标
+    themeButton->setText(currentTheme == Dark ? "🌙" : "☀️");
+
+    // 重新应用样式
+    applyStyles();
+
+    // 保存主题偏好
+    saveTheme();
+}
+
+void MainWindow::loadTheme()
+{
+    QSettings settings("ChickenAI", "Theme");
+    int theme = settings.value("currentTheme", Dark).toInt();
+    currentTheme = static_cast<Theme>(theme);
+}
+
+void MainWindow::saveTheme()
+{
+    QSettings settings("ChickenAI", "Theme");
+    settings.setValue("currentTheme", static_cast<int>(currentTheme));
 }
 
 double MainWindow::calculateScaleFactor()

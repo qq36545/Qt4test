@@ -27,6 +27,7 @@ private slots:
     void showConfig();
     void showAbout();
     void showHistory();
+    void toggleTheme();
 
 private:
     void setupUI();
@@ -35,6 +36,12 @@ private:
     void setupFonts();
     void applyStyles();
     double calculateScaleFactor();
+    void loadTheme();
+    void saveTheme();
+
+    // 主题相关
+    enum Theme { Dark, Light };
+    Theme currentTheme;
 
     // UI 组件
     QWidget *centralWidget;
@@ -47,6 +54,7 @@ private:
     QPushButton *configButton;
     QPushButton *aboutButton;
     QPushButton *historyButton;
+    QPushButton *themeButton;
 
     // 内容页面
     VideoGenWidget *videoGenWidget;

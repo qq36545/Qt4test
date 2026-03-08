@@ -2,5 +2,7 @@
 <RCC version="1.0">
     <qresource>
         <file>styles/glassmorphism.qss</file>
+        <file>styles/light.qss</file>
+        <file>resources/logo.png</file>
     </qresource>
 </RCC>

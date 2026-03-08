@@ -1,6 +1,10 @@
 #include "imagegen.h"
+#include "../database/dbmanager.h"
 #include <QMessageBox>
+#include <QResizeEvent>
+#include <QTabBar>
 
+// ImageGenWidget 实现
 ImageGenWidget::ImageGenWidget(QWidget *parent)
     : QWidget(parent)
 {
@@ -13,97 +17,134 @@ void ImageGenWidget::setupUI()
     mainLayout->setContentsMargins(40, 40, 40, 40);
     mainLayout->setSpacing(20);
 
-    // 标题
     QLabel *titleLabel = new QLabel("🖼️ AI 图片生成");
-    titleLabel->setObjectName("titleLabel");
-    titleLabel->setStyleSheet("font-size: 28px; font-weight: 600; color: #F8FAFC;");
+    titleLabel->setStyleSheet("font-size: 28px; font-weight: bold; color: #F8FAFC;");
     mainLayout->addWidget(titleLabel);
 
-    // 提示词输入
+    tabWidget = new QTabWidget();
+    singleTab = new ImageSingleTab();
+    batchTab = new ImageBatchTab();
+    historyTab = new ImageHistoryTab();
+
+    tabWidget->addTab(singleTab, "AI图片生成-单个");
+    tabWidget->addTab(batchTab, "AI图片生成-批量");
+    tabWidget->addTab(historyTab, "生成历史记录");
+
+    mainLayout->addWidget(tabWidget);
+
+    // 初始化 tab 宽度
+    updateTabWidths();
+}
+
+void ImageGenWidget::resizeEvent(QResizeEvent *event)
+{
+    QWidget::resizeEvent(event);
+    updateTabWidths();
+}
+
+void ImageGenWidget::updateTabWidths()
+{
+    if (!tabWidget) return;
+
+    // 获取当前窗口宽度
+    int windowWidth = width();
+
+    // 计算所有 tab 的总宽度（窗口宽度的 60%）
+    int totalTabWidth = windowWidth * 0.6;
+
+    // 获取 tab 数量
+    int tabCount = tabWidget->count();
+    if (tabCount == 0) return;
+
+    // 计算每个 tab 的宽度
+    int tabWidth = totalTabWidth / tabCount;
+
+    // 设置 tab 样式
+    QString tabStyle = QString(
+        "QTabBar::tab {"
+        "    width: %1px;"
+        "    text-align: center;"
+        "}"
+    ).arg(tabWidth);
+
+    tabWidget->tabBar()->setStyleSheet(tabStyle);
+}
+
+// ImageSingleTab 实现（简化版）
+ImageSingleTab::ImageSingleTab(QWidget *parent) : QWidget(parent)
+{
+    setupUI();
+    loadApiKeys();
+}
+
+void ImageSingleTab::setupUI()
+{
+    QVBoxLayout *mainLayout = new QVBoxLayout(this);
+    mainLayout->setContentsMargins(20, 20, 20, 20);
+
+    QLabel *label = new QLabel("图片生成功能（谷歌香蕉2模型）");
+    label->setStyleSheet("font-size: 18px; color: #F8FAFC;");
+    mainLayout->addWidget(label);
+
     promptInput = new QTextEdit();
-    promptInput->setObjectName("promptInput");
-    promptInput->setPlaceholderText("输入图片生成提示词...\n例如：赛博朋克风格的城市夜景，霓虹灯闪烁，未来感十足");
-    promptInput->setMinimumHeight(120);
+    promptInput->setPlaceholderText("输入图片生成提示词...");
     mainLayout->addWidget(promptInput);
 
-    // 参数设置行
-    QHBoxLayout *paramsLayout = new QHBoxLayout();
-    paramsLayout->setSpacing(15);
+    apiKeyCombo = new QComboBox();
+    addKeyButton = new QPushButton("➕ 添加密钥");
+    mainLayout->addWidget(apiKeyCombo);
+    mainLayout->addWidget(addKeyButton);
 
-    // 分辨率
-    QVBoxLayout *resLayout = new QVBoxLayout();
-    QLabel *resLabel = new QLabel("分辨率");
-    resLabel->setStyleSheet("color: #94A3B8; font-size: 14px;");
-    resolutionCombo = new QComboBox();
-    resolutionCombo->setObjectName("paramCombo");
-    resolutionCombo->addItems({"1024x1024", "1920x1080", "1080x1920", "2048x2048"});
-    resLayout->addWidget(resLabel);
-    resLayout->addWidget(resolutionCombo);
-
-    // 宽高比
-    QVBoxLayout *aspectLayout = new QVBoxLayout();
-    QLabel *aspectLabel = new QLabel("宽高比");
-    aspectLabel->setStyleSheet("color: #94A3B8; font-size: 14px;");
-    aspectRatioCombo = new QComboBox();
-    aspectRatioCombo->setObjectName("paramCombo");
-    aspectRatioCombo->addItems({"1:1", "16:9", "9:16", "4:3", "3:4"});
-    aspectLayout->addWidget(aspectLabel);
-    aspectLayout->addWidget(aspectRatioCombo);
-
-    // 风格
-    QVBoxLayout *styleLayout = new QVBoxLayout();
-    QLabel *styleLabel = new QLabel("风格");
-    styleLabel->setStyleSheet("color: #94A3B8; font-size: 14px;");
-    styleCombo = new QComboBox();
-    styleCombo->setObjectName("paramCombo");
-    styleCombo->addItems({"Photorealistic", "Anime", "Oil Painting", "Watercolor", "Digital Art"});
-    styleLayout->addWidget(styleLabel);
-    styleLayout->addWidget(styleCombo);
-
-    paramsLayout->addLayout(resLayout);
-    paramsLayout->addLayout(aspectLayout);
-    paramsLayout->addLayout(styleLayout);
-    paramsLayout->addStretch();
-
-    mainLayout->addLayout(paramsLayout);
-
-    // 预览区域
-    previewLabel = new QLabel();
-    previewLabel->setObjectName("previewArea");
-    previewLabel->setAlignment(Qt::AlignCenter);
-    previewLabel->setText("生成结果将显示在这里");
-    previewLabel->setMinimumHeight(400);
-    previewLabel->setStyleSheet(
-        "background: rgba(30, 27, 75, 0.5);"
-        "border: 1px solid rgba(248, 250, 252, 0.1);"
-        "border-radius: 12px;"
-        "color: #64748B;"
-        "font-size: 16px;"
-    );
-    mainLayout->addWidget(previewLabel);
-
-    // 生成按钮
     generateButton = new QPushButton("🚀 生成图片");
-    generateButton->setObjectName("generateButton");
-    generateButton->setMinimumHeight(50);
-    generateButton->setCursor(Qt::PointingHandCursor);
-    connect(generateButton, &QPushButton::clicked, this, &ImageGenWidget::generateImage);
-    mainLayout->addWidget(generateButton, 0, Qt::AlignCenter);
+    connect(generateButton, &QPushButton::clicked, this, &ImageSingleTab::generateImage);
+    mainLayout->addWidget(generateButton);
 }
 
-void ImageGenWidget::generateImage()
+void ImageSingleTab::loadApiKeys()
 {
-    QString prompt = promptInput->toPlainText().trimmed();
-    if (prompt.isEmpty()) {
-        QMessageBox::warning(this, "提示", "请输入图片生成提示词");
-        return;
+    apiKeyCombo->clear();
+    QList<ApiKey> keys = DBManager::instance()->getAllApiKeys();
+    for (const ApiKey& key : keys) {
+        apiKeyCombo->addItem(key.name, key.id);
     }
-
-    QString resolution = resolutionCombo->currentText();
-    QString aspectRatio = aspectRatioCombo->currentText();
-    QString style = styleCombo->currentText();
-
-    QMessageBox::information(this, "生成中",
-        QString("正在生成图片...\n\n提示词: %1\n分辨率: %2\n宽高比: %3\n风格: %4\n\n(这是演示版本，暂未接入真实 AI 模型)")
-        .arg(prompt).arg(resolution).arg(aspectRatio).arg(style));
 }
+
+void ImageSingleTab::generateImage()
+{
+    QMessageBox::information(this, "提示", "图片生成功能待实现");
+}
+
+// ImageBatchTab 实现（简化版）
+ImageBatchTab::ImageBatchTab(QWidget *parent) : QWidget(parent)
+{
+    setupUI();
+}
+
+void ImageBatchTab::setupUI()
+{
+    QVBoxLayout *mainLayout = new QVBoxLayout(this);
+    QLabel *label = new QLabel("批量图片生成功能待实现");
+    mainLayout->addWidget(label);
+}
+
+void ImageBatchTab::loadApiKeys() {}
+void ImageBatchTab::generateBatch() {}
+void ImageBatchTab::importCSV() {}
+void ImageBatchTab::deleteAll() {}
+
+// ImageHistoryTab 实现（简化版）
+ImageHistoryTab::ImageHistoryTab(QWidget *parent) : QWidget(parent)
+{
+    setupUI();
+}
+
+void ImageHistoryTab::setupUI()
+{
+    QVBoxLayout *mainLayout = new QVBoxLayout(this);
+    QLabel *label = new QLabel("图片历史记录待实现");
+    mainLayout->addWidget(label);
+}
+
+void ImageHistoryTab::loadHistory() {}
+void ImageHistoryTab::refreshHistory() {}
+void ImageHistoryTab::onRowDoubleClicked(int, int) {}
