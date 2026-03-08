@@ -12,7 +12,45 @@ QMainWindow {
     background: #000000;
 }
 
-/* 侧边栏 */
+/* ========================================
+   Tab Widget 样式
+   ======================================== */
+QTabWidget::pane {
+    border: 1px solid rgba(248, 250, 252, 0.1);
+    border-radius: 12px;
+    background: rgba(30, 27, 75, 0.3);
+    padding: 5px;
+}
+
+QTabBar::tab {
+    background: rgba(248, 250, 252, 0.05);
+    border: 1px solid rgba(248, 250, 252, 0.1);
+    border-bottom: none;
+    border-top-left-radius: 8px;
+    border-top-right-radius: 8px;
+    color: #94A3B8;
+    font-size: 14pt;
+    font-weight: 500;
+    padding: 10px 20px;
+    margin-right: 4px;
+    min-width: 120px;
+}
+
+QTabBar::tab:selected {
+    background: rgba(225, 29, 72, 0.2);
+    border: 1px solid rgba(225, 29, 72, 0.5);
+    border-bottom: none;
+    color: #F8FAFC;
+}
+
+QTabBar::tab:hover:!selected {
+    background: rgba(248, 250, 252, 0.1);
+    color: #F8FAFC;
+}
+
+/* ========================================
+   侧边栏
+   ======================================== */
 #sidebar {
     background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
                                 stop:0 rgba(15, 15, 35, 0.95),
@@ -44,7 +82,9 @@ QMainWindow {
     background: rgba(248, 250, 252, 0.15);
 }
 
-/* 内容区域 */
+/* ========================================
+   内容区域
+   ======================================== */
 #contentArea {
     background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
                                 stop:0 #000000,
@@ -52,48 +92,53 @@ QMainWindow {
                                 stop:1 #000000);
 }
 
+/* ========================================
+   输入组件
+   ======================================== */
+
 /* 提示词输入框 */
-#promptInput {
+QTextEdit {
     background: rgba(30, 27, 75, 0.6);
     border: 1px solid rgba(248, 250, 252, 0.1);
     border-radius: 12px;
     color: #F8FAFC;
-    font-size: 16px;
-    padding: 15px;
+    font-size: 13pt;
+    padding: 12px;
     selection-background-color: rgba(225, 29, 72, 0.3);
 }
 
-#promptInput:focus {
+QTextEdit:focus {
     border: 1px solid rgba(225, 29, 72, 0.5);
     background: rgba(30, 27, 75, 0.8);
 }
 
-/* 参数下拉框 */
-#paramCombo {
+/* 下拉框 */
+QComboBox {
     background: rgba(30, 27, 75, 0.6);
     border: 1px solid rgba(248, 250, 252, 0.1);
     border-radius: 8px;
     color: #F8FAFC;
-    font-size: 14px;
-    padding: 8px 12px;
-    min-width: 150px;
+    font-size: 13pt;
+    padding: 6px 12px;
+    min-width: 120px;
+    max-height: 36px;
 }
 
-#paramCombo:hover {
+QComboBox:hover {
     background: rgba(30, 27, 75, 0.8);
     border: 1px solid rgba(248, 250, 252, 0.2);
 }
 
-#paramCombo:focus {
+QComboBox:focus {
     border: 1px solid rgba(225, 29, 72, 0.5);
 }
 
-#paramCombo::drop-down {
+QComboBox::drop-down {
     border: none;
     width: 20px;
 }
 
-#paramCombo::down-arrow {
+QComboBox::down-arrow {
     image: none;
     border-left: 4px solid transparent;
     border-right: 4px solid transparent;
@@ -101,7 +146,7 @@ QMainWindow {
     margin-right: 8px;
 }
 
-#paramCombo QAbstractItemView {
+QComboBox QAbstractItemView {
     background: rgba(15, 15, 35, 0.95);
     border: 1px solid rgba(248, 250, 252, 0.2);
     border-radius: 8px;
@@ -110,33 +155,111 @@ QMainWindow {
     padding: 5px;
 }
 
-/* 生成按钮 */
-#generateButton {
+/* ========================================
+   按钮样式
+   ======================================== */
+
+/* 主要生成按钮 */
+QPushButton {
+    background: rgba(248, 250, 252, 0.05);
+    border: 1px solid rgba(248, 250, 252, 0.1);
+    border-radius: 8px;
+    color: #F8FAFC;
+    font-size: 13pt;
+    font-weight: 500;
+    padding: 8px 16px;
+    max-height: 36px;
+}
+
+QPushButton:hover {
+    background: rgba(248, 250, 252, 0.1);
+    border: 1px solid rgba(248, 250, 252, 0.2);
+}
+
+QPushButton:pressed {
+    background: rgba(248, 250, 252, 0.15);
+}
+
+/* 主要操作按钮（生成按钮）*/
+QPushButton[objectName="generateButton"],
+QPushButton[text^="🚀"] {
     background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
                                 stop:0 #E11D48,
                                 stop:1 #BE123C);
     border: none;
     border-radius: 12px;
     color: #FFFFFF;
-    font-size: 18px;
+    font-size: 15pt;
     font-weight: 600;
-    padding: 15px 40px;
-    min-width: 200px;
+    padding: 12px 32px;
+    min-height: 48px;
+    max-height: 48px;
 }
 
-#generateButton:hover {
+QPushButton[objectName="generateButton"]:hover,
+QPushButton[text^="🚀"]:hover {
     background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
                                 stop:0 #F43F5E,
                                 stop:1 #E11D48);
 }
 
-#generateButton:pressed {
+QPushButton[objectName="generateButton"]:pressed,
+QPushButton[text^="🚀"]:pressed {
     background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
                                 stop:0 #BE123C,
                                 stop:1 #9F1239);
 }
 
-/* 滚动条 */
+/* 小按钮（添加、刷新等）*/
+QPushButton[text^="➕"],
+QPushButton[text^="🔄"] {
+    max-height: 32px;
+    min-height: 32px;
+    font-size: 12pt;
+    padding: 6px 12px;
+}
+
+/* ========================================
+   标签样式
+   ======================================== */
+QLabel {
+    color: #F8FAFC;
+    font-size: 13pt;
+}
+
+/* ========================================
+   表格样式
+   ======================================== */
+QTableWidget {
+    background: rgba(30, 27, 75, 0.3);
+    border: 1px solid rgba(248, 250, 252, 0.1);
+    border-radius: 8px;
+    color: #F8FAFC;
+    gridline-color: rgba(248, 250, 252, 0.1);
+    font-size: 12pt;
+}
+
+QTableWidget::item {
+    padding: 8px;
+}
+
+QTableWidget::item:selected {
+    background: rgba(225, 29, 72, 0.3);
+}
+
+QHeaderView::section {
+    background: rgba(15, 15, 35, 0.8);
+    border: none;
+    border-bottom: 1px solid rgba(248, 250, 252, 0.2);
+    color: #94A3B8;
+    font-size: 12pt;
+    font-weight: 600;
+    padding: 10px;
+}
+
+/* ========================================
+   滚动条
+   ======================================== */
 QScrollBar:vertical {
     background: rgba(15, 15, 35, 0.3);
     width: 10px;
@@ -177,7 +300,9 @@ QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
     width: 0px;
 }
 
-/* QMessageBox 样式 */
+/* ========================================
+   对话框样式
+   ======================================== */
 QMessageBox {
     background: rgba(15, 15, 35, 0.95);
     color: #F8FAFC;
@@ -185,7 +310,7 @@ QMessageBox {
 
 QMessageBox QLabel {
     color: #F8FAFC;
-    font-size: 14px;
+    font-size: 13pt;
 }
 
 QMessageBox QPushButton {
@@ -193,9 +318,10 @@ QMessageBox QPushButton {
     border: none;
     border-radius: 6px;
     color: #FFFFFF;
-    font-size: 14px;
+    font-size: 13pt;
     padding: 8px 20px;
     min-width: 80px;
+    max-height: 36px;
 }
 
 QMessageBox QPushButton:hover {
