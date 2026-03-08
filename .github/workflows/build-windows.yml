@@ -52,13 +52,10 @@ jobs:
       run: |
         windeployqt --release --no-translations deploy\Qt4test.exe
 
-    - name: Install NSIS
+    - name: Install NSIS and build installer
       run: |
         choco install nsis -y
-
-    - name: Build installer
-      run: |
-        makensis installer.nsi
+        & "C:\Program Files (x86)\NSIS\makensis.exe" installer.nsi
 
     - name: Upload installer
       uses: actions/upload-artifact@v4
