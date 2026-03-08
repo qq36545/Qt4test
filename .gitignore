@@ -1,0 +1,59 @@
+# Build directories
+build/
+cmake-build-*/
+
+# Qt generated files
+*.pro.user
+*.autosave
+*_autogen/
+moc_*.cpp
+qrc_*.cpp
+ui_*.h
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# macOS
+.DS_Store
+*.app
+
+# Windows
+*.exe
+*.dll
+*.obj
+*.pdb
+*.ilk
+
+# Compiled Object files
+*.o
+*.obj
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+
+# Installer artifacts
+*.nsi.bak
+installer-output/
+
+# Filtered files
+CLAUDE.md
+todo.md
+cc.sh
+
+# Large files (models, etc.)
+*.bin
+*.onnx
+*.pt
+*.pth
+*.safetensors
+*.ckpt
+*.h5
+*.pb
+

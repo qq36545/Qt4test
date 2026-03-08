@@ -1,0 +1,203 @@
+/* ========================================
+   Qt4test - 玻璃态暗黑风格样式表
+   设计系统：Glassmorphism Dark
+   ======================================== */
+
+/* 全局样式 */
+* {
+    font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+QMainWindow {
+    background: #000000;
+}
+
+/* 侧边栏 */
+#sidebar {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                stop:0 rgba(15, 15, 35, 0.95),
+                                stop:1 rgba(30, 27, 75, 0.95));
+    border-right: 1px solid rgba(248, 250, 252, 0.1);
+}
+
+/* 侧边栏按钮 */
+#sidebarButton {
+    background: rgba(248, 250, 252, 0.05);
+    border: 1px solid rgba(248, 250, 252, 0.1);
+    border-radius: 12px;
+    color: #F8FAFC;
+    font-size: 24px;
+    transition: all 0.2s ease;
+}
+
+#sidebarButton:hover {
+    background: rgba(248, 250, 252, 0.1);
+    border: 1px solid rgba(248, 250, 252, 0.2);
+}
+
+#sidebarButton:checked {
+    background: rgba(225, 29, 72, 0.2);
+    border: 1px solid rgba(225, 29, 72, 0.5);
+}
+
+#sidebarButton:pressed {
+    background: rgba(248, 250, 252, 0.15);
+}
+
+/* 内容区域 */
+#contentArea {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                                stop:0 #000000,
+                                stop:0.5 rgba(15, 15, 35, 0.3),
+                                stop:1 #000000);
+}
+
+/* 提示词输入框 */
+#promptInput {
+    background: rgba(30, 27, 75, 0.6);
+    border: 1px solid rgba(248, 250, 252, 0.1);
+    border-radius: 12px;
+    color: #F8FAFC;
+    font-size: 16px;
+    padding: 15px;
+    selection-background-color: rgba(225, 29, 72, 0.3);
+}
+
+#promptInput:focus {
+    border: 1px solid rgba(225, 29, 72, 0.5);
+    background: rgba(30, 27, 75, 0.8);
+}
+
+/* 参数下拉框 */
+#paramCombo {
+    background: rgba(30, 27, 75, 0.6);
+    border: 1px solid rgba(248, 250, 252, 0.1);
+    border-radius: 8px;
+    color: #F8FAFC;
+    font-size: 14px;
+    padding: 8px 12px;
+    min-width: 150px;
+}
+
+#paramCombo:hover {
+    background: rgba(30, 27, 75, 0.8);
+    border: 1px solid rgba(248, 250, 252, 0.2);
+}
+
+#paramCombo:focus {
+    border: 1px solid rgba(225, 29, 72, 0.5);
+}
+
+#paramCombo::drop-down {
+    border: none;
+    width: 20px;
+}
+
+#paramCombo::down-arrow {
+    image: none;
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-top: 6px solid #F8FAFC;
+    margin-right: 8px;
+}
+
+#paramCombo QAbstractItemView {
+    background: rgba(15, 15, 35, 0.95);
+    border: 1px solid rgba(248, 250, 252, 0.2);
+    border-radius: 8px;
+    color: #F8FAFC;
+    selection-background-color: rgba(225, 29, 72, 0.3);
+    padding: 5px;
+}
+
+/* 生成按钮 */
+#generateButton {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                                stop:0 #E11D48,
+                                stop:1 #BE123C);
+    border: none;
+    border-radius: 12px;
+    color: #FFFFFF;
+    font-size: 18px;
+    font-weight: 600;
+    padding: 15px 40px;
+    min-width: 200px;
+}
+
+#generateButton:hover {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                                stop:0 #F43F5E,
+                                stop:1 #E11D48);
+}
+
+#generateButton:pressed {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                                stop:0 #BE123C,
+                                stop:1 #9F1239);
+}
+
+/* 滚动条 */
+QScrollBar:vertical {
+    background: rgba(15, 15, 35, 0.3);
+    width: 10px;
+    border-radius: 5px;
+}
+
+QScrollBar::handle:vertical {
+    background: rgba(248, 250, 252, 0.2);
+    border-radius: 5px;
+    min-height: 20px;
+}
+
+QScrollBar::handle:vertical:hover {
+    background: rgba(248, 250, 252, 0.3);
+}
+
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+    height: 0px;
+}
+
+QScrollBar:horizontal {
+    background: rgba(15, 15, 35, 0.3);
+    height: 10px;
+    border-radius: 5px;
+}
+
+QScrollBar::handle:horizontal {
+    background: rgba(248, 250, 252, 0.2);
+    border-radius: 5px;
+    min-width: 20px;
+}
+
+QScrollBar::handle:horizontal:hover {
+    background: rgba(248, 250, 252, 0.3);
+}
+
+QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
+    width: 0px;
+}
+
+/* QMessageBox 样式 */
+QMessageBox {
+    background: rgba(15, 15, 35, 0.95);
+    color: #F8FAFC;
+}
+
+QMessageBox QLabel {
+    color: #F8FAFC;
+    font-size: 14px;
+}
+
+QMessageBox QPushButton {
+    background: rgba(225, 29, 72, 0.8);
+    border: none;
+    border-radius: 6px;
+    color: #FFFFFF;
+    font-size: 14px;
+    padding: 8px 20px;
+    min-width: 80px;
+}
+
+QMessageBox QPushButton:hover {
+    background: rgba(225, 29, 72, 1.0);
+}
