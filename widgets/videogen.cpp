@@ -61,8 +61,8 @@ void VideoGenWidget::updateTabWidths()
     // 获取当前窗口宽度
     int windowWidth = width();
 
-    // 计算所有 tab 的总宽度（窗口宽度的 60%）
-    int totalTabWidth = windowWidth * 0.6;
+    // 计算所有 tab 的总宽度（窗口宽度的 55%）
+    int totalTabWidth = windowWidth * 0.55;
 
     // 获取 tab 数量
     int tabCount = tabWidget->count();
