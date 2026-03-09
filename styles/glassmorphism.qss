@@ -97,7 +97,7 @@ QTabBar::tab:hover:!selected {
 
 /* 提示词输入框 */
 QTextEdit {
-    background: rgba(30, 27, 75, 0.6);
+    background: rgba(30, 27, 75, 0.95);
     border: 1px solid rgba(248, 250, 252, 0.1);
     border-radius: 12px;
     color: #F8FAFC;
@@ -108,12 +108,12 @@ QTextEdit {
 
 QTextEdit:focus {
     border: 1px solid rgba(225, 29, 72, 0.5);
-    background: rgba(30, 27, 75, 0.8);
+    background: rgba(30, 27, 75, 1.0);
 }
 
 /* 下拉框 */
 QComboBox {
-    background: rgba(30, 27, 75, 0.6);
+    background: rgba(30, 27, 75, 0.95);
     border: 1px solid rgba(248, 250, 252, 0.1);
     border-radius: 8px;
     color: #F8FAFC;
@@ -124,7 +124,7 @@ QComboBox {
 }
 
 QComboBox:hover {
-    background: rgba(30, 27, 75, 0.8);
+    background: rgba(30, 27, 75, 1.0);
     border: 1px solid rgba(248, 250, 252, 0.2);
 }
 
@@ -160,7 +160,7 @@ QComboBox QAbstractItemView {
 
 /* 主要生成按钮 */
 QPushButton {
-    background: rgba(248, 250, 252, 0.05);
+    background: rgba(30, 27, 75, 0.9);
     border: 1px solid rgba(248, 250, 252, 0.1);
     border-radius: 8px;
     color: #F8FAFC;
@@ -171,12 +171,12 @@ QPushButton {
 }
 
 QPushButton:hover {
-    background: rgba(248, 250, 252, 0.1);
+    background: rgba(30, 27, 75, 1.0);
     border: 1px solid rgba(248, 250, 252, 0.2);
 }
 
 QPushButton:pressed {
-    background: rgba(248, 250, 252, 0.15);
+    background: rgba(15, 15, 35, 1.0);
 }
 
 /* 主要操作按钮（生成按钮）*/
@@ -259,6 +259,15 @@ QHeaderView::section {
 /* ========================================
    滚动条
    ======================================== */
+QScrollArea {
+    background: transparent;
+    border: none;
+}
+
+QScrollArea > QWidget > QWidget {
+    background: transparent;
+}
+
 QScrollBar:vertical {
     background: rgba(15, 15, 35, 0.3);
     width: 10px;
@@ -325,4 +334,38 @@ QMessageBox QPushButton {
 
 QMessageBox QPushButton:hover {
     background: rgba(225, 29, 72, 1.0);
+}
+
+/* ========================================
+   图片预览组件
+   ======================================== */
+#imagePreviewLabel {
+    background: rgba(30, 27, 75, 0.9);
+    border: 1px solid rgba(248, 250, 252, 0.1);
+    border-radius: 8px;
+    color: #94A3B8;
+    padding: 10px;
+    min-height: 120px;
+}
+
+#imagePreviewLabel[hasImage="true"] {
+    background: rgba(34, 197, 94, 0.15);
+    border: 1px solid rgba(34, 197, 94, 0.4);
+    color: #22C55E;
+}
+
+#videoPreviewLabel {
+    background: rgba(30, 27, 75, 0.9);
+    border: 1px solid rgba(248, 250, 252, 0.1);
+    border-radius: 12px;
+    color: #94A3B8;
+    font-size: 16px;
+}
+
+#imageDropArea {
+    background: rgba(30, 27, 75, 0.9);
+    border: 2px dashed rgba(248, 250, 252, 0.3);
+    border-radius: 12px;
+    color: #94A3B8;
+    font-size: 14px;
 }

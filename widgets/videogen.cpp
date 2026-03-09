@@ -33,7 +33,7 @@ void VideoGenWidget::setupUI()
 
     // 标题
     QLabel *titleLabel = new QLabel("🎬 AI 视频生成");
-    titleLabel->setStyleSheet("font-size: 28px; font-weight: bold; color: #F8FAFC;");
+    titleLabel->setStyleSheet("font-size: 28px; font-weight: bold;");
     mainLayout->addWidget(titleLabel);
 
     // Tab Widget
@@ -135,7 +135,7 @@ void VideoSingleTab::setupUI()
     // 模型选择
     QHBoxLayout *modelLayout = new QHBoxLayout();
     QLabel *modelLabel = new QLabel("视频模型:");
-    modelLabel->setStyleSheet("color: #F8FAFC; font-size: 14px;");
+    modelLabel->setStyleSheet("font-size: 14px;");
     modelCombo = new QComboBox();
     modelCombo->addItems({"sora2视频", "VEO3视频", "Grok3视频", "wan视频"});
     modelCombo->setCurrentIndex(1); // 默认选择 VEO3
@@ -147,7 +147,7 @@ void VideoSingleTab::setupUI()
     // VEO3 模型变体选择
     QHBoxLayout *variantLayout = new QHBoxLayout();
     QLabel *variantLabel = new QLabel("模型变体:");
-    variantLabel->setStyleSheet("color: #F8FAFC; font-size: 14px;");
+    variantLabel->setStyleSheet("font-size: 14px;");
     modelVariantCombo = new QComboBox();
     modelVariantCombo->addItem("veo_3_1-fast", "veo_3_1-fast");
     modelVariantCombo->addItem("veo_3_1", "veo_3_1");
@@ -175,7 +175,7 @@ void VideoSingleTab::setupUI()
     // API Key 选择
     QHBoxLayout *keyLayout = new QHBoxLayout();
     QLabel *keyLabel = new QLabel("API 密钥:");
-    keyLabel->setStyleSheet("color: #F8FAFC; font-size: 14px;");
+    keyLabel->setStyleSheet("font-size: 14px;");
     apiKeyCombo = new QComboBox();
     addKeyButton = new QPushButton("➕ 添加密钥");
     connect(addKeyButton, &QPushButton::clicked, []() {
@@ -189,7 +189,7 @@ void VideoSingleTab::setupUI()
     // 请求服务器选择
     QHBoxLayout *serverLayout = new QHBoxLayout();
     QLabel *serverLabel = new QLabel("请求服务器:");
-    serverLabel->setStyleSheet("color: #F8FAFC; font-size: 14px;");
+    serverLabel->setStyleSheet("font-size: 14px;");
     serverCombo = new QComboBox();
     serverCombo->addItem("【主站】https://ai.kegeai.top", "https://ai.kegeai.top");
     serverCombo->addItem("【备用】https://api.kuai.host", "https://api.kuai.host");
@@ -200,28 +200,21 @@ void VideoSingleTab::setupUI()
 
     // 提示词输入
     QLabel *promptLabel = new QLabel("提示词:");
-    promptLabel->setStyleSheet("color: #F8FAFC; font-size: 14px;");
+    promptLabel->setStyleSheet("font-size: 14px;");
     promptInput = new QTextEdit();
     promptInput->setPlaceholderText("输入视频生成提示词...\n例如：一只可爱的猫咪在花园里玩耍，阳光明媚，电影级画质");
-    promptInput->setMinimumHeight(200);  // 增加一倍高度
+    promptInput->setMinimumHeight(120);  // 支持多行输入和滚动
     contentLayout->addWidget(promptLabel);
     contentLayout->addWidget(promptInput);
 
     // 图片上传区域（首帧）
     imageLabel = new QLabel("首帧图片:");
-    imageLabel->setStyleSheet("color: #F8FAFC; font-size: 14px;");
+    imageLabel->setStyleSheet("font-size: 14px;");
     contentLayout->addWidget(imageLabel);
 
     QHBoxLayout *imageLayout = new QHBoxLayout();
     imagePreviewLabel = new QLabel("未选择图片\n点击此处上传");
-    imagePreviewLabel->setStyleSheet(
-        "background: rgba(30, 27, 75, 0.5);"
-        "border: 1px solid rgba(248, 250, 252, 0.1);"
-        "border-radius: 8px;"
-        "color: #64748B;"
-        "padding: 10px;"
-        "min-height: 120px;"
-    );
+    imagePreviewLabel->setObjectName("imagePreviewLabel");
     imagePreviewLabel->setAlignment(Qt::AlignCenter);
     imagePreviewLabel->setCursor(Qt::PointingHandCursor);
     imagePreviewLabel->setScaledContents(false);
@@ -241,19 +234,12 @@ void VideoSingleTab::setupUI()
     endFrameLayout->setSpacing(10);
 
     endFrameLabel = new QLabel("尾帧图片（可选）:");
-    endFrameLabel->setStyleSheet("color: #F8FAFC; font-size: 14px;");
+    endFrameLabel->setStyleSheet("font-size: 14px;");
     endFrameLayout->addWidget(endFrameLabel);
 
     QHBoxLayout *endFrameImageLayout = new QHBoxLayout();
     endFramePreviewLabel = new QLabel("未选择图片\n点击此处上传");
-    endFramePreviewLabel->setStyleSheet(
-        "background: rgba(30, 27, 75, 0.5);"
-        "border: 1px solid rgba(248, 250, 252, 0.1);"
-        "border-radius: 8px;"
-        "color: #64748B;"
-        "padding: 10px;"
-        "min-height: 120px;"
-    );
+    endFramePreviewLabel->setObjectName("imagePreviewLabel");
     endFramePreviewLabel->setAlignment(Qt::AlignCenter);
     endFramePreviewLabel->setCursor(Qt::PointingHandCursor);
     endFramePreviewLabel->setScaledContents(false);
@@ -273,7 +259,7 @@ void VideoSingleTab::setupUI()
 
     QVBoxLayout *resLayout = new QVBoxLayout();
     QLabel *resLabel = new QLabel("分辨率");
-    resLabel->setStyleSheet("color: #94A3B8; font-size: 14px;");
+    resLabel->setStyleSheet("font-size: 14px;");
     resolutionCombo = new QComboBox();
     resolutionCombo->addItem("横屏 16:9 (1280x720)", "1280x720");
     resolutionCombo->addItem("竖屏 9:16 (720x1280)", "720x1280");
@@ -282,7 +268,7 @@ void VideoSingleTab::setupUI()
 
     QVBoxLayout *durLayout = new QVBoxLayout();
     QLabel *durLabel = new QLabel("时长（秒）");
-    durLabel->setStyleSheet("color: #94A3B8; font-size: 14px;");
+    durLabel->setStyleSheet("font-size: 14px;");
     durationCombo = new QComboBox();
     durationCombo->addItem("8秒（固定）", "8");
     durationCombo->setEnabled(false); // VEO3 固定 8 秒
@@ -291,9 +277,8 @@ void VideoSingleTab::setupUI()
 
     QVBoxLayout *watermarkLayout = new QVBoxLayout();
     QLabel *watermarkLabel = new QLabel("水印");
-    watermarkLabel->setStyleSheet("color: #94A3B8; font-size: 14px;");
+    watermarkLabel->setStyleSheet("font-size: 14px;");
     watermarkCheckBox = new QCheckBox("添加水印");
-    watermarkCheckBox->setStyleSheet("color: #F8FAFC;");
     watermarkLayout->addWidget(watermarkLabel);
     watermarkLayout->addWidget(watermarkCheckBox);
 
@@ -306,16 +291,10 @@ void VideoSingleTab::setupUI()
 
     // 预览区域
     previewLabel = new QLabel();
+    previewLabel->setObjectName("videoPreviewLabel");
     previewLabel->setAlignment(Qt::AlignCenter);
     previewLabel->setText("生成结果将显示在这里");
     previewLabel->setMinimumHeight(300);
-    previewLabel->setStyleSheet(
-        "background: rgba(30, 27, 75, 0.5);"
-        "border: 1px solid rgba(248, 250, 252, 0.1);"
-        "border-radius: 12px;"
-        "color: #64748B;"
-        "font-size: 16px;"
-    );
     contentLayout->addWidget(previewLabel);
 
     // 生成按钮
@@ -403,14 +382,7 @@ void VideoSingleTab::updateImagePreview()
     if (uploadedImagePaths.isEmpty()) {
         imagePreviewLabel->setText("未选择图片\n点击此处上传");
         imagePreviewLabel->setPixmap(QPixmap());
-        imagePreviewLabel->setStyleSheet(
-            "background: rgba(30, 27, 75, 0.5);"
-            "border: 1px solid rgba(248, 250, 252, 0.1);"
-            "border-radius: 8px;"
-            "color: #64748B;"
-            "padding: 10px;"
-            "min-height: 120px;"
-        );
+        imagePreviewLabel->setProperty("hasImage", false);
     } else {
         // 显示第一张图片的缩略图
         QPixmap pixmap(uploadedImagePaths[0]);
@@ -427,15 +399,11 @@ void VideoSingleTab::updateImagePreview()
             }
             imagePreviewLabel->setText(text.trimmed());
         }
-        imagePreviewLabel->setStyleSheet(
-            "background: rgba(34, 197, 94, 0.1);"
-            "border: 1px solid rgba(34, 197, 94, 0.3);"
-            "border-radius: 8px;"
-            "color: #22C55E;"
-            "padding: 10px;"
-            "min-height: 120px;"
-        );
+        imagePreviewLabel->setProperty("hasImage", true);
     }
+    // 强制刷新样式
+    imagePreviewLabel->style()->unpolish(imagePreviewLabel);
+    imagePreviewLabel->style()->polish(imagePreviewLabel);
 }
 
 void VideoSingleTab::uploadEndFrameImage()
@@ -462,14 +430,10 @@ void VideoSingleTab::uploadEndFrameImage()
             endFramePreviewLabel->setText("✓ " + fileInfo.fileName());
         }
 
-        endFramePreviewLabel->setStyleSheet(
-            "background: rgba(34, 197, 94, 0.1);"
-            "border: 1px solid rgba(34, 197, 94, 0.3);"
-            "border-radius: 8px;"
-            "color: #22C55E;"
-            "padding: 10px;"
-            "min-height: 120px;"
-        );
+        endFramePreviewLabel->setProperty("hasImage", true);
+        // 强制刷新样式
+        endFramePreviewLabel->style()->unpolish(endFramePreviewLabel);
+        endFramePreviewLabel->style()->polish(endFramePreviewLabel);
     }
 }
 
@@ -673,7 +637,7 @@ void VideoBatchTab::setupUI()
     // 模型选择
     QHBoxLayout *modelLayout = new QHBoxLayout();
     QLabel *modelLabel = new QLabel("视频模型:");
-    modelLabel->setStyleSheet("color: #F8FAFC; font-size: 14px;");
+    modelLabel->setStyleSheet("font-size: 14px;");
     modelCombo = new QComboBox();
     modelCombo->addItems({"sora2视频", "VEO3视频", "Grok3视频", "wan视频"});
     modelCombo->setCurrentIndex(1); // 默认选择 VEO3
@@ -685,7 +649,7 @@ void VideoBatchTab::setupUI()
     // VEO3 模型变体选择
     QHBoxLayout *variantLayout = new QHBoxLayout();
     QLabel *variantLabel = new QLabel("模型变体:");
-    variantLabel->setStyleSheet("color: #F8FAFC; font-size: 14px;");
+    variantLabel->setStyleSheet("font-size: 14px;");
     modelVariantCombo = new QComboBox();
     modelVariantCombo->addItem("veo_3_1-fast", "veo_3_1-fast");
     modelVariantCombo->addItem("veo_3_1", "veo_3_1");
@@ -713,7 +677,7 @@ void VideoBatchTab::setupUI()
     // API Key 选择
     QHBoxLayout *keyLayout = new QHBoxLayout();
     QLabel *keyLabel = new QLabel("API 密钥:");
-    keyLabel->setStyleSheet("color: #F8FAFC; font-size: 14px;");
+    keyLabel->setStyleSheet("font-size: 14px;");
     apiKeyCombo = new QComboBox();
     addKeyButton = new QPushButton("➕ 添加密钥");
     connect(addKeyButton, &QPushButton::clicked, []() {
@@ -727,7 +691,7 @@ void VideoBatchTab::setupUI()
     // 请求服务器选择
     QHBoxLayout *serverLayout = new QHBoxLayout();
     QLabel *serverLabel = new QLabel("请求服务器:");
-    serverLabel->setStyleSheet("color: #F8FAFC; font-size: 14px;");
+    serverLabel->setStyleSheet("font-size: 14px;");
     serverCombo = new QComboBox();
     serverCombo->addItem("【主站】https://ai.kegeai.top", "https://ai.kegeai.top");
     serverCombo->addItem("【备用】https://api.kuai.host", "https://api.kuai.host");
@@ -738,27 +702,21 @@ void VideoBatchTab::setupUI()
 
     // 提示词输入（多行）
     QLabel *promptLabel = new QLabel("批量提示词（每行一个）:");
-    promptLabel->setStyleSheet("color: #F8FAFC; font-size: 14px;");
+    promptLabel->setStyleSheet("font-size: 14px;");
     promptInput = new QTextEdit();
     promptInput->setPlaceholderText("输入多个提示词，每行一个...\n例如：\n一只猫在花园玩耍\n日落时的海滩\n城市夜景");
-    promptInput->setMinimumHeight(300);  // 增加一倍高度
+    promptInput->setMinimumHeight(120);  // 支持多行输入和滚动
     contentLayout->addWidget(promptLabel);
     contentLayout->addWidget(promptInput);
 
     // 图片拖放区域
     imageLabel = new QLabel("图片（可选，拖放图片到下方区域）:");
-    imageLabel->setStyleSheet("color: #F8FAFC; font-size: 14px;");
+    imageLabel->setStyleSheet("font-size: 14px;");
     imageDropArea = new QLabel();
+    imageDropArea->setObjectName("imageDropArea");
     imageDropArea->setAlignment(Qt::AlignCenter);
     imageDropArea->setText("📁 拖放图片到这里\n（图生视频）");
     imageDropArea->setMinimumHeight(100);
-    imageDropArea->setStyleSheet(
-        "background: rgba(30, 27, 75, 0.5);"
-        "border: 2px dashed rgba(248, 250, 252, 0.3);"
-        "border-radius: 12px;"
-        "color: #94A3B8;"
-        "font-size: 14px;"
-    );
     imageDropArea->setAcceptDrops(true);
     contentLayout->addWidget(imageLabel);
     contentLayout->addWidget(imageDropArea);
@@ -773,7 +731,7 @@ void VideoBatchTab::setupUI()
     QVBoxLayout *endFrameLayout = new QVBoxLayout(endFrameWidget);
     endFrameLayout->setContentsMargins(0, 0, 0, 0);
     endFrameLabel = new QLabel("提示：当前模型支持首尾帧垫图");
-    endFrameLabel->setStyleSheet("color: #94A3B8; font-size: 12px; font-style: italic;");
+    endFrameLabel->setStyleSheet("font-size: 12px; font-style: italic;");
     endFrameLayout->addWidget(endFrameLabel);
     contentLayout->addWidget(endFrameWidget);
     endFrameWidget->setVisible(true);
@@ -783,7 +741,7 @@ void VideoBatchTab::setupUI()
 
     QVBoxLayout *resLayout = new QVBoxLayout();
     QLabel *resLabel = new QLabel("分辨率");
-    resLabel->setStyleSheet("color: #94A3B8; font-size: 14px;");
+    resLabel->setStyleSheet("font-size: 14px;");
     resolutionCombo = new QComboBox();
     resolutionCombo->addItem("横屏 16:9 (1280x720)", "1280x720");
     resolutionCombo->addItem("竖屏 9:16 (720x1280)", "720x1280");
@@ -792,7 +750,7 @@ void VideoBatchTab::setupUI()
 
     QVBoxLayout *durLayout = new QVBoxLayout();
     QLabel *durLabel = new QLabel("时长（秒）");
-    durLabel->setStyleSheet("color: #94A3B8; font-size: 14px;");
+    durLabel->setStyleSheet("font-size: 14px;");
     durationCombo = new QComboBox();
     durationCombo->addItem("8秒（固定）", "8");
     durationCombo->setEnabled(false); // VEO3 固定 8 秒
@@ -801,9 +759,8 @@ void VideoBatchTab::setupUI()
 
     QVBoxLayout *watermarkLayout = new QVBoxLayout();
     QLabel *watermarkLabel = new QLabel("水印");
-    watermarkLabel->setStyleSheet("color: #94A3B8; font-size: 14px;");
+    watermarkLabel->setStyleSheet("font-size: 14px;");
     watermarkCheckBox = new QCheckBox("添加水印");
-    watermarkCheckBox->setStyleSheet("color: #F8FAFC;");
     watermarkLayout->addWidget(watermarkLabel);
     watermarkLayout->addWidget(watermarkCheckBox);
 
