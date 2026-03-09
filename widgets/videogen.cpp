@@ -1145,11 +1145,12 @@ void VideoSingleHistoryTab::setupListView()
     historyTable->setColumnWidth(3, 80);
     historyTable->setColumnWidth(4, 150);
     historyTable->setColumnWidth(5, 150);
-    historyTable->setColumnWidth(6, 200);
+    historyTable->setColumnWidth(6, 260);  // 增加操作列宽度
 
     historyTable->setSelectionBehavior(QAbstractItemView::SelectRows);
     historyTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
     historyTable->verticalHeader()->setVisible(false);
+    historyTable->verticalHeader()->setDefaultSectionSize(90);  // 增加行高
 
     layout->addWidget(historyTable);
 }
