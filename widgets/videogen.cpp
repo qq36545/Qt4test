@@ -330,12 +330,21 @@ void VideoSingleTab::setupUI()
     // 初始化UI状态
     onModelVariantChanged(0);
 
-    // 连接参数变化信号
+    // 连接参数变化信号 - 用于重复提交检测
     connect(promptInput, &QTextEdit::textChanged, this, &VideoSingleTab::onAnyParameterChanged);
     connect(modelCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &VideoSingleTab::onAnyParameterChanged);
     connect(modelVariantCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &VideoSingleTab::onAnyParameterChanged);
     connect(resolutionCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &VideoSingleTab::onAnyParameterChanged);
     connect(watermarkCheckBox, &QCheckBox::checkStateChanged, this, &VideoSingleTab::onAnyParameterChanged);
+
+    // 连接参数变化信号 - 自动保存设置
+    connect(promptInput, &QTextEdit::textChanged, this, &VideoSingleTab::saveSettings);
+    connect(modelCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &VideoSingleTab::saveSettings);
+    connect(modelVariantCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &VideoSingleTab::saveSettings);
+    connect(apiKeyCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &VideoSingleTab::saveSettings);
+    connect(serverCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &VideoSingleTab::saveSettings);
+    connect(resolutionCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &VideoSingleTab::saveSettings);
+    connect(watermarkCheckBox, &QCheckBox::checkStateChanged, this, &VideoSingleTab::saveSettings);
 }
 
 void VideoSingleTab::loadApiKeys()
@@ -411,6 +420,9 @@ void VideoSingleTab::uploadImage()
         // 保存图片所在目录
         QFileInfo fileInfo(fileName);
         settings.setValue("lastImageUploadDir", fileInfo.absolutePath());
+
+        // 保存图片路径到设置
+        saveSettings();
     }
 }
 
@@ -419,6 +431,7 @@ void VideoSingleTab::removeImage(int index)
     if (index >= 0 && index < uploadedImagePaths.size()) {
         uploadedImagePaths.removeAt(index);
         updateImagePreview();
+        saveSettings();  // 保存更改
     }
 }
 
@@ -492,6 +505,9 @@ void VideoSingleTab::uploadEndFrameImage()
         // 保存图片所在目录
         QFileInfo fileInfo(fileName);
         settings.setValue("lastImageUploadDir", fileInfo.absolutePath());
+
+        // 保存图片路径到设置
+        saveSettings();
     }
 }
 
@@ -659,8 +675,12 @@ void VideoSingleTab::saveSettings()
     settings.setValue("prompt", promptInput->toPlainText());
     settings.setValue("model", modelCombo->currentIndex());
     settings.setValue("modelVariant", modelVariantCombo->currentIndex());
+    settings.setValue("apiKey", apiKeyCombo->currentIndex());
+    settings.setValue("server", serverCombo->currentIndex());
     settings.setValue("resolution", resolutionCombo->currentIndex());
     settings.setValue("watermark", watermarkCheckBox->isChecked());
+    settings.setValue("imagePaths", uploadedImagePaths);
+    settings.setValue("endFrameImagePath", uploadedEndFrameImagePath);
     settings.setValue("lastSubmittedHash", lastSubmittedParamsHash);
 
     settings.endGroup();
@@ -683,12 +703,56 @@ void VideoSingleTab::loadSettings()
         modelVariantCombo->setCurrentIndex(variantIndex);
     }
 
+    int apiKeyIndex = settings.value("apiKey", 0).toInt();
+    if (apiKeyIndex >= 0 && apiKeyIndex < apiKeyCombo->count()) {
+        apiKeyCombo->setCurrentIndex(apiKeyIndex);
+    }
+
+    int serverIndex = settings.value("server", 0).toInt();
+    if (serverIndex >= 0 && serverIndex < serverCombo->count()) {
+        serverCombo->setCurrentIndex(serverIndex);
+    }
+
     int resIndex = settings.value("resolution", 1).toInt();  // 默认竖屏
     if (resIndex >= 0 && resIndex < resolutionCombo->count()) {
         resolutionCombo->setCurrentIndex(resIndex);
     }
 
     watermarkCheckBox->setChecked(settings.value("watermark", false).toBool());
+
+    // 加载图片路径，验证文件是否存在
+    QStringList imagePaths = settings.value("imagePaths").toStringList();
+    uploadedImagePaths.clear();
+    for (const QString &path : imagePaths) {
+        if (QFile::exists(path)) {
+            uploadedImagePaths.append(path);
+        }
+    }
+    if (!uploadedImagePaths.isEmpty()) {
+        updateImagePreview();
+    }
+
+    // 加载尾帧图片路径
+    QString endFramePath = settings.value("endFrameImagePath").toString();
+    if (!endFramePath.isEmpty() && QFile::exists(endFramePath)) {
+        uploadedEndFrameImagePath = endFramePath;
+
+        // 显示尾帧缩略图
+        QPixmap pixmap(endFramePath);
+        if (!pixmap.isNull()) {
+            QPixmap scaledPixmap = pixmap.scaled(200, 120, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+            endFramePreviewLabel->setPixmap(scaledPixmap);
+            endFramePreviewLabel->setText("");
+        } else {
+            endFramePreviewLabel->setPixmap(QPixmap());
+            QFileInfo fileInfo(endFramePath);
+            endFramePreviewLabel->setText("✓ " + fileInfo.fileName());
+        }
+        endFramePreviewLabel->setProperty("hasImage", true);
+        endFramePreviewLabel->style()->unpolish(endFramePreviewLabel);
+        endFramePreviewLabel->style()->polish(endFramePreviewLabel);
+    }
+
     lastSubmittedParamsHash = settings.value("lastSubmittedHash", "").toString();
 
     settings.endGroup();
