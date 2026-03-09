@@ -1414,6 +1414,10 @@ VideoSingleHistoryTab::VideoSingleHistoryTab(QWidget *parent)
 {
     setupUI();
     loadHistory();
+
+    // 连接TaskPollManager的状态更新信号
+    connect(TaskPollManager::getInstance(), &TaskPollManager::taskStatusUpdated,
+            this, &VideoSingleHistoryTab::onTaskStatusUpdated);
 }
 
 void VideoSingleHistoryTab::setupUI()
@@ -2008,5 +2012,52 @@ void VideoSingleHistoryTab::onCheckBoxStateChanged()
             headerCheckBox->setCheckState(Qt::PartiallyChecked);  // 部分选中状态
         }
         headerCheckBox->blockSignals(false);
+    }
+}
+
+void VideoSingleHistoryTab::onTaskStatusUpdated(const QString& taskId, const QString& status, int progress)
+{
+    // 只在列表视图时更新
+    if (!isListView) {
+        return;
+    }
+
+    // 遍历表格，找到对应的任务并更新状态和进度
+    for (int row = 0; row < historyTable->rowCount(); ++row) {
+        QTableWidgetItem *taskIdItem = historyTable->item(row, 2);  // 任务ID在第2列
+        if (taskIdItem && taskIdItem->text() == taskId) {
+            // 更新状态
+            QString statusText;
+            if (status == "pending") statusText = "⏳ 等待中";
+            else if (status == "processing") statusText = "🔄 处理中";
+            else if (status == "completed") statusText = "✅ 已完成";
+            else if (status == "failed") statusText = "❌ 失败";
+            else if (status == "timeout") statusText = "⏱️ 超时";
+
+            QTableWidgetItem *statusItem = historyTable->item(row, 4);  // 状态在第4列
+            if (statusItem) {
+                statusItem->setText(statusText);
+            }
+
+            // 更新进度
+            QTableWidgetItem *progressItem = historyTable->item(row, 5);  // 进度在第5列
+            if (progressItem) {
+                progressItem->setText(QString::number(progress) + "%");
+            }
+
+            // 如果任务完成或失败，启用勾选框
+            if (status == "completed" || status == "failed" || status == "timeout") {
+                QWidget *widget = historyTable->cellWidget(row, 0);
+                if (widget) {
+                    QCheckBox *checkBox = widget->findChild<QCheckBox*>();
+                    if (checkBox) {
+                        checkBox->setEnabled(true);
+                        checkBox->setToolTip("");
+                    }
+                }
+            }
+
+            break;
+        }
     }
 }

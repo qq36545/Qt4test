@@ -40,6 +40,7 @@ signals:
     void taskFailed(const QString& taskId, const QString& error);
     void taskTimeout(const QString& taskId);
     void downloadProgress(const QString& taskId, int progress);
+    void taskStatusUpdated(const QString& taskId, const QString& status, int progress);  // 任务状态更新信号
 
 private slots:
     void onPollTimer();

@@ -127,6 +127,9 @@ void TaskPollManager::onQueryFinished()
     // 更新数据库
     DBManager::instance()->updateTaskStatus(taskId, status, progress, videoUrl);
 
+    // 发出状态更新信号，通知UI刷新
+    emit taskStatusUpdated(taskId, status, progress);
+
     if (status == "completed" && !videoUrl.isEmpty()) {
         // 任务完成，开始下载
         if (activeTasks.contains(taskId)) {

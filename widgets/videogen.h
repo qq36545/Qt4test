@@ -150,6 +150,7 @@ private slots:
     void onDeleteSelected();  // 删除选中的记录
     void onSelectAllChanged(int state);  // 全选/取消全选
     void onCheckBoxStateChanged();  // 单个勾选框状态变化
+    void onTaskStatusUpdated(const QString& taskId, const QString& status, int progress);  // 任务状态更新
 
 private:
     void setupUI();
