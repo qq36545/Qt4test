@@ -126,6 +126,7 @@ private slots:
     void onViewVideo(const QString& taskId);
     void onBrowseFile(const QString& taskId);
     void onRetryQuery(const QString& taskId);
+    void onRegenerate(const QString& taskId);
 
 private:
     void setupUI();

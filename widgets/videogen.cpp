@@ -1242,11 +1242,13 @@ void VideoSingleHistoryTab::loadHistory(int offset, int limit)
 
             QPushButton *viewBtn = new QPushButton("查看");
             QPushButton *browseBtn = new QPushButton("浏览");
-            QPushButton *retryBtn = new QPushButton("重新查询");
+            QPushButton *refreshBtn = new QPushButton("刷新");
+            QPushButton *regenerateBtn = new QPushButton("重新生成");
 
             viewBtn->setMaximumWidth(60);
             browseBtn->setMaximumWidth(60);
-            retryBtn->setMaximumWidth(80);
+            refreshBtn->setMaximumWidth(60);
+            regenerateBtn->setMaximumWidth(80);
 
             connect(viewBtn, &QPushButton::clicked, [this, task]() {
                 onViewVideo(task.taskId);
@@ -1254,13 +1256,17 @@ void VideoSingleHistoryTab::loadHistory(int offset, int limit)
             connect(browseBtn, &QPushButton::clicked, [this, task]() {
                 onBrowseFile(task.taskId);
             });
-            connect(retryBtn, &QPushButton::clicked, [this, task]() {
+            connect(refreshBtn, &QPushButton::clicked, [this, task]() {
                 onRetryQuery(task.taskId);
+            });
+            connect(regenerateBtn, &QPushButton::clicked, [this, task]() {
+                onRegenerate(task.taskId);
             });
 
             btnLayout->addWidget(viewBtn);
             btnLayout->addWidget(browseBtn);
-            btnLayout->addWidget(retryBtn);
+            btnLayout->addWidget(refreshBtn);
+            btnLayout->addWidget(regenerateBtn);
 
             historyTable->setCellWidget(row, 7, btnWidget);
 
@@ -1454,4 +1460,39 @@ void VideoSingleHistoryTab::onRetryQuery(const QString& taskId)
     QMessageBox::information(this, "提示",
         "重新查询功能需要存储 API Key 和服务器信息\n"
         "当前版本暂不支持，请重新生成任务");
+}
+
+void VideoSingleHistoryTab::onRegenerate(const QString& taskId)
+{
+    // 获取任务信息
+    QList<VideoTask> tasks = DBManager::instance()->getTasksByType("video_single");
+    VideoTask targetTask;
+    bool found = false;
+
+    for (const VideoTask& task : tasks) {
+        if (task.taskId == taskId) {
+            targetTask = task;
+            found = true;
+            break;
+        }
+    }
+
+    if (!found) {
+        QMessageBox::warning(this, "错误", "未找到任务信息");
+        return;
+    }
+
+    // 确认对话框
+    QMessageBox::StandardButton reply = QMessageBox::question(
+        this,
+        "确认重新生成",
+        "确定要使用相同的提示词重新生成视频吗？",
+        QMessageBox::Yes | QMessageBox::No
+    );
+
+    if (reply == QMessageBox::Yes) {
+        // TODO: 调用 API 重新生成视频
+        // 这里需要根据实际的 API 调用逻辑来实现
+        QMessageBox::information(this, "提示", "重新生成功能待实现");
+    }
 }
