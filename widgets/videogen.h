@@ -15,6 +15,7 @@
 #include <QScrollArea>
 #include <QStackedWidget>
 #include <QGridLayout>
+#include <QShowEvent>
 
 // 单个视频生成 Tab
 class VideoSingleTab : public QWidget
@@ -134,6 +135,9 @@ class VideoSingleHistoryTab : public QWidget
 
 public:
     explicit VideoSingleHistoryTab(QWidget *parent = nullptr);
+
+protected:
+    void showEvent(QShowEvent *event) override;  // tab显示时自动刷新
 
 private slots:
     void refreshHistory();

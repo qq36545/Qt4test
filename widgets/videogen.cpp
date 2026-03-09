@@ -1455,6 +1455,13 @@ void VideoSingleHistoryTab::setupUI()
     mainLayout->addWidget(viewStack);
 }
 
+void VideoSingleHistoryTab::showEvent(QShowEvent *event)
+{
+    QWidget::showEvent(event);
+    // tab显示时自动刷新历史记录
+    refreshHistory();
+}
+
 void VideoSingleHistoryTab::setupListView()
 {
     listViewWidget = new QWidget();
