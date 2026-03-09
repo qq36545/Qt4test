@@ -12,7 +12,7 @@ set(CMAKE_AUTOUIC ON)
 # 设置 Qt 路径
 set(CMAKE_PREFIX_PATH "/usr/local/opt/qt@6")
 
-find_package(Qt6 REQUIRED COMPONENTS Core Widgets Gui Sql Network)
+find_package(Qt6 REQUIRED COMPONENTS Core Widgets Gui Sql Network Multimedia)
 
 # 源文件
 set(SOURCES
@@ -24,6 +24,7 @@ set(SOURCES
     widgets/aboutwidget.cpp
     database/dbmanager.cpp
     network/veo3api.cpp
+    network/taskpollmanager.cpp
 )
 
 # 头文件
@@ -35,6 +36,7 @@ set(HEADERS
     widgets/aboutwidget.h
     database/dbmanager.h
     network/veo3api.h
+    network/taskpollmanager.h
 )
 
 # 资源文件
@@ -54,6 +56,7 @@ target_link_libraries(${PROJECT_NAME}
     Qt6::Gui
     Qt6::Sql
     Qt6::Network
+    Qt6::Multimedia
 )
 
 # macOS 特定设置

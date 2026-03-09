@@ -92,6 +92,29 @@ bool DBManager::createTables()
         return false;
     }
 
+    // 创建 Video Tasks 表（异步轮询）
+    QString createVideoTasksTable = R"(
+        CREATE TABLE IF NOT EXISTS video_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            task_id TEXT NOT NULL UNIQUE,
+            task_type TEXT NOT NULL,
+            prompt TEXT,
+            status TEXT DEFAULT 'pending',
+            progress INTEGER DEFAULT 0,
+            video_url TEXT,
+            video_path TEXT,
+            thumbnail_path TEXT,
+            download_status TEXT DEFAULT 'not_started',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            completed_at TIMESTAMP
+        )
+    )";
+
+    if (!query.exec(createVideoTasksTable)) {
+        qCritical() << "Failed to create video_history table:" << query.lastError().text();
+        return false;
+    }
+
     // 插入默认 API Key（如果表为空）
     query.exec("SELECT COUNT(*) FROM api_keys");
     if (query.next() && query.value(0).toInt() == 0) {
@@ -280,4 +303,205 @@ GenerationHistory DBManager::getGenerationHistory(int id)
     }
 
     return history;
+}
+
+// Video Tasks CRUD
+int DBManager::insertVideoTask(const VideoTask& task)
+{
+    QSqlQuery query;
+    query.prepare(R"(
+        INSERT INTO video_history
+        (task_id, task_type, prompt, status, progress, video_url, video_path, thumbnail_path, download_status, completed_at)
+        VALUES (:task_id, :task_type, :prompt, :status, :progress, :video_url, :video_path, :thumbnail_path, :download_status, :completed_at)
+    )");
+
+    query.bindValue(":task_id", task.taskId);
+    query.bindValue(":task_type", task.taskType);
+    query.bindValue(":prompt", task.prompt);
+    query.bindValue(":status", task.status);
+    query.bindValue(":progress", task.progress);
+    query.bindValue(":video_url", task.videoUrl);
+    query.bindValue(":video_path", task.videoPath);
+    query.bindValue(":thumbnail_path", task.thumbnailPath);
+    query.bindValue(":download_status", task.downloadStatus);
+    query.bindValue(":completed_at", task.completedAt);
+
+    if (!query.exec()) {
+        qCritical() << "Failed to insert video task:" << query.lastError().text();
+        return -1;
+    }
+
+    return query.lastInsertId().toInt();
+}
+
+bool DBManager::updateTaskStatus(const QString& taskId, const QString& status, int progress, const QString& videoUrl)
+{
+    QSqlQuery query;
+
+    if (videoUrl.isEmpty()) {
+        query.prepare("UPDATE video_history SET status = :status, progress = :progress WHERE task_id = :task_id");
+        query.bindValue(":status", status);
+        query.bindValue(":progress", progress);
+        query.bindValue(":task_id", taskId);
+    } else {
+        query.prepare(R"(
+            UPDATE video_history
+            SET status = :status, progress = :progress, video_url = :video_url,
+                completed_at = CURRENT_TIMESTAMP
+            WHERE task_id = :task_id
+        )");
+        query.bindValue(":status", status);
+        query.bindValue(":progress", progress);
+        query.bindValue(":video_url", videoUrl);
+        query.bindValue(":task_id", taskId);
+    }
+
+    if (!query.exec()) {
+        qCritical() << "Failed to update task status:" << query.lastError().text();
+        return false;
+    }
+    return true;
+}
+
+bool DBManager::updateVideoPath(const QString& taskId, const QString& videoPath, const QString& thumbnailPath, const QString& downloadStatus)
+{
+    QSqlQuery query;
+    query.prepare(R"(
+        UPDATE video_history
+        SET video_path = :video_path, thumbnail_path = :thumbnail_path, download_status = :download_status
+        WHERE task_id = :task_id
+    )");
+
+    query.bindValue(":video_path", videoPath);
+    query.bindValue(":thumbnail_path", thumbnailPath);
+    query.bindValue(":download_status", downloadStatus);
+    query.bindValue(":task_id", taskId);
+
+    if (!query.exec()) {
+        qCritical() << "Failed to update video path:" << query.lastError().text();
+        return false;
+    }
+    return true;
+}
+
+QList<VideoTask> DBManager::getTasksByType(const QString& taskType, int offset, int limit)
+{
+    QList<VideoTask> tasks;
+    QSqlQuery query;
+    query.prepare(R"(
+        SELECT id, task_id, task_type, prompt, status, progress, video_url, video_path,
+               thumbnail_path, download_status, created_at, completed_at
+        FROM video_history
+        WHERE task_type = :task_type
+        ORDER BY created_at DESC
+        LIMIT :limit OFFSET :offset
+    )");
+
+    query.bindValue(":task_type", taskType);
+    query.bindValue(":limit", limit);
+    query.bindValue(":offset", offset);
+
+    if (!query.exec()) {
+        qCritical() << "Failed to get tasks by type:" << query.lastError().text();
+        return tasks;
+    }
+
+    while (query.next()) {
+        VideoTask task;
+        task.id = query.value(0).toInt();
+        task.taskId = query.value(1).toString();
+        task.taskType = query.value(2).toString();
+        task.prompt = query.value(3).toString();
+        task.status = query.value(4).toString();
+        task.progress = query.value(5).toInt();
+        task.videoUrl = query.value(6).toString();
+        task.videoPath = query.value(7).toString();
+        task.thumbnailPath = query.value(8).toString();
+        task.downloadStatus = query.value(9).toString();
+        task.createdAt = query.value(10).toDateTime();
+        task.completedAt = query.value(11).toDateTime();
+        tasks.append(task);
+    }
+
+    return tasks;
+}
+
+VideoTask DBManager::getTaskById(const QString& taskId)
+{
+    VideoTask task;
+    QSqlQuery query;
+    query.prepare(R"(
+        SELECT id, task_id, task_type, prompt, status, progress, video_url, video_path,
+               thumbnail_path, download_status, created_at, completed_at
+        FROM video_history
+        WHERE task_id = :task_id
+    )");
+
+    query.bindValue(":task_id", taskId);
+
+    if (query.exec() && query.next()) {
+        task.id = query.value(0).toInt();
+        task.taskId = query.value(1).toString();
+        task.taskType = query.value(2).toString();
+        task.prompt = query.value(3).toString();
+        task.status = query.value(4).toString();
+        task.progress = query.value(5).toInt();
+        task.videoUrl = query.value(6).toString();
+        task.videoPath = query.value(7).toString();
+        task.thumbnailPath = query.value(8).toString();
+        task.downloadStatus = query.value(9).toString();
+        task.createdAt = query.value(10).toDateTime();
+        task.completedAt = query.value(11).toDateTime();
+    }
+
+    return task;
+}
+
+int DBManager::getTaskCount(const QString& taskType)
+{
+    QSqlQuery query;
+    query.prepare("SELECT COUNT(*) FROM video_history WHERE task_type = :task_type");
+    query.bindValue(":task_type", taskType);
+
+    if (query.exec() && query.next()) {
+        return query.value(0).toInt();
+    }
+
+    return 0;
+}
+
+QList<VideoTask> DBManager::getPendingTasks()
+{
+    QList<VideoTask> tasks;
+    QSqlQuery query(R"(
+        SELECT id, task_id, task_type, prompt, status, progress, video_url, video_path,
+               thumbnail_path, download_status, created_at, completed_at
+        FROM video_history
+        WHERE status IN ('pending', 'processing')
+        ORDER BY created_at ASC
+    )");
+
+    if (!query.exec()) {
+        qCritical() << "Failed to get pending tasks:" << query.lastError().text();
+        return tasks;
+    }
+
+    while (query.next()) {
+        VideoTask task;
+        task.id = query.value(0).toInt();
+        task.taskId = query.value(1).toString();
+        task.taskType = query.value(2).toString();
+        task.prompt = query.value(3).toString();
+        task.status = query.value(4).toString();
+        task.progress = query.value(5).toInt();
+        task.videoUrl = query.value(6).toString();
+        task.videoPath = query.value(7).toString();
+        task.thumbnailPath = query.value(8).toString();
+        task.downloadStatus = query.value(9).toString();
+        task.createdAt = query.value(10).toDateTime();
+        task.completedAt = query.value(11).toDateTime();
+        tasks.append(task);
+    }
+
+    return tasks;
 }

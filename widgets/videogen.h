@@ -13,6 +13,8 @@
 #include <QListWidget>
 #include <QCheckBox>
 #include <QScrollArea>
+#include <QStackedWidget>
+#include <QGridLayout>
 
 // 单个视频生成 Tab
 class VideoSingleTab : public QWidget
@@ -110,7 +112,59 @@ private:
     QPushButton *generateButton;
 };
 
-// 历史记录 Tab
+// 单个视频历史记录 Tab
+class VideoSingleHistoryTab : public QWidget
+{
+    Q_OBJECT
+
+public:
+    explicit VideoSingleHistoryTab(QWidget *parent = nullptr);
+
+private slots:
+    void refreshHistory();
+    void switchView();  // 切换列表/缩略图视图
+    void onViewVideo(const QString& taskId);
+    void onBrowseFile(const QString& taskId);
+    void onRetryQuery(const QString& taskId);
+
+private:
+    void setupUI();
+    void loadHistory(int offset = 0, int limit = 50);
+    void setupListView();
+    void setupThumbnailView();
+
+    QStackedWidget* viewStack;
+    QWidget* listViewWidget;
+    QWidget* thumbnailViewWidget;
+    QTableWidget* historyTable;
+    QScrollArea* thumbnailScrollArea;
+    QWidget* thumbnailContainer;
+    QGridLayout* thumbnailLayout;
+    QPushButton* switchViewButton;
+    QPushButton* refreshButton;
+    bool isListView;
+    int currentOffset;
+};
+
+// 历史记录容器 Widget (4 tab)
+class VideoHistoryWidget : public QWidget
+{
+    Q_OBJECT
+
+public:
+    explicit VideoHistoryWidget(QWidget *parent = nullptr);
+
+private:
+    void setupUI();
+
+    QTabWidget* tabWidget;
+    VideoSingleHistoryTab* videoSingleTab;
+    // VideoBatchHistoryTab* videoBatchTab;  // 后续实现
+    // ImageSingleHistoryTab* imageSingleTab;  // 后续实现
+    // ImageBatchHistoryTab* imageBatchTab;  // 后续实现
+};
+
+// 旧的 VideoHistoryTab 保留作为兼容（后续删除）
 class VideoHistoryTab : public QWidget
 {
     Q_OBJECT
@@ -148,7 +202,7 @@ private:
     QTabWidget *tabWidget;
     VideoSingleTab *singleTab;
     VideoBatchTab *batchTab;
-    VideoHistoryTab *historyTab;
+    VideoHistoryWidget *historyWidget;  // 改为 VideoHistoryWidget
 };
 
 #endif // VIDEOGEN_H
