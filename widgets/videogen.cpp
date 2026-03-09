@@ -1081,7 +1081,7 @@ VideoSingleHistoryTab::VideoSingleHistoryTab(QWidget *parent)
 void VideoSingleHistoryTab::setupUI()
 {
     QVBoxLayout *mainLayout = new QVBoxLayout(this);
-    mainLayout->setContentsMargins(20, 20, 20, 20);
+    mainLayout->setContentsMargins(0, 20, 0, 20);
     mainLayout->setSpacing(15);
 
     // 标题
