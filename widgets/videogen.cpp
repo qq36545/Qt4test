@@ -2084,11 +2084,14 @@ void VideoSingleHistoryTab::updateHeaderCheckBoxPosition()
     int headerHeight = header->height();
 
     // 勾选框大小
-    int checkBoxSize = 20;
+    int checkBoxSize = 18;  // 稍微调小一点，更美观
 
-    // 计算居中位置
+    // 计算水平居中位置
     int x = columnPos + (columnWidth - checkBoxSize) / 2;
-    int y = (headerHeight - checkBoxSize) / 2;
+
+    // 计算垂直居中位置 - 需要考虑表头在table中的y偏移
+    int headerY = header->geometry().y();  // 表头在table中的y位置
+    int y = headerY + (headerHeight - checkBoxSize) / 2;
 
     // 设置勾选框位置和大小
     headerCheckBox->setGeometry(x, y, checkBoxSize, checkBoxSize);
