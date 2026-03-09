@@ -646,14 +646,8 @@ void VideoSingleTab::onVideoCreated(const QString &taskId, const QString &status
                 "系统将自动轮询任务状态并下载完成的视频。")
         .arg(taskId));
 
-    // 清空输入
-    promptInput->clear();
-    uploadedImagePaths.clear();
-    imagePreviewLabel->clear();
-    imagePreviewLabel->setText("📁 拖拽图片到此处或点击按钮上传");
-    imagePreviewLabel->setProperty("hasImage", false);
-    imagePreviewLabel->style()->unpolish(imagePreviewLabel);
-    imagePreviewLabel->style()->polish(imagePreviewLabel);
+    // 不清空输入，保留参数供用户继续使用
+    // 参数已通过 saveSettings() 自动保存
 }
 
 void VideoSingleTab::onTaskStatusUpdated(const QString &taskId, const QString &status, const QString &videoUrl, int progress)
@@ -690,6 +684,15 @@ void VideoSingleTab::loadSettings()
 {
     QSettings settings("ChickenAI", "VideoGen");
     settings.beginGroup("VideoSingleTab");
+
+    // 阻止信号发射，避免加载时触发保存
+    promptInput->blockSignals(true);
+    modelCombo->blockSignals(true);
+    modelVariantCombo->blockSignals(true);
+    apiKeyCombo->blockSignals(true);
+    serverCombo->blockSignals(true);
+    resolutionCombo->blockSignals(true);
+    watermarkCheckBox->blockSignals(true);
 
     promptInput->setPlainText(settings.value("prompt", "").toString());
 
@@ -756,6 +759,15 @@ void VideoSingleTab::loadSettings()
     lastSubmittedParamsHash = settings.value("lastSubmittedHash", "").toString();
 
     settings.endGroup();
+
+    // 恢复信号发射
+    promptInput->blockSignals(false);
+    modelCombo->blockSignals(false);
+    modelVariantCombo->blockSignals(false);
+    apiKeyCombo->blockSignals(false);
+    serverCombo->blockSignals(false);
+    resolutionCombo->blockSignals(false);
+    watermarkCheckBox->blockSignals(false);
 
     // 加载后标记为未修改
     parametersModified = false;
