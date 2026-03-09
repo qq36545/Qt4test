@@ -1127,25 +1127,41 @@ void VideoSingleHistoryTab::setupListView()
     layout->setContentsMargins(0, 0, 0, 0);
 
     historyTable = new QTableWidget();
-    historyTable->setColumnCount(7);
+    historyTable->setColumnCount(8);
     historyTable->setHorizontalHeaderLabels({
-        "任务ID", "提示词", "状态", "进度", "创建时间", "完成时间", "操作"
+        "序号", "任务ID", "提示词", "状态", "进度", "创建时间", "完成时间", "操作"
     });
 
+    // 序号列
     historyTable->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Fixed);
-    historyTable->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
-    historyTable->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Fixed);
-    historyTable->horizontalHeader()->setSectionResizeMode(3, QHeaderView::Fixed);
-    historyTable->horizontalHeader()->setSectionResizeMode(4, QHeaderView::Fixed);
-    historyTable->horizontalHeader()->setSectionResizeMode(5, QHeaderView::Fixed);
-    historyTable->horizontalHeader()->setSectionResizeMode(6, QHeaderView::Fixed);
+    historyTable->setColumnWidth(0, 50);
 
-    historyTable->setColumnWidth(0, 100);
-    historyTable->setColumnWidth(2, 80);
+    // 任务ID列
+    historyTable->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Fixed);
+    historyTable->setColumnWidth(1, 100);
+
+    // 提示词列 - 改为固定宽度
+    historyTable->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Fixed);
+    historyTable->setColumnWidth(2, 200);
+
+    // 状态列
+    historyTable->horizontalHeader()->setSectionResizeMode(3, QHeaderView::Fixed);
     historyTable->setColumnWidth(3, 80);
-    historyTable->setColumnWidth(4, 150);
+
+    // 进度列
+    historyTable->horizontalHeader()->setSectionResizeMode(4, QHeaderView::Fixed);
+    historyTable->setColumnWidth(4, 80);
+
+    // 创建时间列
+    historyTable->horizontalHeader()->setSectionResizeMode(5, QHeaderView::Fixed);
     historyTable->setColumnWidth(5, 150);
-    historyTable->setColumnWidth(6, 260);  // 增加操作列宽度
+
+    // 完成时间列
+    historyTable->horizontalHeader()->setSectionResizeMode(6, QHeaderView::Fixed);
+    historyTable->setColumnWidth(6, 150);
+
+    // 操作列 - 扩展宽度以容纳新按钮
+    historyTable->horizontalHeader()->setSectionResizeMode(7, QHeaderView::Stretch);
 
     historyTable->setSelectionBehavior(QAbstractItemView::SelectRows);
     historyTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
