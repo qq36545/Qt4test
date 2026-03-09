@@ -162,7 +162,7 @@ void VideoSingleTab::setupUI()
     QLabel *serverLabel = new QLabel("请求服务器:");
     serverLabel->setStyleSheet("color: #F8FAFC; font-size: 14px;");
     serverCombo = new QComboBox();
-    serverCombo->addItem("【主站】https://api.kegeai.top", "https://api.kegeai.top");
+    serverCombo->addItem("【主站】https://ai.kegeai.top", "https://ai.kegeai.top");
     serverCombo->addItem("【备用】https://api.kuai.host", "https://api.kuai.host");
     serverCombo->setCurrentIndex(0); // 默认选择主站
     serverLayout->addWidget(serverLabel);
@@ -657,7 +657,7 @@ void VideoBatchTab::setupUI()
     QLabel *serverLabel = new QLabel("请求服务器:");
     serverLabel->setStyleSheet("color: #F8FAFC; font-size: 14px;");
     serverCombo = new QComboBox();
-    serverCombo->addItem("【主站】https://api.kegeai.top", "https://api.kegeai.top");
+    serverCombo->addItem("【主站】https://ai.kegeai.top", "https://ai.kegeai.top");
     serverCombo->addItem("【备用】https://api.kuai.host", "https://api.kuai.host");
     serverCombo->setCurrentIndex(0); // 默认选择主站
     serverLayout->addWidget(serverLabel);
