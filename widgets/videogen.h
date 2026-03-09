@@ -147,6 +147,9 @@ private slots:
     void onRetryQuery(const QString& taskId);
     void onRegenerate(const QString& taskId);
     void showContextMenu(const QPoint &pos);  // 显示右键菜单
+    void onDeleteSelected();  // 删除选中的记录
+    void onSelectAllChanged(int state);  // 全选/取消全选
+    void onCheckBoxStateChanged();  // 单个勾选框状态变化
 
 private:
     void setupUI();
@@ -163,6 +166,8 @@ private:
     QGridLayout* thumbnailLayout;
     QPushButton* switchViewButton;
     QPushButton* refreshButton;
+    QPushButton* deleteButton;  // 删除按钮
+    QSet<QString> selectedTaskIds;  // 存储选中的任务ID
     bool isListView;
     int currentOffset;
 };

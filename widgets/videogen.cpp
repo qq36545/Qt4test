@@ -26,6 +26,7 @@
 #include <QSettings>
 #include <QCryptographicHash>
 #include <QCheckBox>
+#include <QSet>
 #include <QCoreApplication>
 #include <QStandardPaths>
 #include <QMenu>
@@ -1435,9 +1436,13 @@ void VideoSingleHistoryTab::setupUI()
     refreshButton = new QPushButton("🔄 刷新");
     connect(refreshButton, &QPushButton::clicked, this, &VideoSingleHistoryTab::refreshHistory);
 
+    deleteButton = new QPushButton("🗑️ 删除");
+    connect(deleteButton, &QPushButton::clicked, this, &VideoSingleHistoryTab::onDeleteSelected);
+
     toolbarLayout->addWidget(switchViewButton);
     toolbarLayout->addStretch();
     toolbarLayout->addWidget(refreshButton);
+    toolbarLayout->addWidget(deleteButton);
 
     mainLayout->addLayout(toolbarLayout);
 
@@ -1471,41 +1476,45 @@ void VideoSingleHistoryTab::setupListView()
     layout->setContentsMargins(0, 0, 0, 0);
 
     historyTable = new QTableWidget();
-    historyTable->setColumnCount(8);
+    historyTable->setColumnCount(9);  // 增加一列用于勾选框
     historyTable->setHorizontalHeaderLabels({
-        "序号", "任务ID", "提示词", "状态", "进度", "创建时间", "视频类型", "操作"
+        "选择", "序号", "任务ID", "提示词", "状态", "进度", "创建时间", "视频类型", "操作"
     });
 
-    // 序号列 - 可调整
-    historyTable->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Interactive);
+    // 选择列 - 固定宽度
+    historyTable->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Fixed);
     historyTable->setColumnWidth(0, 50);
 
-    // 任务ID列 - 可调整
+    // 序号列 - 可调整
     historyTable->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Interactive);
-    historyTable->setColumnWidth(1, 100);
+    historyTable->setColumnWidth(1, 50);
+
+    // 任务ID列 - 可调整
+    historyTable->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Interactive);
+    historyTable->setColumnWidth(2, 100);
 
     // 提示词列 - 可调整
-    historyTable->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Interactive);
-    historyTable->setColumnWidth(2, 200);
+    historyTable->horizontalHeader()->setSectionResizeMode(3, QHeaderView::Interactive);
+    historyTable->setColumnWidth(3, 200);
 
     // 状态列 - 可调整
-    historyTable->horizontalHeader()->setSectionResizeMode(3, QHeaderView::Interactive);
-    historyTable->setColumnWidth(3, 80);
-
-    // 进度列 - 可调整
     historyTable->horizontalHeader()->setSectionResizeMode(4, QHeaderView::Interactive);
     historyTable->setColumnWidth(4, 80);
 
-    // 创建时间列 - 可调整
+    // 进度列 - 可调整
     historyTable->horizontalHeader()->setSectionResizeMode(5, QHeaderView::Interactive);
-    historyTable->setColumnWidth(5, 150);
+    historyTable->setColumnWidth(5, 80);
+
+    // 创建时间列 - 可调整
+    historyTable->horizontalHeader()->setSectionResizeMode(6, QHeaderView::Interactive);
+    historyTable->setColumnWidth(6, 150);
 
     // 视频类型列 - 可调整
-    historyTable->horizontalHeader()->setSectionResizeMode(6, QHeaderView::Interactive);
-    historyTable->setColumnWidth(6, 120);
+    historyTable->horizontalHeader()->setSectionResizeMode(7, QHeaderView::Interactive);
+    historyTable->setColumnWidth(7, 120);
 
     // 操作列 - 扩展宽度以容纳新按钮
-    historyTable->horizontalHeader()->setSectionResizeMode(7, QHeaderView::Stretch);
+    historyTable->horizontalHeader()->setSectionResizeMode(8, QHeaderView::Stretch);
 
     historyTable->setSelectionBehavior(QAbstractItemView::SelectRows);
     historyTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
@@ -1515,6 +1524,14 @@ void VideoSingleHistoryTab::setupListView()
     // 启用右键菜单
     historyTable->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(historyTable, &QTableWidget::customContextMenuRequested, this, &VideoSingleHistoryTab::showContextMenu);
+
+    // 表头点击事件 - 用于全选/取消全选
+    connect(historyTable->horizontalHeader(), &QHeaderView::sectionClicked, this, [this](int logicalIndex) {
+        if (logicalIndex == 0) {  // 点击"选择"列表头
+            bool allChecked = (selectedTaskIds.size() == historyTable->rowCount());
+            onSelectAllChanged(allChecked ? Qt::Unchecked : Qt::Checked);
+        }
+    });
 
     layout->addWidget(historyTable);
 }
@@ -1545,24 +1562,41 @@ void VideoSingleHistoryTab::loadHistory(int offset, int limit)
     if (isListView) {
         // 加载列表视图数据
         historyTable->setRowCount(0);
+        selectedTaskIds.clear();  // 清空选中状态
         QList<VideoTask> tasks = DBManager::instance()->getTasksByType("video_single", offset, limit);
 
         int row = 0;
         for (const VideoTask& task : tasks) {
             historyTable->insertRow(row);
 
+            // 勾选框
+            QWidget *checkBoxWidget = new QWidget();
+            QHBoxLayout *checkBoxLayout = new QHBoxLayout(checkBoxWidget);
+            checkBoxLayout->setContentsMargins(0, 0, 0, 0);
+            checkBoxLayout->setAlignment(Qt::AlignCenter);
+            QCheckBox *checkBox = new QCheckBox();
+            checkBox->setProperty("taskId", task.taskId);
+            // 处理中的任务禁用勾选框
+            if (task.status == "pending" || task.status == "processing") {
+                checkBox->setEnabled(false);
+                checkBox->setToolTip("处理中的任务不能删除");
+            }
+            connect(checkBox, &QCheckBox::checkStateChanged, this, &VideoSingleHistoryTab::onCheckBoxStateChanged);
+            checkBoxLayout->addWidget(checkBox);
+            historyTable->setCellWidget(row, 0, checkBoxWidget);
+
             // 序号
-            historyTable->setItem(row, 0, new QTableWidgetItem(QString::number(row + 1)));
+            historyTable->setItem(row, 1, new QTableWidgetItem(QString::number(row + 1)));
 
             // 任务ID - 显示完整ID，让Qt自动省略
             QTableWidgetItem *taskIdItem = new QTableWidgetItem(task.taskId);
             taskIdItem->setToolTip(task.taskId);  // 鼠标悬停显示完整ID
-            historyTable->setItem(row, 1, taskIdItem);
+            historyTable->setItem(row, 2, taskIdItem);
 
             // 提示词 - 显示完整提示词，让Qt自动省略
             QTableWidgetItem *promptItem = new QTableWidgetItem(task.prompt);
             promptItem->setToolTip(task.prompt);  // 鼠标悬停显示完整提示词
-            historyTable->setItem(row, 2, promptItem);
+            historyTable->setItem(row, 3, promptItem);
 
             // 状态
             QString statusText;
@@ -1571,17 +1605,17 @@ void VideoSingleHistoryTab::loadHistory(int offset, int limit)
             else if (task.status == "completed") statusText = "✅ 已完成";
             else if (task.status == "failed") statusText = "❌ 失败";
             else if (task.status == "timeout") statusText = "⏱️ 超时";
-            historyTable->setItem(row, 3, new QTableWidgetItem(statusText));
+            historyTable->setItem(row, 4, new QTableWidgetItem(statusText));
 
             // 进度
-            historyTable->setItem(row, 4, new QTableWidgetItem(QString::number(task.progress) + "%"));
+            historyTable->setItem(row, 5, new QTableWidgetItem(QString::number(task.progress) + "%"));
 
             // 创建时间
-            historyTable->setItem(row, 5, new QTableWidgetItem(task.createdAt.toString("yyyy-MM-dd HH:mm:ss")));
+            historyTable->setItem(row, 6, new QTableWidgetItem(task.createdAt.toString("yyyy-MM-dd HH:mm:ss")));
 
             // 视频类型（模型变体）
             QString videoType = task.modelVariant.isEmpty() ? "-" : task.modelVariant;
-            historyTable->setItem(row, 6, new QTableWidgetItem(videoType));
+            historyTable->setItem(row, 7, new QTableWidgetItem(videoType));
 
             // 操作按钮
             QWidget *btnWidget = new QWidget();
@@ -1617,7 +1651,7 @@ void VideoSingleHistoryTab::loadHistory(int offset, int limit)
             btnLayout->addWidget(refreshBtn);
             btnLayout->addWidget(regenerateBtn);
 
-            historyTable->setCellWidget(row, 7, btnWidget);
+            historyTable->setCellWidget(row, 8, btnWidget);
 
             row++;
         }
@@ -1878,6 +1912,69 @@ void VideoSingleHistoryTab::showContextMenu(const QPoint &pos)
 
             // 可选：显示提示
             // QMessageBox::information(this, "提示", "已复制到剪贴板");
+        }
+    }
+}
+
+void VideoSingleHistoryTab::onDeleteSelected()
+{
+    if (selectedTaskIds.isEmpty()) {
+        QMessageBox::information(this, "提示", "请先选择要删除的记录");
+        return;
+    }
+
+    // 确认删除
+    int count = selectedTaskIds.size();
+    QMessageBox::StandardButton reply = QMessageBox::question(this, "确认删除",
+        QString("确定要删除选中的 %1 条记录吗？\n\n注意：只会删除数据库记录，不会删除本地视频文件。").arg(count),
+        QMessageBox::Yes | QMessageBox::No);
+
+    if (reply != QMessageBox::Yes) {
+        return;
+    }
+
+    // 执行删除
+    QStringList taskIdsToDelete(selectedTaskIds.begin(), selectedTaskIds.end());
+    int deletedCount = DBManager::instance()->deleteVideoTasks(taskIdsToDelete);
+
+    if (deletedCount > 0) {
+        QMessageBox::information(this, "删除成功", QString("成功删除 %1 条记录").arg(deletedCount));
+        selectedTaskIds.clear();
+        refreshHistory();
+    } else {
+        QMessageBox::warning(this, "删除失败", "删除记录失败，请查看日志");
+    }
+}
+
+void VideoSingleHistoryTab::onSelectAllChanged(int state)
+{
+    bool checked = (state == Qt::Checked);
+
+    for (int row = 0; row < historyTable->rowCount(); ++row) {
+        QWidget *widget = historyTable->cellWidget(row, 0);
+        if (widget) {
+            QCheckBox *checkBox = widget->findChild<QCheckBox*>();
+            if (checkBox && checkBox->isEnabled()) {
+                checkBox->setChecked(checked);
+            }
+        }
+    }
+}
+
+void VideoSingleHistoryTab::onCheckBoxStateChanged()
+{
+    selectedTaskIds.clear();
+
+    for (int row = 0; row < historyTable->rowCount(); ++row) {
+        QWidget *widget = historyTable->cellWidget(row, 0);
+        if (widget) {
+            QCheckBox *checkBox = widget->findChild<QCheckBox*>();
+            if (checkBox && checkBox->isChecked()) {
+                QString taskId = checkBox->property("taskId").toString();
+                if (!taskId.isEmpty()) {
+                    selectedTaskIds.insert(taskId);
+                }
+            }
         }
     }
 }

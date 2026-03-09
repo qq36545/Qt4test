@@ -73,6 +73,8 @@ public:
     VideoTask getTaskById(const QString& taskId);  // 根据 taskId 查询
     int getTaskCount(const QString& taskType);
     QList<VideoTask> getPendingTasks();  // 获取所有待轮询的任务
+    bool deleteVideoTask(const QString& taskId);  // 删除单个任务
+    int deleteVideoTasks(const QStringList& taskIds);  // 批量删除任务，返回实际删除的数量
 
 private:
     explicit DBManager(QObject *parent = nullptr);

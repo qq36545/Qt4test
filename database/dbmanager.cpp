@@ -444,6 +444,46 @@ QList<VideoTask> DBManager::getTasksByType(const QString& taskType, int offset, 
     return tasks;
 }
 
+bool DBManager::deleteVideoTask(const QString& taskId)
+{
+    QSqlQuery query;
+    query.prepare("DELETE FROM video_history WHERE task_id = :task_id");
+    query.bindValue(":task_id", taskId);
+
+    if (!query.exec()) {
+        qCritical() << "Failed to delete video task:" << query.lastError().text();
+        return false;
+    }
+    return true;
+}
+
+int DBManager::deleteVideoTasks(const QStringList& taskIds)
+{
+    if (taskIds.isEmpty()) {
+        return 0;
+    }
+
+    int deletedCount = 0;
+    QSqlQuery query;
+
+    // 开启事务以提高批量删除性能
+    db.transaction();
+
+    for (const QString& taskId : taskIds) {
+        query.prepare("DELETE FROM video_history WHERE task_id = :task_id");
+        query.bindValue(":task_id", taskId);
+
+        if (query.exec()) {
+            deletedCount++;
+        } else {
+            qCritical() << "Failed to delete video task" << taskId << ":" << query.lastError().text();
+        }
+    }
+
+    db.commit();
+    return deletedCount;
+}
+
 VideoTask DBManager::getTaskById(const QString& taskId)
 {
     VideoTask task;
@@ -525,3 +565,4 @@ QList<VideoTask> DBManager::getPendingTasks()
 
     return tasks;
 }
+
