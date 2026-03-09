@@ -97,7 +97,7 @@ QTabBar::tab:hover:!selected {
 
 /* 提示词输入框 */
 QTextEdit {
-    background: rgba(30, 27, 75, 0.95);
+    background: rgba(15, 13, 40, 1.0);
     border: 1px solid rgba(248, 250, 252, 0.1);
     border-radius: 12px;
     color: #F8FAFC;
@@ -108,12 +108,12 @@ QTextEdit {
 
 QTextEdit:focus {
     border: 1px solid rgba(225, 29, 72, 0.5);
-    background: rgba(30, 27, 75, 1.0);
+    background: rgba(15, 13, 40, 1.0);
 }
 
 /* 下拉框 */
 QComboBox {
-    background: rgba(30, 27, 75, 0.95);
+    background: rgba(15, 13, 40, 1.0);
     border: 1px solid rgba(248, 250, 252, 0.1);
     border-radius: 8px;
     color: #F8FAFC;
@@ -124,7 +124,7 @@ QComboBox {
 }
 
 QComboBox:hover {
-    background: rgba(30, 27, 75, 1.0);
+    background: rgba(20, 18, 50, 1.0);
     border: 1px solid rgba(248, 250, 252, 0.2);
 }
 
@@ -268,6 +268,11 @@ QScrollArea > QWidget > QWidget {
     background: transparent;
 }
 
+/* 滚动区域内容容器 */
+#scrollContentWidget {
+    background: rgba(30, 27, 75, 0.3);  /* 与 QTabWidget::pane 保持一致 */
+}
+
 QScrollBar:vertical {
     background: rgba(15, 15, 35, 0.3);
     width: 10px;
@@ -340,7 +345,7 @@ QMessageBox QPushButton:hover {
    图片预览组件
    ======================================== */
 #imagePreviewLabel {
-    background: rgba(30, 27, 75, 0.9);
+    background: rgba(15, 13, 40, 1.0);
     border: 1px solid rgba(248, 250, 252, 0.1);
     border-radius: 8px;
     color: #94A3B8;
@@ -355,7 +360,7 @@ QMessageBox QPushButton:hover {
 }
 
 #videoPreviewLabel {
-    background: rgba(30, 27, 75, 0.9);
+    background: rgba(15, 13, 40, 1.0);
     border: 1px solid rgba(248, 250, 252, 0.1);
     border-radius: 12px;
     color: #94A3B8;

@@ -268,6 +268,11 @@ QScrollArea > QWidget > QWidget {
     background: transparent;
 }
 
+/* 滚动区域内容容器 */
+#scrollContentWidget {
+    background: #FFFFFF;  /* 与 QTabWidget::pane 保持一致 */
+}
+
 QScrollBar:vertical {
     background: #E2E8F0;
     width: 10px;
