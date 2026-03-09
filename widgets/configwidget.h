@@ -17,6 +17,9 @@ class ConfigWidget : public QWidget
 public:
     explicit ConfigWidget(QWidget *parent = nullptr);
 
+signals:
+    void apiKeysChanged();
+
 protected:
     void resizeEvent(QResizeEvent *event) override;
 

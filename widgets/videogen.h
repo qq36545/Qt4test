@@ -24,6 +24,9 @@ class VideoSingleTab : public QWidget
 public:
     explicit VideoSingleTab(QWidget *parent = nullptr);
 
+public slots:
+    void refreshApiKeys();
+
 protected:
     bool eventFilter(QObject *obj, QEvent *event) override;
 
@@ -44,6 +47,12 @@ private:
     void onVideoCreated(const QString &taskId, const QString &status);
     void onTaskStatusUpdated(const QString &taskId, const QString &status, const QString &videoUrl, int progress);
     void onApiError(const QString &error);
+    void saveSettings();
+    void loadSettings();
+    QString calculateParamsHash() const;
+    bool checkDuplicateSubmission();
+    void onAnyParameterChanged();
+    QString copyImagesToPersistentStorage(const QString &taskId);
 
     QTextEdit *promptInput;
     QComboBox *modelCombo;
@@ -68,6 +77,9 @@ private:
 
     class Veo3API *veo3API;  // API 实例
     QString currentTaskId;   // 当前任务 ID
+    QString lastSubmittedParamsHash;  // 上次提交的参数哈希
+    bool suppressDuplicateWarning;    // 本次会话是否抑制重复提交警告
+    bool parametersModified;          // 参数是否被修改过
 };
 
 // 批量视频生成 Tab
@@ -77,6 +89,9 @@ class VideoBatchTab : public QWidget
 
 public:
     explicit VideoBatchTab(QWidget *parent = nullptr);
+
+public slots:
+    void refreshApiKeys();
 
 private slots:
     void generateBatch();
@@ -127,6 +142,7 @@ private slots:
     void onBrowseFile(const QString& taskId);
     void onRetryQuery(const QString& taskId);
     void onRegenerate(const QString& taskId);
+    void showContextMenu(const QPoint &pos);  // 显示右键菜单
 
 private:
     void setupUI();
@@ -192,6 +208,8 @@ class VideoGenWidget : public QWidget
 
 public:
     explicit VideoGenWidget(QWidget *parent = nullptr);
+    VideoSingleTab* getSingleTab() const { return singleTab; }
+    VideoBatchTab* getBatchTab() const { return batchTab; }
 
 protected:
     void resizeEvent(QResizeEvent *event) override;

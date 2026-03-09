@@ -137,6 +137,12 @@ void MainWindow::setupContentArea()
     contentArea->addWidget(configWidget);
     contentArea->addWidget(aboutWidget);
     contentArea->addWidget(historyWidget);
+
+    // 连接配置页面的密钥变化信号到视频生成页面
+    connect(configWidget, &ConfigWidget::apiKeysChanged,
+            videoGenWidget->getSingleTab(), &VideoSingleTab::refreshApiKeys);
+    connect(configWidget, &ConfigWidget::apiKeysChanged,
+            videoGenWidget->getBatchTab(), &VideoBatchTab::refreshApiKeys);
 }
 
 void MainWindow::showVideoGen()

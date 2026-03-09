@@ -23,6 +23,14 @@
 #include <QUrl>
 #include <QProcess>
 #include <QDir>
+#include <QSettings>
+#include <QCryptographicHash>
+#include <QCheckBox>
+#include <QCoreApplication>
+#include <QStandardPaths>
+#include <QMenu>
+#include <QClipboard>
+#include <QApplication>
 
 // VideoGenWidget 实现
 VideoGenWidget::VideoGenWidget(QWidget *parent)
@@ -96,7 +104,9 @@ void VideoGenWidget::updateTabWidths()
 
 // VideoSingleTab 实现
 VideoSingleTab::VideoSingleTab(QWidget *parent)
-    : QWidget(parent)
+    : QWidget(parent),
+      suppressDuplicateWarning(false),
+      parametersModified(false)
 {
     veo3API = new Veo3API(this);
     connect(veo3API, &Veo3API::videoCreated, this, &VideoSingleTab::onVideoCreated);
@@ -105,6 +115,7 @@ VideoSingleTab::VideoSingleTab(QWidget *parent)
 
     setupUI();
     loadApiKeys();
+    loadSettings();
 }
 
 bool VideoSingleTab::eventFilter(QObject *obj, QEvent *event)
@@ -287,6 +298,7 @@ void VideoSingleTab::setupUI()
     QLabel *watermarkLabel = new QLabel("水印");
     watermarkLabel->setStyleSheet("font-size: 14px;");
     watermarkCheckBox = new QCheckBox("添加水印");
+    watermarkCheckBox->setStyleSheet("color: white; font-size: 12px;");
     watermarkLayout->addWidget(watermarkLabel);
     watermarkLayout->addWidget(watermarkCheckBox);
 
@@ -301,8 +313,8 @@ void VideoSingleTab::setupUI()
     previewLabel = new QLabel();
     previewLabel->setObjectName("videoPreviewLabel");
     previewLabel->setAlignment(Qt::AlignCenter);
-    previewLabel->setText("生成结果将显示在这里");
-    previewLabel->setMinimumHeight(300);
+    previewLabel->setText("💡 生成结果将显示在这里");
+    previewLabel->setMinimumHeight(150);
     contentLayout->addWidget(previewLabel);
 
     // 生成按钮
@@ -317,6 +329,13 @@ void VideoSingleTab::setupUI()
 
     // 初始化UI状态
     onModelVariantChanged(0);
+
+    // 连接参数变化信号
+    connect(promptInput, &QTextEdit::textChanged, this, &VideoSingleTab::onAnyParameterChanged);
+    connect(modelCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &VideoSingleTab::onAnyParameterChanged);
+    connect(modelVariantCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &VideoSingleTab::onAnyParameterChanged);
+    connect(resolutionCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &VideoSingleTab::onAnyParameterChanged);
+    connect(watermarkCheckBox, &QCheckBox::checkStateChanged, this, &VideoSingleTab::onAnyParameterChanged);
 }
 
 void VideoSingleTab::loadApiKeys()
@@ -335,6 +354,11 @@ void VideoSingleTab::loadApiKeys()
             apiKeyCombo->addItem(key.name, key.id);
         }
     }
+}
+
+void VideoSingleTab::refreshApiKeys()
+{
+    loadApiKeys();
 }
 
 void VideoSingleTab::onModelChanged(int index)
@@ -364,16 +388,29 @@ void VideoSingleTab::uploadImage()
         return;
     }
 
+    // 读取上次图片上传路径
+    QSettings settings("ChickenAI", "VideoGen");
+    QString lastDir = settings.value("lastImageUploadDir", QStandardPaths::writableLocation(QStandardPaths::PicturesLocation)).toString();
+
+    // 验证路径是否存在
+    if (!QDir(lastDir).exists()) {
+        lastDir = QStandardPaths::writableLocation(QStandardPaths::PicturesLocation);
+    }
+
     QString fileName = QFileDialog::getOpenFileName(
         this,
         "选择首帧图片",
-        "",
+        lastDir,
         "图片文件 (*.png *.jpg *.jpeg *.bmp *.gif)"
     );
 
     if (!fileName.isEmpty()) {
         uploadedImagePaths.append(fileName);
         updateImagePreview();
+
+        // 保存图片所在目录
+        QFileInfo fileInfo(fileName);
+        settings.setValue("lastImageUploadDir", fileInfo.absolutePath());
     }
 }
 
@@ -416,10 +453,19 @@ void VideoSingleTab::updateImagePreview()
 
 void VideoSingleTab::uploadEndFrameImage()
 {
+    // 读取上次图片上传路径（与首帧共享）
+    QSettings settings("ChickenAI", "VideoGen");
+    QString lastDir = settings.value("lastImageUploadDir", QStandardPaths::writableLocation(QStandardPaths::PicturesLocation)).toString();
+
+    // 验证路径是否存在
+    if (!QDir(lastDir).exists()) {
+        lastDir = QStandardPaths::writableLocation(QStandardPaths::PicturesLocation);
+    }
+
     QString fileName = QFileDialog::getOpenFileName(
         this,
         "选择尾帧图片",
-        "",
+        lastDir,
         "图片文件 (*.png *.jpg *.jpeg *.bmp *.gif)"
     );
 
@@ -442,6 +488,10 @@ void VideoSingleTab::uploadEndFrameImage()
         // 强制刷新样式
         endFramePreviewLabel->style()->unpolish(endFramePreviewLabel);
         endFramePreviewLabel->style()->polish(endFramePreviewLabel);
+
+        // 保存图片所在目录
+        QFileInfo fileInfo(fileName);
+        settings.setValue("lastImageUploadDir", fileInfo.absolutePath());
     }
 }
 
@@ -505,6 +555,11 @@ void VideoSingleTab::generateVideo()
         return;
     }
 
+    // 检测重复提交
+    if (!checkDuplicateSubmission()) {
+        return;
+    }
+
     QString model = modelCombo->currentText();
     QString modelVariant = modelVariantCombo->currentData().toString();
     QString server = serverCombo->currentData().toString();
@@ -540,6 +595,9 @@ void VideoSingleTab::onVideoCreated(const QString &taskId, const QString &status
 {
     currentTaskId = taskId;
 
+    // 复制图片到持久化存储
+    QString persistentImagePath = copyImagesToPersistentStorage(taskId);
+
     // 获取当前参数
     QString prompt = promptInput->toPlainText().trimmed();
     int keyId = apiKeyCombo->currentData().toInt();
@@ -558,6 +616,11 @@ void VideoSingleTab::onVideoCreated(const QString &taskId, const QString &status
 
     // 启动轮询
     TaskPollManager::getInstance()->startPolling(taskId, "video_single", apiKeyData.apiKey, server);
+
+    // 保存当前参数哈希和设置
+    lastSubmittedParamsHash = calculateParamsHash();
+    parametersModified = false;
+    saveSettings();
 
     // 显示提示
     QMessageBox::information(this, "任务已创建",
@@ -586,6 +649,184 @@ void VideoSingleTab::onTaskStatusUpdated(const QString &taskId, const QString &s
 void VideoSingleTab::onApiError(const QString &error)
 {
     QMessageBox::critical(this, "错误", QString("API 调用失败:\n%1").arg(error));
+}
+
+void VideoSingleTab::saveSettings()
+{
+    QSettings settings("ChickenAI", "VideoGen");
+    settings.beginGroup("VideoSingleTab");
+
+    settings.setValue("prompt", promptInput->toPlainText());
+    settings.setValue("model", modelCombo->currentIndex());
+    settings.setValue("modelVariant", modelVariantCombo->currentIndex());
+    settings.setValue("resolution", resolutionCombo->currentIndex());
+    settings.setValue("watermark", watermarkCheckBox->isChecked());
+    settings.setValue("lastSubmittedHash", lastSubmittedParamsHash);
+
+    settings.endGroup();
+}
+
+void VideoSingleTab::loadSettings()
+{
+    QSettings settings("ChickenAI", "VideoGen");
+    settings.beginGroup("VideoSingleTab");
+
+    promptInput->setPlainText(settings.value("prompt", "").toString());
+
+    int modelIndex = settings.value("model", 1).toInt();  // 默认 VEO3
+    if (modelIndex >= 0 && modelIndex < modelCombo->count()) {
+        modelCombo->setCurrentIndex(modelIndex);
+    }
+
+    int variantIndex = settings.value("modelVariant", 0).toInt();
+    if (variantIndex >= 0 && variantIndex < modelVariantCombo->count()) {
+        modelVariantCombo->setCurrentIndex(variantIndex);
+    }
+
+    int resIndex = settings.value("resolution", 1).toInt();  // 默认竖屏
+    if (resIndex >= 0 && resIndex < resolutionCombo->count()) {
+        resolutionCombo->setCurrentIndex(resIndex);
+    }
+
+    watermarkCheckBox->setChecked(settings.value("watermark", false).toBool());
+    lastSubmittedParamsHash = settings.value("lastSubmittedHash", "").toString();
+
+    settings.endGroup();
+
+    // 加载后标记为未修改
+    parametersModified = false;
+}
+
+QString VideoSingleTab::calculateParamsHash() const
+{
+    QCryptographicHash hash(QCryptographicHash::Sha256);
+
+    hash.addData(promptInput->toPlainText().toUtf8());
+    hash.addData(QString::number(modelCombo->currentIndex()).toUtf8());
+    hash.addData(QString::number(modelVariantCombo->currentIndex()).toUtf8());
+    hash.addData(QString::number(resolutionCombo->currentIndex()).toUtf8());
+    hash.addData(QString::number(watermarkCheckBox->isChecked()).toUtf8());
+
+    for (const QString &path : uploadedImagePaths) {
+        hash.addData(path.toUtf8());
+    }
+
+    if (!uploadedEndFrameImagePath.isEmpty()) {
+        hash.addData(uploadedEndFrameImagePath.toUtf8());
+    }
+
+    return QString(hash.result().toHex());
+}
+
+bool VideoSingleTab::checkDuplicateSubmission()
+{
+    QString currentHash = calculateParamsHash();
+
+    // 如果参数未修改且与上次提交相同，且未抑制警告
+    if (!parametersModified && currentHash == lastSubmittedParamsHash && !suppressDuplicateWarning) {
+        QMessageBox msgBox(this);
+        msgBox.setWindowTitle("重复提交提醒");
+        msgBox.setText("刚刚已经提交这次任务，是否继续？");
+        msgBox.setIcon(QMessageBox::Question);
+
+        QPushButton *continueBtn = msgBox.addButton("继续", QMessageBox::AcceptRole);
+        QPushButton *cancelBtn = msgBox.addButton("停止", QMessageBox::RejectRole);
+
+        QCheckBox *suppressCheckBox = new QCheckBox("不再显示此提示");
+        msgBox.setCheckBox(suppressCheckBox);
+
+        msgBox.exec();
+
+        if (msgBox.clickedButton() == cancelBtn) {
+            return false;
+        }
+
+        if (suppressCheckBox->isChecked()) {
+            suppressDuplicateWarning = true;
+        }
+    }
+
+    return true;
+}
+
+void VideoSingleTab::onAnyParameterChanged()
+{
+    parametersModified = true;
+    suppressDuplicateWarning = false;  // 参数修改后重置抑制标志
+}
+
+QString VideoSingleTab::copyImagesToPersistentStorage(const QString &taskId)
+{
+    // 获取当前模型名称
+    QString modelName = modelCombo->currentText();
+    QString modelDirName;
+
+    if (modelName.contains("sora", Qt::CaseInsensitive)) {
+        modelDirName = "sora_one_by_one";
+    } else if (modelName.contains("veo", Qt::CaseInsensitive)) {
+        modelDirName = "veo3_one_by_one";
+    } else if (modelName.contains("grok", Qt::CaseInsensitive)) {
+        modelDirName = "grok_one_by_one";
+    } else if (modelName.contains("wan", Qt::CaseInsensitive)) {
+        modelDirName = "wan_one_by_one";
+    } else {
+        modelDirName = "unknown_one_by_one";
+    }
+
+    // 构建目录路径: inputs/model_name/YYYYMMDD/taskid/
+    // 使用应用可执行文件所在目录的父目录（项目根目录）
+    QString dateStr = QDateTime::currentDateTime().toString("yyyyMMdd");
+    QString appPath = QCoreApplication::applicationDirPath();
+
+    // 如果是 macOS .app 包，需要向上3级到项目根目录
+    QDir appDir(appPath);
+    if (appPath.contains(".app/Contents/MacOS")) {
+        appDir.cdUp();  // Contents
+        appDir.cdUp();  // ChickenAI.app
+        appDir.cdUp();  // build
+    }
+
+    QString basePath = appDir.absolutePath();
+    QString targetDir = QString("%1/inputs/%2/%3/%4")
+        .arg(basePath)
+        .arg(modelDirName)
+        .arg(dateStr)
+        .arg(taskId);
+
+    // 创建目录
+    QDir dir;
+    if (!dir.mkpath(targetDir)) {
+        qWarning() << "Failed to create directory:" << targetDir;
+        return "";
+    }
+
+    // 复制首帧图片
+    for (int i = 0; i < uploadedImagePaths.size(); ++i) {
+        QString sourcePath = uploadedImagePaths[i];
+        QFileInfo fileInfo(sourcePath);
+        QString targetPath = QString("%1/frame_start_%2.%3")
+            .arg(targetDir)
+            .arg(i)
+            .arg(fileInfo.suffix());
+
+        if (!QFile::copy(sourcePath, targetPath)) {
+            qWarning() << "Failed to copy image:" << sourcePath << "to" << targetPath;
+        }
+    }
+
+    // 复制尾帧图片（如果有）
+    if (!uploadedEndFrameImagePath.isEmpty()) {
+        QFileInfo fileInfo(uploadedEndFrameImagePath);
+        QString targetPath = QString("%1/frame_end.%2")
+            .arg(targetDir)
+            .arg(fileInfo.suffix());
+
+        if (!QFile::copy(uploadedEndFrameImagePath, targetPath)) {
+            qWarning() << "Failed to copy end frame image:" << uploadedEndFrameImagePath;
+        }
+    }
+
+    return targetDir;
 }
 
 // VideoBatchTab 实现
@@ -798,6 +1039,11 @@ void VideoBatchTab::loadApiKeys()
     }
 }
 
+void VideoBatchTab::refreshApiKeys()
+{
+    loadApiKeys();
+}
+
 void VideoBatchTab::onModelChanged(int index)
 {
     loadApiKeys();
@@ -900,8 +1146,21 @@ void VideoBatchTab::generateBatch()
 
 void VideoBatchTab::importCSV()
 {
-    QString fileName = QFileDialog::getOpenFileName(this, "导入 CSV", "", "CSV Files (*.csv)");
+    // 读取上次图片上传路径（与单个生成共享）
+    QSettings settings("ChickenAI", "VideoGen");
+    QString lastDir = settings.value("lastImageUploadDir", QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation)).toString();
+
+    // 验证路径是否存在
+    if (!QDir(lastDir).exists()) {
+        lastDir = QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation);
+    }
+
+    QString fileName = QFileDialog::getOpenFileName(this, "导入 CSV", lastDir, "CSV Files (*.csv)");
     if (!fileName.isEmpty()) {
+        // 保存文件所在目录
+        QFileInfo fileInfo(fileName);
+        settings.setValue("lastImageUploadDir", fileInfo.absolutePath());
+
         QMessageBox::information(this, "提示", "CSV 导入功能待实现");
     }
 }
@@ -1132,32 +1391,32 @@ void VideoSingleHistoryTab::setupListView()
         "序号", "任务ID", "提示词", "状态", "进度", "创建时间", "完成时间", "操作"
     });
 
-    // 序号列
-    historyTable->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Fixed);
+    // 序号列 - 可调整
+    historyTable->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Interactive);
     historyTable->setColumnWidth(0, 50);
 
-    // 任务ID列
-    historyTable->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Fixed);
+    // 任务ID列 - 可调整
+    historyTable->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Interactive);
     historyTable->setColumnWidth(1, 100);
 
-    // 提示词列 - 改为固定宽度
-    historyTable->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Fixed);
+    // 提示词列 - 可调整
+    historyTable->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Interactive);
     historyTable->setColumnWidth(2, 200);
 
-    // 状态列
-    historyTable->horizontalHeader()->setSectionResizeMode(3, QHeaderView::Fixed);
+    // 状态列 - 可调整
+    historyTable->horizontalHeader()->setSectionResizeMode(3, QHeaderView::Interactive);
     historyTable->setColumnWidth(3, 80);
 
-    // 进度列
-    historyTable->horizontalHeader()->setSectionResizeMode(4, QHeaderView::Fixed);
+    // 进度列 - 可调整
+    historyTable->horizontalHeader()->setSectionResizeMode(4, QHeaderView::Interactive);
     historyTable->setColumnWidth(4, 80);
 
-    // 创建时间列
-    historyTable->horizontalHeader()->setSectionResizeMode(5, QHeaderView::Fixed);
+    // 创建时间列 - 可调整
+    historyTable->horizontalHeader()->setSectionResizeMode(5, QHeaderView::Interactive);
     historyTable->setColumnWidth(5, 150);
 
-    // 完成时间列
-    historyTable->horizontalHeader()->setSectionResizeMode(6, QHeaderView::Fixed);
+    // 完成时间列 - 可调整
+    historyTable->horizontalHeader()->setSectionResizeMode(6, QHeaderView::Interactive);
     historyTable->setColumnWidth(6, 150);
 
     // 操作列 - 扩展宽度以容纳新按钮
@@ -1167,6 +1426,10 @@ void VideoSingleHistoryTab::setupListView()
     historyTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
     historyTable->verticalHeader()->setVisible(false);
     historyTable->verticalHeader()->setDefaultSectionSize(90);  // 增加行高
+
+    // 启用右键菜单
+    historyTable->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(historyTable, &QTableWidget::customContextMenuRequested, this, &VideoSingleHistoryTab::showContextMenu);
 
     layout->addWidget(historyTable);
 }
@@ -1206,13 +1469,15 @@ void VideoSingleHistoryTab::loadHistory(int offset, int limit)
             // 序号
             historyTable->setItem(row, 0, new QTableWidgetItem(QString::number(row + 1)));
 
-            // 任务ID
-            historyTable->setItem(row, 1, new QTableWidgetItem(task.taskId.left(8) + "..."));
+            // 任务ID - 显示完整ID，让Qt自动省略
+            QTableWidgetItem *taskIdItem = new QTableWidgetItem(task.taskId);
+            taskIdItem->setToolTip(task.taskId);  // 鼠标悬停显示完整ID
+            historyTable->setItem(row, 1, taskIdItem);
 
-            // 提示词
-            QString promptPreview = task.prompt.left(30);
-            if (task.prompt.length() > 30) promptPreview += "...";
-            historyTable->setItem(row, 2, new QTableWidgetItem(promptPreview));
+            // 提示词 - 显示完整提示词，让Qt自动省略
+            QTableWidgetItem *promptItem = new QTableWidgetItem(task.prompt);
+            promptItem->setToolTip(task.prompt);  // 鼠标悬停显示完整提示词
+            historyTable->setItem(row, 2, promptItem);
 
             // 状态
             QString statusText;
@@ -1494,5 +1759,41 @@ void VideoSingleHistoryTab::onRegenerate(const QString& taskId)
         // TODO: 调用 API 重新生成视频
         // 这里需要根据实际的 API 调用逻辑来实现
         QMessageBox::information(this, "提示", "重新生成功能待实现");
+    }
+}
+
+void VideoSingleHistoryTab::showContextMenu(const QPoint &pos)
+{
+    // 获取点击的单元格
+    QTableWidgetItem *item = historyTable->itemAt(pos);
+    if (!item) {
+        return;
+    }
+
+    // 创建右键菜单
+    QMenu contextMenu(this);
+    contextMenu.setStyleSheet("QMenu { font-size: 14px; } QMenu::item { padding: 5px 20px; }");
+    QAction *copyAction = contextMenu.addAction("📋 复制");
+
+    // 显示菜单并获取用户选择
+    QAction *selectedAction = contextMenu.exec(historyTable->viewport()->mapToGlobal(pos));
+
+    if (selectedAction == copyAction) {
+        // 复制单元格内容到剪贴板
+        QString cellText = item->text();
+
+        // 如果单元格文本为空，尝试获取 tooltip（完整内容）
+        if (cellText.isEmpty() || cellText == "-") {
+            cellText = item->toolTip();
+        }
+
+        // 如果还是空的，可能是操作列（包含按钮），跳过
+        if (!cellText.isEmpty()) {
+            QClipboard *clipboard = QApplication::clipboard();
+            clipboard->setText(cellText);
+
+            // 可选：显示提示
+            // QMessageBox::information(this, "提示", "已复制到剪贴板");
+        }
     }
 }

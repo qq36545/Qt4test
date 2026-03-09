@@ -243,6 +243,7 @@ void ConfigWidget::addApiKey()
         if (DBManager::instance()->addApiKey(name, apiKey)) {
             QMessageBox::information(this, "成功", "密钥添加成功");
             loadApiKeys();
+            emit apiKeysChanged();
         } else {
             QMessageBox::critical(this, "错误", "密钥添加失败");
         }
@@ -269,6 +270,7 @@ void ConfigWidget::editApiKey()
         if (DBManager::instance()->updateApiKey(keyId, name, apiKey)) {
             QMessageBox::information(this, "成功", "密钥更新成功");
             loadApiKeys();
+            emit apiKeysChanged();
         } else {
             QMessageBox::critical(this, "错误", "密钥更新失败");
         }
@@ -291,6 +293,7 @@ void ConfigWidget::deleteApiKey()
         if (DBManager::instance()->deleteApiKey(keyId)) {
             QMessageBox::information(this, "成功", "密钥删除成功");
             loadApiKeys();
+            emit apiKeysChanged();
         } else {
             QMessageBox::critical(this, "错误", "密钥删除失败");
         }
