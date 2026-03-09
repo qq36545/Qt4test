@@ -1390,7 +1390,7 @@ VideoHistoryWidget::VideoHistoryWidget(QWidget *parent)
 void VideoHistoryWidget::setupUI()
 {
     QVBoxLayout *mainLayout = new QVBoxLayout(this);
-    mainLayout->setContentsMargins(20, 20, 20, 20);
+    mainLayout->setContentsMargins(0, 20, 0, 20);  // 移除左右边距，保留上下边距
     mainLayout->setSpacing(15);
 
     // 创建 Tab Widget
@@ -1423,7 +1423,7 @@ VideoSingleHistoryTab::VideoSingleHistoryTab(QWidget *parent)
 void VideoSingleHistoryTab::setupUI()
 {
     QVBoxLayout *mainLayout = new QVBoxLayout(this);
-    mainLayout->setContentsMargins(0, 20, 0, 20);
+    mainLayout->setContentsMargins(0, 20, 0, 20);  // 移除左右边距，保留上下边距
     mainLayout->setSpacing(15);
 
     // 标题
