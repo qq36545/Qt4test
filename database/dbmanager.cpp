@@ -99,6 +99,7 @@ bool DBManager::createTables()
             task_id TEXT NOT NULL UNIQUE,
             task_type TEXT NOT NULL,
             prompt TEXT,
+            model_variant TEXT,
             status TEXT DEFAULT 'pending',
             progress INTEGER DEFAULT 0,
             video_url TEXT,
@@ -113,6 +114,21 @@ bool DBManager::createTables()
     if (!query.exec(createVideoTasksTable)) {
         qCritical() << "Failed to create video_history table:" << query.lastError().text();
         return false;
+    }
+
+    // 为已存在的表添加 model_variant 列（兼容旧数据）
+    query.exec("PRAGMA table_info(video_history)");
+    bool hasModelVariant = false;
+    while (query.next()) {
+        if (query.value(1).toString() == "model_variant") {
+            hasModelVariant = true;
+            break;
+        }
+    }
+    if (!hasModelVariant) {
+        if (!query.exec("ALTER TABLE video_history ADD COLUMN model_variant TEXT")) {
+            qCritical() << "Failed to add model_variant column:" << query.lastError().text();
+        }
     }
 
     // 插入默认 API Key（如果表为空）
@@ -311,13 +327,14 @@ int DBManager::insertVideoTask(const VideoTask& task)
     QSqlQuery query;
     query.prepare(R"(
         INSERT INTO video_history
-        (task_id, task_type, prompt, status, progress, video_url, video_path, thumbnail_path, download_status, completed_at)
-        VALUES (:task_id, :task_type, :prompt, :status, :progress, :video_url, :video_path, :thumbnail_path, :download_status, :completed_at)
+        (task_id, task_type, prompt, model_variant, status, progress, video_url, video_path, thumbnail_path, download_status, completed_at)
+        VALUES (:task_id, :task_type, :prompt, :model_variant, :status, :progress, :video_url, :video_path, :thumbnail_path, :download_status, :completed_at)
     )");
 
     query.bindValue(":task_id", task.taskId);
     query.bindValue(":task_type", task.taskType);
     query.bindValue(":prompt", task.prompt);
+    query.bindValue(":model_variant", task.modelVariant);
     query.bindValue(":status", task.status);
     query.bindValue(":progress", task.progress);
     query.bindValue(":video_url", task.videoUrl);
@@ -389,7 +406,7 @@ QList<VideoTask> DBManager::getTasksByType(const QString& taskType, int offset, 
     QList<VideoTask> tasks;
     QSqlQuery query;
     query.prepare(R"(
-        SELECT id, task_id, task_type, prompt, status, progress, video_url, video_path,
+        SELECT id, task_id, task_type, prompt, model_variant, status, progress, video_url, video_path,
                thumbnail_path, download_status, created_at, completed_at
         FROM video_history
         WHERE task_type = :task_type
@@ -412,14 +429,15 @@ QList<VideoTask> DBManager::getTasksByType(const QString& taskType, int offset, 
         task.taskId = query.value(1).toString();
         task.taskType = query.value(2).toString();
         task.prompt = query.value(3).toString();
-        task.status = query.value(4).toString();
-        task.progress = query.value(5).toInt();
-        task.videoUrl = query.value(6).toString();
-        task.videoPath = query.value(7).toString();
-        task.thumbnailPath = query.value(8).toString();
-        task.downloadStatus = query.value(9).toString();
-        task.createdAt = query.value(10).toDateTime();
-        task.completedAt = query.value(11).toDateTime();
+        task.modelVariant = query.value(4).toString();
+        task.status = query.value(5).toString();
+        task.progress = query.value(6).toInt();
+        task.videoUrl = query.value(7).toString();
+        task.videoPath = query.value(8).toString();
+        task.thumbnailPath = query.value(9).toString();
+        task.downloadStatus = query.value(10).toString();
+        task.createdAt = query.value(11).toDateTime();
+        task.completedAt = query.value(12).toDateTime();
         tasks.append(task);
     }
 
@@ -431,7 +449,7 @@ VideoTask DBManager::getTaskById(const QString& taskId)
     VideoTask task;
     QSqlQuery query;
     query.prepare(R"(
-        SELECT id, task_id, task_type, prompt, status, progress, video_url, video_path,
+        SELECT id, task_id, task_type, prompt, model_variant, status, progress, video_url, video_path,
                thumbnail_path, download_status, created_at, completed_at
         FROM video_history
         WHERE task_id = :task_id
@@ -444,14 +462,15 @@ VideoTask DBManager::getTaskById(const QString& taskId)
         task.taskId = query.value(1).toString();
         task.taskType = query.value(2).toString();
         task.prompt = query.value(3).toString();
-        task.status = query.value(4).toString();
-        task.progress = query.value(5).toInt();
-        task.videoUrl = query.value(6).toString();
-        task.videoPath = query.value(7).toString();
-        task.thumbnailPath = query.value(8).toString();
-        task.downloadStatus = query.value(9).toString();
-        task.createdAt = query.value(10).toDateTime();
-        task.completedAt = query.value(11).toDateTime();
+        task.modelVariant = query.value(4).toString();
+        task.status = query.value(5).toString();
+        task.progress = query.value(6).toInt();
+        task.videoUrl = query.value(7).toString();
+        task.videoPath = query.value(8).toString();
+        task.thumbnailPath = query.value(9).toString();
+        task.downloadStatus = query.value(10).toString();
+        task.createdAt = query.value(11).toDateTime();
+        task.completedAt = query.value(12).toDateTime();
     }
 
     return task;
@@ -474,7 +493,7 @@ QList<VideoTask> DBManager::getPendingTasks()
 {
     QList<VideoTask> tasks;
     QSqlQuery query(R"(
-        SELECT id, task_id, task_type, prompt, status, progress, video_url, video_path,
+        SELECT id, task_id, task_type, prompt, model_variant, status, progress, video_url, video_path,
                thumbnail_path, download_status, created_at, completed_at
         FROM video_history
         WHERE status IN ('pending', 'processing')
@@ -492,14 +511,15 @@ QList<VideoTask> DBManager::getPendingTasks()
         task.taskId = query.value(1).toString();
         task.taskType = query.value(2).toString();
         task.prompt = query.value(3).toString();
-        task.status = query.value(4).toString();
-        task.progress = query.value(5).toInt();
-        task.videoUrl = query.value(6).toString();
-        task.videoPath = query.value(7).toString();
-        task.thumbnailPath = query.value(8).toString();
-        task.downloadStatus = query.value(9).toString();
-        task.createdAt = query.value(10).toDateTime();
-        task.completedAt = query.value(11).toDateTime();
+        task.modelVariant = query.value(4).toString();
+        task.status = query.value(5).toString();
+        task.progress = query.value(6).toInt();
+        task.videoUrl = query.value(7).toString();
+        task.videoPath = query.value(8).toString();
+        task.thumbnailPath = query.value(9).toString();
+        task.downloadStatus = query.value(10).toString();
+        task.createdAt = query.value(11).toDateTime();
+        task.completedAt = query.value(12).toDateTime();
         tasks.append(task);
     }
 

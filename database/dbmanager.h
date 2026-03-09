@@ -33,6 +33,7 @@ struct VideoTask {
     QString taskId;           // API 返回的任务 ID
     QString taskType;         // "video_single", "video_batch", "image_single", "image_batch"
     QString prompt;
+    QString modelVariant;     // 模型变体："文生视频", "图生视频", "首尾帧生视频"
     QString status;           // "pending", "processing", "completed", "failed", "timeout"
     int progress;             // 0-100
     QString videoUrl;         // API 返回的视频 URL

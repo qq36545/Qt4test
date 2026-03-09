@@ -616,6 +616,7 @@ void VideoSingleTab::onVideoCreated(const QString &taskId, const QString &status
 
     // 获取当前参数
     QString prompt = promptInput->toPlainText().trimmed();
+    QString modelVariantText = modelVariantCombo->currentText();  // 获取模型变体显示文本
     int keyId = apiKeyCombo->currentData().toInt();
     ApiKey apiKeyData = DBManager::instance()->getApiKey(keyId);
     QString server = serverCombo->currentData().toString();
@@ -625,6 +626,7 @@ void VideoSingleTab::onVideoCreated(const QString &taskId, const QString &status
     task.taskId = taskId;
     task.taskType = "video_single";
     task.prompt = prompt;
+    task.modelVariant = modelVariantText;  // 保存模型变体
     task.status = "pending";
     task.progress = 0;
 
@@ -1471,7 +1473,7 @@ void VideoSingleHistoryTab::setupListView()
     historyTable = new QTableWidget();
     historyTable->setColumnCount(8);
     historyTable->setHorizontalHeaderLabels({
-        "序号", "任务ID", "提示词", "状态", "进度", "创建时间", "完成时间", "操作"
+        "序号", "任务ID", "提示词", "状态", "进度", "创建时间", "视频类型", "操作"
     });
 
     // 序号列 - 可调整
@@ -1498,9 +1500,9 @@ void VideoSingleHistoryTab::setupListView()
     historyTable->horizontalHeader()->setSectionResizeMode(5, QHeaderView::Interactive);
     historyTable->setColumnWidth(5, 150);
 
-    // 完成时间列 - 可调整
+    // 视频类型列 - 可调整
     historyTable->horizontalHeader()->setSectionResizeMode(6, QHeaderView::Interactive);
-    historyTable->setColumnWidth(6, 150);
+    historyTable->setColumnWidth(6, 120);
 
     // 操作列 - 扩展宽度以容纳新按钮
     historyTable->horizontalHeader()->setSectionResizeMode(7, QHeaderView::Stretch);
@@ -1577,10 +1579,9 @@ void VideoSingleHistoryTab::loadHistory(int offset, int limit)
             // 创建时间
             historyTable->setItem(row, 5, new QTableWidgetItem(task.createdAt.toString("yyyy-MM-dd HH:mm:ss")));
 
-            // 完成时间
-            QString completedTime = task.completedAt.isValid() ?
-                task.completedAt.toString("yyyy-MM-dd HH:mm:ss") : "-";
-            historyTable->setItem(row, 6, new QTableWidgetItem(completedTime));
+            // 视频类型（模型变体）
+            QString videoType = task.modelVariant.isEmpty() ? "-" : task.modelVariant;
+            historyTable->setItem(row, 6, new QTableWidgetItem(videoType));
 
             // 操作按钮
             QWidget *btnWidget = new QWidget();
