@@ -11,6 +11,7 @@
 #include <QHBoxLayout>
 #include <QTableWidget>
 #include <QListWidget>
+#include <QCheckBox>
 
 // 单个视频生成 Tab
 class VideoSingleTab : public QWidget
@@ -23,18 +24,34 @@ public:
 private slots:
     void generateVideo();
     void onModelChanged(int index);
+    void onModelVariantChanged(int index);
+    void uploadImage();
+    void uploadEndFrameImage();
 
 private:
     void setupUI();
     void loadApiKeys();
+    void updateResolutionOptions(bool is4K);
+    void updateImageUploadUI(const QString &modelName);
 
     QTextEdit *promptInput;
     QComboBox *modelCombo;
     QComboBox *apiKeyCombo;
     QPushButton *addKeyButton;
+    QComboBox *serverCombo;
+    QComboBox *modelVariantCombo;
     QComboBox *resolutionCombo;
     QComboBox *durationCombo;
-    QComboBox *styleCombo;
+    QCheckBox *watermarkCheckBox;
+    QLabel *imageLabel;
+    QLabel *imagePreviewLabel;
+    QPushButton *uploadImageButton;
+    QString uploadedImagePath;
+    QWidget *endFrameWidget;
+    QLabel *endFrameLabel;
+    QLabel *endFramePreviewLabel;
+    QPushButton *uploadEndFrameButton;
+    QString uploadedEndFrameImagePath;
     QLabel *previewLabel;
     QPushButton *generateButton;
 };
@@ -53,10 +70,13 @@ private slots:
     void deleteSelected();
     void deleteAll();
     void onModelChanged(int index);
+    void onModelVariantChanged(int index);
 
 private:
     void setupUI();
     void loadApiKeys();
+    void updateResolutionOptions(bool is4K);
+    void updateImageUploadUI(const QString &modelName);
 
     QTextEdit *promptInput;
     QLabel *imageDropArea;
@@ -64,6 +84,14 @@ private:
     QComboBox *modelCombo;
     QComboBox *apiKeyCombo;
     QPushButton *addKeyButton;
+    QComboBox *serverCombo;
+    QComboBox *modelVariantCombo;
+    QComboBox *resolutionCombo;
+    QComboBox *durationCombo;
+    QCheckBox *watermarkCheckBox;
+    QLabel *imageLabel;
+    QWidget *endFrameWidget;
+    QLabel *endFrameLabel;
     QPushButton *importButton;
     QPushButton *deleteButton;
     QPushButton *deleteAllButton;
