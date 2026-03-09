@@ -3,6 +3,7 @@
 #include "widgets/imagegen.h"
 #include "widgets/configwidget.h"
 #include "widgets/aboutwidget.h"
+#include "network/taskpollmanager.h"
 #include <QFile>
 #include <QGraphicsBlurEffect>
 #include <QGraphicsDropShadowEffect>
@@ -21,6 +22,9 @@ MainWindow::MainWindow(QWidget *parent)
 
     // 默认显示视频生成页面
     showVideoGen();
+
+    // 恢复待轮询任务
+    TaskPollManager::getInstance()->recoverPendingTasks();
 }
 
 MainWindow::~MainWindow()
@@ -125,14 +129,7 @@ void MainWindow::setupContentArea()
     imageGenWidget = new ImageGenWidget();
     configWidget = new ConfigWidget();
     aboutWidget = new AboutWidget();
-    historyWidget = new QWidget();
-
-    // 历史记录页面占位
-    QVBoxLayout *historyLayout = new QVBoxLayout(historyWidget);
-    QLabel *historyLabel = new QLabel("📜 历史记录");
-    historyLabel->setAlignment(Qt::AlignCenter);
-    historyLabel->setStyleSheet("font-size: 24px; color: #F8FAFC;");
-    historyLayout->addWidget(historyLabel);
+    historyWidget = new VideoSingleHistoryTab();
 
     // 添加到堆栈
     contentArea->addWidget(videoGenWidget);

@@ -1,6 +1,7 @@
 #include "videogen.h"
 #include "../database/dbmanager.h"
 #include "../network/veo3api.h"
+#include "../network/taskpollmanager.h"
 #include <QMessageBox>
 #include <QFileDialog>
 #include <QFileInfo>
@@ -17,6 +18,11 @@
 #include <QEvent>
 #include <QMouseEvent>
 #include <QScrollArea>
+#include <QStackedWidget>
+#include <QDesktopServices>
+#include <QUrl>
+#include <QProcess>
+#include <QDir>
 
 // VideoGenWidget 实现
 VideoGenWidget::VideoGenWidget(QWidget *parent)
@@ -42,11 +48,11 @@ void VideoGenWidget::setupUI()
 
     singleTab = new VideoSingleTab();
     batchTab = new VideoBatchTab();
-    historyTab = new VideoHistoryTab();
+    historyWidget = new VideoHistoryWidget();
 
     tabWidget->addTab(singleTab, "AI视频生成-单个");
     tabWidget->addTab(batchTab, "AI视频生成-批量");
-    tabWidget->addTab(historyTab, "生成历史记录");
+    tabWidget->addTab(historyWidget, "生成历史记录");
 
     mainLayout->addWidget(tabWidget);
 
@@ -128,6 +134,8 @@ void VideoSingleTab::setupUI()
 
     // 创建内容容器
     QWidget *contentWidget = new QWidget();
+    contentWidget->setObjectName("scrollContentWidget");  // 设置 objectName 用于 QSS
+    contentWidget->setAutoFillBackground(false);  // 关键：不自动填充背景
     QVBoxLayout *contentLayout = new QVBoxLayout(contentWidget);
     contentLayout->setContentsMargins(20, 20, 20, 20);
     contentLayout->setSpacing(15);
@@ -505,68 +513,6 @@ void VideoSingleTab::generateVideo()
     bool watermark = watermarkCheckBox->isChecked();
     int keyId = apiKeyCombo->currentData().toInt();
 
-    // 构建参数字符串
-    QString imageInfo;
-    if (uploadedImagePaths.size() == 1) {
-        imageInfo = QString("首帧:%1").arg(QFileInfo(uploadedImagePaths[0]).fileName());
-    } else {
-        imageInfo = QString("首帧(%1张):").arg(uploadedImagePaths.size());
-        for (int i = 0; i < uploadedImagePaths.size(); ++i) {
-            imageInfo += QString("%1").arg(QFileInfo(uploadedImagePaths[i]).fileName());
-            if (i < uploadedImagePaths.size() - 1) imageInfo += ", ";
-        }
-    }
-
-    QString params = QString("服务器:%1, 分辨率:%2, 时长:%3秒, 水印:%4, %5")
-        .arg(server)
-        .arg(resolution)
-        .arg(duration)
-        .arg(watermark ? "是" : "否")
-        .arg(imageInfo);
-
-    // 如果有尾帧图片
-    if (!uploadedEndFrameImagePath.isEmpty()) {
-        params += QString(", 尾帧:%1").arg(QFileInfo(uploadedEndFrameImagePath).fileName());
-    }
-
-    // 保存到历史记录
-    GenerationHistory history;
-    history.date = QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss");
-    history.type = "single";
-    history.modelType = "video";
-    history.modelName = model + " (" + modelVariant + ")";
-    history.prompt = prompt;
-    history.parameters = params;
-    history.status = "pending";
-
-    int historyId = DBManager::instance()->addGenerationHistory(history);
-
-    QString infoMsg = QString("正在生成视频...\n\n"
-                "模型: %1\n"
-                "模型变体: %2\n"
-                "服务器: %3\n"
-                "提示词: %4\n"
-                "分辨率: %5\n"
-                "时长: %6秒\n"
-                "水印: %7\n"
-                "%8\n")
-        .arg(model)
-        .arg(modelVariant)
-        .arg(server)
-        .arg(prompt)
-        .arg(resolution)
-        .arg(duration)
-        .arg(watermark ? "是" : "否")
-        .arg(imageInfo);
-
-    if (!uploadedEndFrameImagePath.isEmpty()) {
-        infoMsg += QString("尾帧: %1\n").arg(QFileInfo(uploadedEndFrameImagePath).fileName());
-    }
-
-    infoMsg += QString("\n正在调用 API 生成视频...\n历史记录 #%1").arg(historyId);
-
-    QMessageBox::information(this, "生成中", infoMsg);
-
     // 获取 API Key
     ApiKey apiKeyData = DBManager::instance()->getApiKey(keyId);
     if (apiKeyData.apiKey.isEmpty()) {
@@ -574,7 +520,7 @@ void VideoSingleTab::generateVideo()
         return;
     }
 
-    // 调用 API
+    // 调用 API 创建任务
     veo3API->createVideo(
         apiKeyData.apiKey,
         server,
@@ -585,23 +531,56 @@ void VideoSingleTab::generateVideo()
         duration,
         watermark
     );
+
+    // 注意：任务创建成功后会触发 onVideoCreated 回调
+    // 在那里插入数据库并启动轮询
 }
 
 void VideoSingleTab::onVideoCreated(const QString &taskId, const QString &status)
 {
     currentTaskId = taskId;
-    previewLabel->setText(QString("视频任务已创建\n任务 ID: %1\n状态: %2").arg(taskId).arg(status));
-    QMessageBox::information(this, "成功", QString("视频生成任务已创建\n任务 ID: %1\n状态: %2").arg(taskId).arg(status));
+
+    // 获取当前参数
+    QString prompt = promptInput->toPlainText().trimmed();
+    int keyId = apiKeyCombo->currentData().toInt();
+    ApiKey apiKeyData = DBManager::instance()->getApiKey(keyId);
+    QString server = serverCombo->currentData().toString();
+
+    // 插入数据库
+    VideoTask task;
+    task.taskId = taskId;
+    task.taskType = "video_single";
+    task.prompt = prompt;
+    task.status = "pending";
+    task.progress = 0;
+
+    DBManager::instance()->insertVideoTask(task);
+
+    // 启动轮询
+    TaskPollManager::getInstance()->startPolling(taskId, "video_single", apiKeyData.apiKey, server);
+
+    // 显示提示
+    QMessageBox::information(this, "任务已创建",
+        QString("视频生成任务已创建！\n\n"
+                "任务 ID: %1\n\n"
+                "生成结果请在【生成历史记录】标签页查看。\n"
+                "系统将自动轮询任务状态并下载完成的视频。")
+        .arg(taskId));
+
+    // 清空输入
+    promptInput->clear();
+    uploadedImagePaths.clear();
+    imagePreviewLabel->clear();
+    imagePreviewLabel->setText("📁 拖拽图片到此处或点击按钮上传");
+    imagePreviewLabel->setProperty("hasImage", false);
+    imagePreviewLabel->style()->unpolish(imagePreviewLabel);
+    imagePreviewLabel->style()->polish(imagePreviewLabel);
 }
 
 void VideoSingleTab::onTaskStatusUpdated(const QString &taskId, const QString &status, const QString &videoUrl, int progress)
 {
-    previewLabel->setText(QString("任务 ID: %1\n状态: %2\n进度: %3%\n视频 URL: %4")
-                          .arg(taskId).arg(status).arg(progress).arg(videoUrl));
-
-    if (status == "completed" && !videoUrl.isEmpty()) {
-        QMessageBox::information(this, "完成", QString("视频生成完成！\n\n视频 URL:\n%1").arg(videoUrl));
-    }
+    // 不再需要在这里显示状态，由历史记录页面负责
+    // 保留此方法以兼容 Veo3API 的信号
 }
 
 void VideoSingleTab::onApiError(const QString &error)
@@ -630,6 +609,8 @@ void VideoBatchTab::setupUI()
 
     // 创建内容容器
     QWidget *contentWidget = new QWidget();
+    contentWidget->setObjectName("scrollContentWidget");  // 设置 objectName 用于 QSS
+    contentWidget->setAutoFillBackground(false);  // 关键：不自动填充背景
     QVBoxLayout *contentLayout = new QVBoxLayout(contentWidget);
     contentLayout->setContentsMargins(20, 20, 20, 20);
     contentLayout->setSpacing(15);
@@ -1059,4 +1040,398 @@ void VideoHistoryTab::onRowDoubleClicked(int row, int column)
     layout->addWidget(closeBtn);
 
     dialog.exec();
+}
+
+// VideoHistoryWidget 实现（新的 4 tab 容器）
+VideoHistoryWidget::VideoHistoryWidget(QWidget *parent)
+    : QWidget(parent)
+{
+    setupUI();
+}
+
+void VideoHistoryWidget::setupUI()
+{
+    QVBoxLayout *mainLayout = new QVBoxLayout(this);
+    mainLayout->setContentsMargins(20, 20, 20, 20);
+    mainLayout->setSpacing(15);
+
+    // 创建 Tab Widget
+    tabWidget = new QTabWidget();
+
+    // 创建 4 个子 tab
+    videoSingleTab = new VideoSingleHistoryTab();
+    tabWidget->addTab(videoSingleTab, "AI视频生成-单个记录");
+
+    // 其他 tab 后续实现
+    tabWidget->addTab(new QWidget(), "AI生成视频-批量记录");
+    tabWidget->addTab(new QWidget(), "AI生成图片-单个记录");
+    tabWidget->addTab(new QWidget(), "AI生成图片-批量记录");
+
+    mainLayout->addWidget(tabWidget);
+}
+
+// VideoSingleHistoryTab 实现
+VideoSingleHistoryTab::VideoSingleHistoryTab(QWidget *parent)
+    : QWidget(parent), isListView(true), currentOffset(0)
+{
+    setupUI();
+    loadHistory();
+}
+
+void VideoSingleHistoryTab::setupUI()
+{
+    QVBoxLayout *mainLayout = new QVBoxLayout(this);
+    mainLayout->setContentsMargins(20, 20, 20, 20);
+    mainLayout->setSpacing(15);
+
+    // 标题
+    QLabel *titleLabel = new QLabel("📜 AI生成历史记录");
+    titleLabel->setStyleSheet("font-size: 24px; font-weight: bold;");
+    mainLayout->addWidget(titleLabel);
+
+    // 顶部工具栏
+    QHBoxLayout *toolbarLayout = new QHBoxLayout();
+
+    switchViewButton = new QPushButton("📷 缩略图视图");
+    connect(switchViewButton, &QPushButton::clicked, this, &VideoSingleHistoryTab::switchView);
+
+    refreshButton = new QPushButton("🔄 刷新");
+    connect(refreshButton, &QPushButton::clicked, this, &VideoSingleHistoryTab::refreshHistory);
+
+    toolbarLayout->addWidget(switchViewButton);
+    toolbarLayout->addStretch();
+    toolbarLayout->addWidget(refreshButton);
+
+    mainLayout->addLayout(toolbarLayout);
+
+    // 创建视图切换容器
+    viewStack = new QStackedWidget();
+
+    // 列表视图
+    setupListView();
+
+    // 缩略图视图
+    setupThumbnailView();
+
+    viewStack->addWidget(listViewWidget);
+    viewStack->addWidget(thumbnailViewWidget);
+    viewStack->setCurrentIndex(0);  // 默认显示列表视图
+
+    mainLayout->addWidget(viewStack);
+}
+
+void VideoSingleHistoryTab::setupListView()
+{
+    listViewWidget = new QWidget();
+    QVBoxLayout *layout = new QVBoxLayout(listViewWidget);
+    layout->setContentsMargins(0, 0, 0, 0);
+
+    historyTable = new QTableWidget();
+    historyTable->setColumnCount(7);
+    historyTable->setHorizontalHeaderLabels({
+        "任务ID", "提示词", "状态", "进度", "创建时间", "完成时间", "操作"
+    });
+
+    historyTable->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Fixed);
+    historyTable->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
+    historyTable->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Fixed);
+    historyTable->horizontalHeader()->setSectionResizeMode(3, QHeaderView::Fixed);
+    historyTable->horizontalHeader()->setSectionResizeMode(4, QHeaderView::Fixed);
+    historyTable->horizontalHeader()->setSectionResizeMode(5, QHeaderView::Fixed);
+    historyTable->horizontalHeader()->setSectionResizeMode(6, QHeaderView::Fixed);
+
+    historyTable->setColumnWidth(0, 100);
+    historyTable->setColumnWidth(2, 80);
+    historyTable->setColumnWidth(3, 80);
+    historyTable->setColumnWidth(4, 150);
+    historyTable->setColumnWidth(5, 150);
+    historyTable->setColumnWidth(6, 200);
+
+    historyTable->setSelectionBehavior(QAbstractItemView::SelectRows);
+    historyTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    historyTable->verticalHeader()->setVisible(false);
+
+    layout->addWidget(historyTable);
+}
+
+void VideoSingleHistoryTab::setupThumbnailView()
+{
+    thumbnailViewWidget = new QWidget();
+    QVBoxLayout *layout = new QVBoxLayout(thumbnailViewWidget);
+    layout->setContentsMargins(0, 0, 0, 0);
+
+    thumbnailScrollArea = new QScrollArea();
+    thumbnailScrollArea->setWidgetResizable(true);
+    thumbnailScrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    thumbnailScrollArea->setFrameShape(QFrame::NoFrame);
+
+    thumbnailContainer = new QWidget();
+    thumbnailLayout = new QGridLayout(thumbnailContainer);
+    thumbnailLayout->setSpacing(15);
+
+    thumbnailScrollArea->setWidget(thumbnailContainer);
+    layout->addWidget(thumbnailScrollArea);
+}
+
+void VideoSingleHistoryTab::loadHistory(int offset, int limit)
+{
+    currentOffset = offset;
+
+    if (isListView) {
+        // 加载列表视图数据
+        historyTable->setRowCount(0);
+        QList<VideoTask> tasks = DBManager::instance()->getTasksByType("video_single", offset, limit);
+
+        int row = 0;
+        for (const VideoTask& task : tasks) {
+            historyTable->insertRow(row);
+
+            // 任务ID
+            historyTable->setItem(row, 0, new QTableWidgetItem(task.taskId.left(8) + "..."));
+
+            // 提示词
+            QString promptPreview = task.prompt.left(50);
+            if (task.prompt.length() > 50) promptPreview += "...";
+            historyTable->setItem(row, 1, new QTableWidgetItem(promptPreview));
+
+            // 状态
+            QString statusText;
+            if (task.status == "pending") statusText = "⏳ 等待中";
+            else if (task.status == "processing") statusText = "🔄 处理中";
+            else if (task.status == "completed") statusText = "✅ 已完成";
+            else if (task.status == "failed") statusText = "❌ 失败";
+            else if (task.status == "timeout") statusText = "⏱️ 超时";
+            historyTable->setItem(row, 2, new QTableWidgetItem(statusText));
+
+            // 进度
+            historyTable->setItem(row, 3, new QTableWidgetItem(QString::number(task.progress) + "%"));
+
+            // 创建时间
+            historyTable->setItem(row, 4, new QTableWidgetItem(task.createdAt.toString("yyyy-MM-dd HH:mm:ss")));
+
+            // 完成时间
+            QString completedTime = task.completedAt.isValid() ?
+                task.completedAt.toString("yyyy-MM-dd HH:mm:ss") : "-";
+            historyTable->setItem(row, 5, new QTableWidgetItem(completedTime));
+
+            // 操作按钮
+            QWidget *btnWidget = new QWidget();
+            QHBoxLayout *btnLayout = new QHBoxLayout(btnWidget);
+            btnLayout->setContentsMargins(5, 2, 5, 2);
+            btnLayout->setSpacing(5);
+
+            QPushButton *viewBtn = new QPushButton("查看");
+            QPushButton *browseBtn = new QPushButton("浏览");
+            QPushButton *retryBtn = new QPushButton("重新查询");
+
+            viewBtn->setMaximumWidth(60);
+            browseBtn->setMaximumWidth(60);
+            retryBtn->setMaximumWidth(80);
+
+            connect(viewBtn, &QPushButton::clicked, [this, task]() {
+                onViewVideo(task.taskId);
+            });
+            connect(browseBtn, &QPushButton::clicked, [this, task]() {
+                onBrowseFile(task.taskId);
+            });
+            connect(retryBtn, &QPushButton::clicked, [this, task]() {
+                onRetryQuery(task.taskId);
+            });
+
+            btnLayout->addWidget(viewBtn);
+            btnLayout->addWidget(browseBtn);
+            btnLayout->addWidget(retryBtn);
+
+            historyTable->setCellWidget(row, 6, btnWidget);
+
+            row++;
+        }
+    } else {
+        // 加载缩略图视图数据
+        // 清空现有缩略图
+        QLayoutItem* item;
+        while ((item = thumbnailLayout->takeAt(0)) != nullptr) {
+            delete item->widget();
+            delete item;
+        }
+
+        QList<VideoTask> tasks = DBManager::instance()->getTasksByType("video_single", offset, limit);
+
+        int col = 0;
+        int row = 0;
+        int colsPerRow = 4;  // 每行 4 个缩略图
+
+        for (const VideoTask& task : tasks) {
+            // 创建缩略图卡片
+            QWidget* card = new QWidget();
+            card->setFixedSize(200, 250);
+            card->setStyleSheet("QWidget { background: #2a2a2a; border-radius: 8px; }");
+
+            QVBoxLayout* cardLayout = new QVBoxLayout(card);
+            cardLayout->setContentsMargins(10, 10, 10, 10);
+            cardLayout->setSpacing(8);
+
+            // 缩略图或占位符
+            QLabel* thumbLabel = new QLabel();
+            thumbLabel->setFixedSize(180, 120);
+            thumbLabel->setAlignment(Qt::AlignCenter);
+
+            if (!task.thumbnailPath.isEmpty() && QFile::exists(task.thumbnailPath)) {
+                QPixmap pixmap(task.thumbnailPath);
+                thumbLabel->setPixmap(pixmap.scaled(180, 120, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+            } else {
+                thumbLabel->setText("🎬");
+                thumbLabel->setStyleSheet("font-size: 48px; background: #1a1a1a;");
+            }
+
+            // 状态图标
+            QLabel* statusLabel = new QLabel();
+            if (task.status == "completed") statusLabel->setText("✅");
+            else if (task.status == "processing") statusLabel->setText("🔄");
+            else if (task.status == "pending") statusLabel->setText("⏳");
+            else if (task.status == "failed") statusLabel->setText("❌");
+            else if (task.status == "timeout") statusLabel->setText("⏱️");
+            statusLabel->setStyleSheet("font-size: 20px;");
+
+            // 提示词摘要
+            QString promptPreview = task.prompt.left(30);
+            if (task.prompt.length() > 30) promptPreview += "...";
+            QLabel* promptLabel = new QLabel(promptPreview);
+            promptLabel->setWordWrap(true);
+            promptLabel->setStyleSheet("color: #cccccc; font-size: 12px;");
+
+            // 操作按钮
+            QHBoxLayout* btnLayout = new QHBoxLayout();
+            QPushButton* viewBtn = new QPushButton("查看");
+            QPushButton* browseBtn = new QPushButton("浏览");
+            viewBtn->setMaximumWidth(70);
+            browseBtn->setMaximumWidth(70);
+
+            connect(viewBtn, &QPushButton::clicked, [this, task]() {
+                onViewVideo(task.taskId);
+            });
+            connect(browseBtn, &QPushButton::clicked, [this, task]() {
+                onBrowseFile(task.taskId);
+            });
+
+            btnLayout->addWidget(viewBtn);
+            btnLayout->addWidget(browseBtn);
+
+            // 组装卡片
+            cardLayout->addWidget(thumbLabel);
+            cardLayout->addWidget(statusLabel);
+            cardLayout->addWidget(promptLabel);
+            cardLayout->addLayout(btnLayout);
+
+            // 添加到网格
+            thumbnailLayout->addWidget(card, row, col);
+
+            col++;
+            if (col >= colsPerRow) {
+                col = 0;
+                row++;
+            }
+        }
+    }
+}
+
+void VideoSingleHistoryTab::switchView()
+{
+    isListView = !isListView;
+
+    if (isListView) {
+        switchViewButton->setText("📷 缩略图视图");
+        viewStack->setCurrentIndex(0);
+    } else {
+        switchViewButton->setText("📋 列表视图");
+        viewStack->setCurrentIndex(1);
+    }
+
+    loadHistory(0, isListView ? 50 : 20);
+}
+
+void VideoSingleHistoryTab::refreshHistory()
+{
+    loadHistory(0, isListView ? 50 : 20);
+}
+
+void VideoSingleHistoryTab::onViewVideo(const QString& taskId)
+{
+    // 查询任务信息
+    VideoTask task = DBManager::instance()->getTaskById(taskId);
+
+    if (task.taskId.isEmpty()) {
+        QMessageBox::warning(this, "错误", "未找到任务记录");
+        return;
+    }
+
+    // 检查视频是否已下载
+    if (task.videoPath.isEmpty() || !QFile::exists(task.videoPath)) {
+        // 视频未下载，尝试下载
+        if (task.videoUrl.isEmpty()) {
+            QMessageBox::warning(this, "提示", "视频尚未生成完成，请稍后再试");
+            return;
+        }
+
+        QMessageBox::StandardButton reply = QMessageBox::question(this, "下载视频",
+            "视频尚未下载，是否立即下载？",
+            QMessageBox::Yes | QMessageBox::No);
+
+        if (reply == QMessageBox::Yes) {
+            // TODO: 触发下载
+            QMessageBox::information(this, "提示", "下载功能待实现");
+        }
+        return;
+    }
+
+    // 打开视频文件
+    QDesktopServices::openUrl(QUrl::fromLocalFile(task.videoPath));
+}
+
+void VideoSingleHistoryTab::onBrowseFile(const QString& taskId)
+{
+    // 查询任务信息
+    VideoTask task = DBManager::instance()->getTaskById(taskId);
+
+    if (task.taskId.isEmpty()) {
+        QMessageBox::warning(this, "错误", "未找到任务记录");
+        return;
+    }
+
+    if (task.videoPath.isEmpty() || !QFile::exists(task.videoPath)) {
+        QMessageBox::warning(this, "提示", "视频文件不存在");
+        return;
+    }
+
+    // 打开文件管理器并定位文件
+    QFileInfo fileInfo(task.videoPath);
+    QString dirPath = fileInfo.absolutePath();
+
+#ifdef Q_OS_MAC
+    // macOS: 使用 Finder 打开并选中文件
+    QProcess::execute("open", QStringList() << "-R" << task.videoPath);
+#elif defined(Q_OS_WIN)
+    // Windows: 使用 explorer 打开并选中文件
+    QProcess::execute("explorer", QStringList() << "/select," << QDir::toNativeSeparators(task.videoPath));
+#else
+    // Linux: 打开目录
+    QDesktopServices::openUrl(QUrl::fromLocalFile(dirPath));
+#endif
+}
+
+void VideoSingleHistoryTab::onRetryQuery(const QString& taskId)
+{
+    // 查询任务信息
+    VideoTask task = DBManager::instance()->getTaskById(taskId);
+
+    if (task.taskId.isEmpty()) {
+        QMessageBox::warning(this, "错误", "未找到任务记录");
+        return;
+    }
+
+    // 重新启动轮询（需要 API Key 和 baseUrl）
+    // TODO: 从数据库或配置中获取这些信息
+    QMessageBox::information(this, "提示",
+        "重新查询功能需要存储 API Key 和服务器信息\n"
+        "当前版本暂不支持，请重新生成任务");
 }

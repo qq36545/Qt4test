@@ -12,6 +12,7 @@ class VideoGenWidget;
 class ImageGenWidget;
 class ConfigWidget;
 class AboutWidget;
+class VideoSingleHistoryTab;
 
 class MainWindow : public QMainWindow
 {
@@ -61,7 +62,7 @@ private:
     ImageGenWidget *imageGenWidget;
     ConfigWidget *configWidget;
     AboutWidget *aboutWidget;
-    QWidget *historyWidget;
+    VideoSingleHistoryTab *historyWidget;
 };
 
 #endif // MAINWINDOW_H
