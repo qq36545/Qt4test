@@ -1478,7 +1478,7 @@ void VideoSingleHistoryTab::setupListView()
     historyTable = new QTableWidget();
     historyTable->setColumnCount(9);  // 增加一列用于勾选框
     historyTable->setHorizontalHeaderLabels({
-        "选择", "序号", "任务ID", "提示词", "状态", "进度", "创建时间", "视频类型", "操作"
+        "", "序号", "任务ID", "提示词", "状态", "进度", "创建时间", "视频类型", "操作"
     });
 
     // 选择列 - 固定宽度
@@ -1525,15 +1525,19 @@ void VideoSingleHistoryTab::setupListView()
     historyTable->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(historyTable, &QTableWidget::customContextMenuRequested, this, &VideoSingleHistoryTab::showContextMenu);
 
-    // 表头点击事件 - 用于全选/取消全选
-    connect(historyTable->horizontalHeader(), &QHeaderView::sectionClicked, this, [this](int logicalIndex) {
-        if (logicalIndex == 0) {  // 点击"选择"列表头
-            bool allChecked = (selectedTaskIds.size() == historyTable->rowCount());
-            onSelectAllChanged(allChecked ? Qt::Unchecked : Qt::Checked);
-        }
-    });
-
     layout->addWidget(historyTable);
+
+    // 在表头"选择"列添加勾选框
+    headerCheckBox = new QCheckBox(historyTable);
+    headerCheckBox->setStyleSheet("QCheckBox { margin-left: 15px; }");
+    connect(headerCheckBox, &QCheckBox::checkStateChanged, this, &VideoSingleHistoryTab::onSelectAllChanged);
+
+    // 将勾选框放置在表头的正确位置
+    QHeaderView *header = historyTable->horizontalHeader();
+    int headerHeight = header->height();
+    int checkBoxSize = 20;
+    headerCheckBox->setGeometry((50 - checkBoxSize) / 2, (headerHeight - checkBoxSize) / 2, checkBoxSize, checkBoxSize);
+    headerCheckBox->raise();  // 确保勾选框在最上层
 }
 
 void VideoSingleHistoryTab::setupThumbnailView()
@@ -1654,6 +1658,13 @@ void VideoSingleHistoryTab::loadHistory(int offset, int limit)
             historyTable->setCellWidget(row, 8, btnWidget);
 
             row++;
+        }
+
+        // 重置表头勾选框状态
+        if (headerCheckBox) {
+            headerCheckBox->blockSignals(true);
+            headerCheckBox->setCheckState(Qt::Unchecked);
+            headerCheckBox->blockSignals(false);
         }
     } else {
         // 加载缩略图视图数据
@@ -1964,17 +1975,38 @@ void VideoSingleHistoryTab::onSelectAllChanged(int state)
 void VideoSingleHistoryTab::onCheckBoxStateChanged()
 {
     selectedTaskIds.clear();
+    int enabledCount = 0;  // 可用的勾选框数量
+    int checkedCount = 0;  // 已勾选的数量
 
     for (int row = 0; row < historyTable->rowCount(); ++row) {
         QWidget *widget = historyTable->cellWidget(row, 0);
         if (widget) {
             QCheckBox *checkBox = widget->findChild<QCheckBox*>();
-            if (checkBox && checkBox->isChecked()) {
-                QString taskId = checkBox->property("taskId").toString();
-                if (!taskId.isEmpty()) {
-                    selectedTaskIds.insert(taskId);
+            if (checkBox) {
+                if (checkBox->isEnabled()) {
+                    enabledCount++;
+                    if (checkBox->isChecked()) {
+                        checkedCount++;
+                        QString taskId = checkBox->property("taskId").toString();
+                        if (!taskId.isEmpty()) {
+                            selectedTaskIds.insert(taskId);
+                        }
+                    }
                 }
             }
         }
+    }
+
+    // 更新表头勾选框状态
+    if (headerCheckBox) {
+        headerCheckBox->blockSignals(true);  // 阻止信号，避免递归调用
+        if (checkedCount == 0) {
+            headerCheckBox->setCheckState(Qt::Unchecked);
+        } else if (checkedCount == enabledCount) {
+            headerCheckBox->setCheckState(Qt::Checked);
+        } else {
+            headerCheckBox->setCheckState(Qt::PartiallyChecked);  // 部分选中状态
+        }
+        headerCheckBox->blockSignals(false);
     }
 }

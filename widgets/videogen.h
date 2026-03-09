@@ -167,6 +167,7 @@ private:
     QPushButton* switchViewButton;
     QPushButton* refreshButton;
     QPushButton* deleteButton;  // 删除按钮
+    QCheckBox* headerCheckBox;  // 表头全选勾选框
     QSet<QString> selectedTaskIds;  // 存储选中的任务ID
     bool isListView;
     int currentOffset;
