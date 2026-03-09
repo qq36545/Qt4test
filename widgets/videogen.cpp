@@ -1585,7 +1585,7 @@ void VideoSingleHistoryTab::loadHistory(int offset, int limit)
             QCheckBox *checkBox = new QCheckBox();
             checkBox->setProperty("taskId", task.taskId);
             // 处理中的任务禁用勾选框
-            if (task.status == "pending" || task.status == "processing") {
+            if (task.status == "queued" || task.status == "pending" || task.status == "processing") {
                 checkBox->setEnabled(false);
                 checkBox->setToolTip("处理中的任务不能删除");
             }
@@ -1608,11 +1608,13 @@ void VideoSingleHistoryTab::loadHistory(int offset, int limit)
 
             // 状态
             QString statusText;
-            if (task.status == "pending") statusText = "⏳ 等待中";
+            if (task.status == "queued") statusText = "📋 排队中";
+            else if (task.status == "pending") statusText = "⏳ 等待中";
             else if (task.status == "processing") statusText = "🔄 处理中";
             else if (task.status == "completed") statusText = "✅ 已完成";
             else if (task.status == "failed") statusText = "❌ 失败";
             else if (task.status == "timeout") statusText = "⏱️ 超时";
+            else statusText = task.status;  // 未知状态直接显示原始值
             historyTable->setItem(row, 4, new QTableWidgetItem(statusText));
 
             // 进度
@@ -2028,11 +2030,13 @@ void VideoSingleHistoryTab::onTaskStatusUpdated(const QString& taskId, const QSt
         if (taskIdItem && taskIdItem->text() == taskId) {
             // 更新状态
             QString statusText;
-            if (status == "pending") statusText = "⏳ 等待中";
+            if (status == "queued") statusText = "📋 排队中";
+            else if (status == "pending") statusText = "⏳ 等待中";
             else if (status == "processing") statusText = "🔄 处理中";
             else if (status == "completed") statusText = "✅ 已完成";
             else if (status == "failed") statusText = "❌ 失败";
             else if (status == "timeout") statusText = "⏱️ 超时";
+            else statusText = status;  // 未知状态直接显示原始值
 
             QTableWidgetItem *statusItem = historyTable->item(row, 4);  // 状态在第4列
             if (statusItem) {
