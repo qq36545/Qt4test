@@ -1203,13 +1203,16 @@ void VideoSingleHistoryTab::loadHistory(int offset, int limit)
         for (const VideoTask& task : tasks) {
             historyTable->insertRow(row);
 
+            // 序号
+            historyTable->setItem(row, 0, new QTableWidgetItem(QString::number(row + 1)));
+
             // 任务ID
-            historyTable->setItem(row, 0, new QTableWidgetItem(task.taskId.left(8) + "..."));
+            historyTable->setItem(row, 1, new QTableWidgetItem(task.taskId.left(8) + "..."));
 
             // 提示词
-            QString promptPreview = task.prompt.left(50);
-            if (task.prompt.length() > 50) promptPreview += "...";
-            historyTable->setItem(row, 1, new QTableWidgetItem(promptPreview));
+            QString promptPreview = task.prompt.left(30);
+            if (task.prompt.length() > 30) promptPreview += "...";
+            historyTable->setItem(row, 2, new QTableWidgetItem(promptPreview));
 
             // 状态
             QString statusText;
@@ -1218,18 +1221,18 @@ void VideoSingleHistoryTab::loadHistory(int offset, int limit)
             else if (task.status == "completed") statusText = "✅ 已完成";
             else if (task.status == "failed") statusText = "❌ 失败";
             else if (task.status == "timeout") statusText = "⏱️ 超时";
-            historyTable->setItem(row, 2, new QTableWidgetItem(statusText));
+            historyTable->setItem(row, 3, new QTableWidgetItem(statusText));
 
             // 进度
-            historyTable->setItem(row, 3, new QTableWidgetItem(QString::number(task.progress) + "%"));
+            historyTable->setItem(row, 4, new QTableWidgetItem(QString::number(task.progress) + "%"));
 
             // 创建时间
-            historyTable->setItem(row, 4, new QTableWidgetItem(task.createdAt.toString("yyyy-MM-dd HH:mm:ss")));
+            historyTable->setItem(row, 5, new QTableWidgetItem(task.createdAt.toString("yyyy-MM-dd HH:mm:ss")));
 
             // 完成时间
             QString completedTime = task.completedAt.isValid() ?
                 task.completedAt.toString("yyyy-MM-dd HH:mm:ss") : "-";
-            historyTable->setItem(row, 5, new QTableWidgetItem(completedTime));
+            historyTable->setItem(row, 6, new QTableWidgetItem(completedTime));
 
             // 操作按钮
             QWidget *btnWidget = new QWidget();
@@ -1259,7 +1262,7 @@ void VideoSingleHistoryTab::loadHistory(int offset, int limit)
             btnLayout->addWidget(browseBtn);
             btnLayout->addWidget(retryBtn);
 
-            historyTable->setCellWidget(row, 6, btnWidget);
+            historyTable->setCellWidget(row, 7, btnWidget);
 
             row++;
         }
