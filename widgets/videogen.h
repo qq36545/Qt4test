@@ -27,12 +27,17 @@ private slots:
     void onModelVariantChanged(int index);
     void uploadImage();
     void uploadEndFrameImage();
+    void removeImage(int index);
 
 private:
     void setupUI();
     void loadApiKeys();
     void updateResolutionOptions(bool is4K);
     void updateImageUploadUI(const QString &modelName);
+    void updateImagePreview();
+    void onVideoCreated(const QString &taskId, const QString &status);
+    void onTaskStatusUpdated(const QString &taskId, const QString &status, const QString &videoUrl, int progress);
+    void onApiError(const QString &error);
 
     QTextEdit *promptInput;
     QComboBox *modelCombo;
@@ -46,7 +51,7 @@ private:
     QLabel *imageLabel;
     QLabel *imagePreviewLabel;
     QPushButton *uploadImageButton;
-    QString uploadedImagePath;
+    QStringList uploadedImagePaths;  // 改为支持多图
     QWidget *endFrameWidget;
     QLabel *endFrameLabel;
     QLabel *endFramePreviewLabel;
@@ -54,6 +59,9 @@ private:
     QString uploadedEndFrameImagePath;
     QLabel *previewLabel;
     QPushButton *generateButton;
+
+    class Veo3API *veo3API;  // API 实例
+    QString currentTaskId;   // 当前任务 ID
 };
 
 // 批量视频生成 Tab

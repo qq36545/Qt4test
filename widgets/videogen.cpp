@@ -1,5 +1,6 @@
 #include "videogen.h"
 #include "../database/dbmanager.h"
+#include "../network/veo3api.h"
 #include <QMessageBox>
 #include <QFileDialog>
 #include <QFileInfo>
@@ -87,6 +88,11 @@ void VideoGenWidget::updateTabWidths()
 VideoSingleTab::VideoSingleTab(QWidget *parent)
     : QWidget(parent)
 {
+    veo3API = new Veo3API(this);
+    connect(veo3API, &Veo3API::videoCreated, this, &VideoSingleTab::onVideoCreated);
+    connect(veo3API, &Veo3API::taskStatusUpdated, this, &VideoSingleTab::onTaskStatusUpdated);
+    connect(veo3API, &Veo3API::errorOccurred, this, &VideoSingleTab::onApiError);
+
     setupUI();
     loadApiKeys();
 }
@@ -312,6 +318,25 @@ void VideoSingleTab::onModelChanged(int index)
 
 void VideoSingleTab::uploadImage()
 {
+    QString modelName = modelVariantCombo->currentData().toString();
+    bool isComponents = modelName.contains("components");
+
+    if (isComponents && uploadedImagePaths.size() >= 3) {
+        QMessageBox::warning(this, "提示", "components 模型最多支持 3 张图片");
+        return;
+    }
+
+    bool isFrames = modelName.contains("frames");
+    if (isFrames && uploadedImagePaths.size() >= 1) {
+        QMessageBox::warning(this, "提示", "frames 模型只支持单张图片");
+        return;
+    }
+
+    if (!isComponents && !isFrames && uploadedImagePaths.size() >= 1) {
+        QMessageBox::warning(this, "提示", "当前模型只支持单张首帧图片");
+        return;
+    }
+
     QString fileName = QFileDialog::getOpenFileName(
         this,
         "选择首帧图片",
@@ -320,9 +345,38 @@ void VideoSingleTab::uploadImage()
     );
 
     if (!fileName.isEmpty()) {
-        uploadedImagePath = fileName;
-        QFileInfo fileInfo(fileName);
-        imagePreviewLabel->setText("✓ " + fileInfo.fileName());
+        uploadedImagePaths.append(fileName);
+        updateImagePreview();
+    }
+}
+
+void VideoSingleTab::removeImage(int index)
+{
+    if (index >= 0 && index < uploadedImagePaths.size()) {
+        uploadedImagePaths.removeAt(index);
+        updateImagePreview();
+    }
+}
+
+void VideoSingleTab::updateImagePreview()
+{
+    if (uploadedImagePaths.isEmpty()) {
+        imagePreviewLabel->setText("未选择图片");
+        imagePreviewLabel->setStyleSheet(
+            "background: rgba(30, 27, 75, 0.5);"
+            "border: 1px solid rgba(248, 250, 252, 0.1);"
+            "border-radius: 8px;"
+            "color: #64748B;"
+            "padding: 10px;"
+            "min-height: 60px;"
+        );
+    } else {
+        QString text = QString("✓ 已选择 %1 张图片\n").arg(uploadedImagePaths.size());
+        for (int i = 0; i < uploadedImagePaths.size(); ++i) {
+            QFileInfo fileInfo(uploadedImagePaths[i]);
+            text += QString("%1. %2\n").arg(i + 1).arg(fileInfo.fileName());
+        }
+        imagePreviewLabel->setText(text.trimmed());
         imagePreviewLabel->setStyleSheet(
             "background: rgba(34, 197, 94, 0.1);"
             "border: 1px solid rgba(34, 197, 94, 0.3);"
@@ -408,7 +462,7 @@ void VideoSingleTab::generateVideo()
         return;
     }
 
-    if (uploadedImagePath.isEmpty()) {
+    if (uploadedImagePaths.isEmpty()) {
         QMessageBox::warning(this, "提示", "请上传首帧图片");
         return;
     }
@@ -427,12 +481,23 @@ void VideoSingleTab::generateVideo()
     int keyId = apiKeyCombo->currentData().toInt();
 
     // 构建参数字符串
-    QString params = QString("服务器:%1, 分辨率:%2, 时长:%3秒, 水印:%4, 首帧:%5")
+    QString imageInfo;
+    if (uploadedImagePaths.size() == 1) {
+        imageInfo = QString("首帧:%1").arg(QFileInfo(uploadedImagePaths[0]).fileName());
+    } else {
+        imageInfo = QString("首帧(%1张):").arg(uploadedImagePaths.size());
+        for (int i = 0; i < uploadedImagePaths.size(); ++i) {
+            imageInfo += QString("%1").arg(QFileInfo(uploadedImagePaths[i]).fileName());
+            if (i < uploadedImagePaths.size() - 1) imageInfo += ", ";
+        }
+    }
+
+    QString params = QString("服务器:%1, 分辨率:%2, 时长:%3秒, 水印:%4, %5")
         .arg(server)
         .arg(resolution)
         .arg(duration)
         .arg(watermark ? "是" : "否")
-        .arg(QFileInfo(uploadedImagePath).fileName());
+        .arg(imageInfo);
 
     // 如果有尾帧图片
     if (!uploadedEndFrameImagePath.isEmpty()) {
@@ -459,7 +524,7 @@ void VideoSingleTab::generateVideo()
                 "分辨率: %5\n"
                 "时长: %6秒\n"
                 "水印: %7\n"
-                "首帧: %8\n")
+                "%8\n")
         .arg(model)
         .arg(modelVariant)
         .arg(server)
@@ -467,15 +532,56 @@ void VideoSingleTab::generateVideo()
         .arg(resolution)
         .arg(duration)
         .arg(watermark ? "是" : "否")
-        .arg(QFileInfo(uploadedImagePath).fileName());
+        .arg(imageInfo);
 
     if (!uploadedEndFrameImagePath.isEmpty()) {
         infoMsg += QString("尾帧: %1\n").arg(QFileInfo(uploadedEndFrameImagePath).fileName());
     }
 
-    infoMsg += QString("\n(演示版本，已保存到历史记录 #%1)").arg(historyId);
+    infoMsg += QString("\n正在调用 API 生成视频...\n历史记录 #%1").arg(historyId);
 
     QMessageBox::information(this, "生成中", infoMsg);
+
+    // 获取 API Key
+    ApiKey apiKeyData = DBManager::instance()->getApiKey(keyId);
+    if (apiKeyData.apiKey.isEmpty()) {
+        QMessageBox::warning(this, "错误", "无法获取 API 密钥");
+        return;
+    }
+
+    // 调用 API
+    veo3API->createVideo(
+        apiKeyData.apiKey,
+        server,
+        modelVariant,
+        prompt,
+        uploadedImagePaths,
+        resolution,
+        duration,
+        watermark
+    );
+}
+
+void VideoSingleTab::onVideoCreated(const QString &taskId, const QString &status)
+{
+    currentTaskId = taskId;
+    previewLabel->setText(QString("视频任务已创建\n任务 ID: %1\n状态: %2").arg(taskId).arg(status));
+    QMessageBox::information(this, "成功", QString("视频生成任务已创建\n任务 ID: %1\n状态: %2").arg(taskId).arg(status));
+}
+
+void VideoSingleTab::onTaskStatusUpdated(const QString &taskId, const QString &status, const QString &videoUrl, int progress)
+{
+    previewLabel->setText(QString("任务 ID: %1\n状态: %2\n进度: %3%\n视频 URL: %4")
+                          .arg(taskId).arg(status).arg(progress).arg(videoUrl));
+
+    if (status == "completed" && !videoUrl.isEmpty()) {
+        QMessageBox::information(this, "完成", QString("视频生成完成！\n\n视频 URL:\n%1").arg(videoUrl));
+    }
+}
+
+void VideoSingleTab::onApiError(const QString &error)
+{
+    QMessageBox::critical(this, "错误", QString("API 调用失败:\n%1").arg(error));
 }
 
 // VideoBatchTab 实现
