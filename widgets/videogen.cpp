@@ -13,6 +13,10 @@
 #include <QFormLayout>
 #include <QResizeEvent>
 #include <QTabBar>
+#include <QPixmap>
+#include <QEvent>
+#include <QMouseEvent>
+#include <QScrollArea>
 
 // VideoGenWidget 实现
 VideoGenWidget::VideoGenWidget(QWidget *parent)
@@ -97,11 +101,36 @@ VideoSingleTab::VideoSingleTab(QWidget *parent)
     loadApiKeys();
 }
 
+bool VideoSingleTab::eventFilter(QObject *obj, QEvent *event)
+{
+    if (event->type() == QEvent::MouseButtonPress) {
+        if (obj == imagePreviewLabel) {
+            uploadImage();
+            return true;
+        } else if (obj == endFramePreviewLabel) {
+            uploadEndFrameImage();
+            return true;
+        }
+    }
+    return QWidget::eventFilter(obj, event);
+}
+
 void VideoSingleTab::setupUI()
 {
     QVBoxLayout *mainLayout = new QVBoxLayout(this);
-    mainLayout->setContentsMargins(20, 20, 20, 20);
-    mainLayout->setSpacing(15);
+    mainLayout->setContentsMargins(0, 0, 0, 0);
+    mainLayout->setSpacing(0);
+
+    // 创建滚动区域
+    QScrollArea *scrollArea = new QScrollArea();
+    scrollArea->setWidgetResizable(true);
+    scrollArea->setFrameShape(QFrame::NoFrame);
+
+    // 创建内容容器
+    QWidget *contentWidget = new QWidget();
+    QVBoxLayout *contentLayout = new QVBoxLayout(contentWidget);
+    contentLayout->setContentsMargins(20, 20, 20, 20);
+    contentLayout->setSpacing(15);
 
     // 模型选择
     QHBoxLayout *modelLayout = new QHBoxLayout();
@@ -113,7 +142,7 @@ void VideoSingleTab::setupUI()
     connect(modelCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &VideoSingleTab::onModelChanged);
     modelLayout->addWidget(modelLabel);
     modelLayout->addWidget(modelCombo, 1);
-    mainLayout->addLayout(modelLayout);
+    contentLayout->addLayout(modelLayout);
 
     // VEO3 模型变体选择
     QHBoxLayout *variantLayout = new QHBoxLayout();
@@ -141,7 +170,7 @@ void VideoSingleTab::setupUI()
     connect(modelVariantCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &VideoSingleTab::onModelVariantChanged);
     variantLayout->addWidget(variantLabel);
     variantLayout->addWidget(modelVariantCombo, 1);
-    mainLayout->addLayout(variantLayout);
+    contentLayout->addLayout(variantLayout);
 
     // API Key 选择
     QHBoxLayout *keyLayout = new QHBoxLayout();
@@ -155,7 +184,7 @@ void VideoSingleTab::setupUI()
     keyLayout->addWidget(keyLabel);
     keyLayout->addWidget(apiKeyCombo, 1);
     keyLayout->addWidget(addKeyButton);
-    mainLayout->addLayout(keyLayout);
+    contentLayout->addLayout(keyLayout);
 
     // 请求服务器选择
     QHBoxLayout *serverLayout = new QHBoxLayout();
@@ -167,39 +196,43 @@ void VideoSingleTab::setupUI()
     serverCombo->setCurrentIndex(0); // 默认选择主站
     serverLayout->addWidget(serverLabel);
     serverLayout->addWidget(serverCombo, 1);
-    mainLayout->addLayout(serverLayout);
+    contentLayout->addLayout(serverLayout);
 
     // 提示词输入
     QLabel *promptLabel = new QLabel("提示词:");
     promptLabel->setStyleSheet("color: #F8FAFC; font-size: 14px;");
     promptInput = new QTextEdit();
     promptInput->setPlaceholderText("输入视频生成提示词...\n例如：一只可爱的猫咪在花园里玩耍，阳光明媚，电影级画质");
-    promptInput->setMinimumHeight(100);
-    mainLayout->addWidget(promptLabel);
-    mainLayout->addWidget(promptInput);
+    promptInput->setMinimumHeight(200);  // 增加一倍高度
+    contentLayout->addWidget(promptLabel);
+    contentLayout->addWidget(promptInput);
 
     // 图片上传区域（首帧）
     imageLabel = new QLabel("首帧图片:");
     imageLabel->setStyleSheet("color: #F8FAFC; font-size: 14px;");
-    mainLayout->addWidget(imageLabel);
+    contentLayout->addWidget(imageLabel);
 
     QHBoxLayout *imageLayout = new QHBoxLayout();
-    imagePreviewLabel = new QLabel("未选择图片");
+    imagePreviewLabel = new QLabel("未选择图片\n点击此处上传");
     imagePreviewLabel->setStyleSheet(
         "background: rgba(30, 27, 75, 0.5);"
         "border: 1px solid rgba(248, 250, 252, 0.1);"
         "border-radius: 8px;"
         "color: #64748B;"
         "padding: 10px;"
-        "min-height: 60px;"
+        "min-height: 120px;"
     );
     imagePreviewLabel->setAlignment(Qt::AlignCenter);
+    imagePreviewLabel->setCursor(Qt::PointingHandCursor);
+    imagePreviewLabel->setScaledContents(false);
+    imagePreviewLabel->installEventFilter(this);  // 安装事件过滤器以捕获点击
+
     uploadImageButton = new QPushButton("📁 选择首帧图片");
     uploadImageButton->setFixedWidth(150);
     connect(uploadImageButton, &QPushButton::clicked, this, &VideoSingleTab::uploadImage);
     imageLayout->addWidget(imagePreviewLabel, 1);
     imageLayout->addWidget(uploadImageButton);
-    mainLayout->addLayout(imageLayout);
+    contentLayout->addLayout(imageLayout);
 
     // 尾帧图片上传区域（默认隐藏，根据模型动态显示）
     endFrameWidget = new QWidget();
@@ -212,16 +245,19 @@ void VideoSingleTab::setupUI()
     endFrameLayout->addWidget(endFrameLabel);
 
     QHBoxLayout *endFrameImageLayout = new QHBoxLayout();
-    endFramePreviewLabel = new QLabel("未选择图片");
+    endFramePreviewLabel = new QLabel("未选择图片\n点击此处上传");
     endFramePreviewLabel->setStyleSheet(
         "background: rgba(30, 27, 75, 0.5);"
         "border: 1px solid rgba(248, 250, 252, 0.1);"
         "border-radius: 8px;"
         "color: #64748B;"
         "padding: 10px;"
-        "min-height: 60px;"
+        "min-height: 120px;"
     );
     endFramePreviewLabel->setAlignment(Qt::AlignCenter);
+    endFramePreviewLabel->setCursor(Qt::PointingHandCursor);
+    endFramePreviewLabel->setScaledContents(false);
+    endFramePreviewLabel->installEventFilter(this);  // 安装事件过滤器以捕获点击
     uploadEndFrameButton = new QPushButton("📁 选择尾帧图片");
     uploadEndFrameButton->setFixedWidth(150);
     connect(uploadEndFrameButton, &QPushButton::clicked, this, &VideoSingleTab::uploadEndFrameImage);
@@ -229,7 +265,7 @@ void VideoSingleTab::setupUI()
     endFrameImageLayout->addWidget(uploadEndFrameButton);
     endFrameLayout->addLayout(endFrameImageLayout);
 
-    mainLayout->addWidget(endFrameWidget);
+    contentLayout->addWidget(endFrameWidget);
     endFrameWidget->setVisible(true); // 默认显示，支持首尾帧
 
     // 参数设置
@@ -266,7 +302,7 @@ void VideoSingleTab::setupUI()
     paramsLayout->addLayout(watermarkLayout);
     paramsLayout->addStretch();
 
-    mainLayout->addLayout(paramsLayout);
+    contentLayout->addLayout(paramsLayout);
 
     // 预览区域
     previewLabel = new QLabel();
@@ -280,13 +316,17 @@ void VideoSingleTab::setupUI()
         "color: #64748B;"
         "font-size: 16px;"
     );
-    mainLayout->addWidget(previewLabel);
+    contentLayout->addWidget(previewLabel);
 
     // 生成按钮
     generateButton = new QPushButton("🚀 生成视频");
     generateButton->setCursor(Qt::PointingHandCursor);
     connect(generateButton, &QPushButton::clicked, this, &VideoSingleTab::generateVideo);
-    mainLayout->addWidget(generateButton);
+    contentLayout->addWidget(generateButton);
+
+    // 设置滚动区域
+    scrollArea->setWidget(contentWidget);
+    mainLayout->addWidget(scrollArea);
 
     // 初始化UI状态
     onModelVariantChanged(0);
@@ -361,29 +401,39 @@ void VideoSingleTab::removeImage(int index)
 void VideoSingleTab::updateImagePreview()
 {
     if (uploadedImagePaths.isEmpty()) {
-        imagePreviewLabel->setText("未选择图片");
+        imagePreviewLabel->setText("未选择图片\n点击此处上传");
+        imagePreviewLabel->setPixmap(QPixmap());
         imagePreviewLabel->setStyleSheet(
             "background: rgba(30, 27, 75, 0.5);"
             "border: 1px solid rgba(248, 250, 252, 0.1);"
             "border-radius: 8px;"
             "color: #64748B;"
             "padding: 10px;"
-            "min-height: 60px;"
+            "min-height: 120px;"
         );
     } else {
-        QString text = QString("✓ 已选择 %1 张图片\n").arg(uploadedImagePaths.size());
-        for (int i = 0; i < uploadedImagePaths.size(); ++i) {
-            QFileInfo fileInfo(uploadedImagePaths[i]);
-            text += QString("%1. %2\n").arg(i + 1).arg(fileInfo.fileName());
+        // 显示第一张图片的缩略图
+        QPixmap pixmap(uploadedImagePaths[0]);
+        if (!pixmap.isNull()) {
+            QPixmap scaledPixmap = pixmap.scaled(200, 120, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+            imagePreviewLabel->setPixmap(scaledPixmap);
+            imagePreviewLabel->setText("");
+        } else {
+            imagePreviewLabel->setPixmap(QPixmap());
+            QString text = QString("✓ 已选择 %1 张图片\n").arg(uploadedImagePaths.size());
+            for (int i = 0; i < uploadedImagePaths.size(); ++i) {
+                QFileInfo fileInfo(uploadedImagePaths[i]);
+                text += QString("%1. %2\n").arg(i + 1).arg(fileInfo.fileName());
+            }
+            imagePreviewLabel->setText(text.trimmed());
         }
-        imagePreviewLabel->setText(text.trimmed());
         imagePreviewLabel->setStyleSheet(
             "background: rgba(34, 197, 94, 0.1);"
             "border: 1px solid rgba(34, 197, 94, 0.3);"
             "border-radius: 8px;"
             "color: #22C55E;"
             "padding: 10px;"
-            "min-height: 60px;"
+            "min-height: 120px;"
         );
     }
 }
@@ -399,15 +449,26 @@ void VideoSingleTab::uploadEndFrameImage()
 
     if (!fileName.isEmpty()) {
         uploadedEndFrameImagePath = fileName;
-        QFileInfo fileInfo(fileName);
-        endFramePreviewLabel->setText("✓ " + fileInfo.fileName());
+
+        // 显示缩略图
+        QPixmap pixmap(fileName);
+        if (!pixmap.isNull()) {
+            QPixmap scaledPixmap = pixmap.scaled(200, 120, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+            endFramePreviewLabel->setPixmap(scaledPixmap);
+            endFramePreviewLabel->setText("");
+        } else {
+            endFramePreviewLabel->setPixmap(QPixmap());
+            QFileInfo fileInfo(fileName);
+            endFramePreviewLabel->setText("✓ " + fileInfo.fileName());
+        }
+
         endFramePreviewLabel->setStyleSheet(
             "background: rgba(34, 197, 94, 0.1);"
             "border: 1px solid rgba(34, 197, 94, 0.3);"
             "border-radius: 8px;"
             "color: #22C55E;"
             "padding: 10px;"
-            "min-height: 60px;"
+            "min-height: 120px;"
         );
     }
 }
@@ -595,8 +656,19 @@ VideoBatchTab::VideoBatchTab(QWidget *parent)
 void VideoBatchTab::setupUI()
 {
     QVBoxLayout *mainLayout = new QVBoxLayout(this);
-    mainLayout->setContentsMargins(20, 20, 20, 20);
-    mainLayout->setSpacing(15);
+    mainLayout->setContentsMargins(0, 0, 0, 0);
+    mainLayout->setSpacing(0);
+
+    // 创建滚动区域
+    QScrollArea *scrollArea = new QScrollArea();
+    scrollArea->setWidgetResizable(true);
+    scrollArea->setFrameShape(QFrame::NoFrame);
+
+    // 创建内容容器
+    QWidget *contentWidget = new QWidget();
+    QVBoxLayout *contentLayout = new QVBoxLayout(contentWidget);
+    contentLayout->setContentsMargins(20, 20, 20, 20);
+    contentLayout->setSpacing(15);
 
     // 模型选择
     QHBoxLayout *modelLayout = new QHBoxLayout();
@@ -608,7 +680,7 @@ void VideoBatchTab::setupUI()
     connect(modelCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &VideoBatchTab::onModelChanged);
     modelLayout->addWidget(modelLabel);
     modelLayout->addWidget(modelCombo, 1);
-    mainLayout->addLayout(modelLayout);
+    contentLayout->addLayout(modelLayout);
 
     // VEO3 模型变体选择
     QHBoxLayout *variantLayout = new QHBoxLayout();
@@ -636,7 +708,7 @@ void VideoBatchTab::setupUI()
     connect(modelVariantCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &VideoBatchTab::onModelVariantChanged);
     variantLayout->addWidget(variantLabel);
     variantLayout->addWidget(modelVariantCombo, 1);
-    mainLayout->addLayout(variantLayout);
+    contentLayout->addLayout(variantLayout);
 
     // API Key 选择
     QHBoxLayout *keyLayout = new QHBoxLayout();
@@ -650,7 +722,7 @@ void VideoBatchTab::setupUI()
     keyLayout->addWidget(keyLabel);
     keyLayout->addWidget(apiKeyCombo, 1);
     keyLayout->addWidget(addKeyButton);
-    mainLayout->addLayout(keyLayout);
+    contentLayout->addLayout(keyLayout);
 
     // 请求服务器选择
     QHBoxLayout *serverLayout = new QHBoxLayout();
@@ -662,16 +734,16 @@ void VideoBatchTab::setupUI()
     serverCombo->setCurrentIndex(0); // 默认选择主站
     serverLayout->addWidget(serverLabel);
     serverLayout->addWidget(serverCombo, 1);
-    mainLayout->addLayout(serverLayout);
+    contentLayout->addLayout(serverLayout);
 
     // 提示词输入（多行）
     QLabel *promptLabel = new QLabel("批量提示词（每行一个）:");
     promptLabel->setStyleSheet("color: #F8FAFC; font-size: 14px;");
     promptInput = new QTextEdit();
     promptInput->setPlaceholderText("输入多个提示词，每行一个...\n例如：\n一只猫在花园玩耍\n日落时的海滩\n城市夜景");
-    promptInput->setMinimumHeight(150);
-    mainLayout->addWidget(promptLabel);
-    mainLayout->addWidget(promptInput);
+    promptInput->setMinimumHeight(300);  // 增加一倍高度
+    contentLayout->addWidget(promptLabel);
+    contentLayout->addWidget(promptInput);
 
     // 图片拖放区域
     imageLabel = new QLabel("图片（可选，拖放图片到下方区域）:");
@@ -688,13 +760,13 @@ void VideoBatchTab::setupUI()
         "font-size: 14px;"
     );
     imageDropArea->setAcceptDrops(true);
-    mainLayout->addWidget(imageLabel);
-    mainLayout->addWidget(imageDropArea);
+    contentLayout->addWidget(imageLabel);
+    contentLayout->addWidget(imageDropArea);
 
     // 图片列表
     imageList = new QListWidget();
     imageList->setMaximumHeight(100);
-    mainLayout->addWidget(imageList);
+    contentLayout->addWidget(imageList);
 
     // 尾帧提示（根据模型动态显示）
     endFrameWidget = new QWidget();
@@ -703,7 +775,7 @@ void VideoBatchTab::setupUI()
     endFrameLabel = new QLabel("提示：当前模型支持首尾帧垫图");
     endFrameLabel->setStyleSheet("color: #94A3B8; font-size: 12px; font-style: italic;");
     endFrameLayout->addWidget(endFrameLabel);
-    mainLayout->addWidget(endFrameWidget);
+    contentLayout->addWidget(endFrameWidget);
     endFrameWidget->setVisible(true);
 
     // 参数设置
@@ -740,7 +812,7 @@ void VideoBatchTab::setupUI()
     paramsLayout->addLayout(watermarkLayout);
     paramsLayout->addStretch();
 
-    mainLayout->addLayout(paramsLayout);
+    contentLayout->addLayout(paramsLayout);
 
     // 按钮行
     QHBoxLayout *buttonLayout = new QHBoxLayout();
@@ -754,13 +826,17 @@ void VideoBatchTab::setupUI()
     buttonLayout->addWidget(deleteButton);
     buttonLayout->addWidget(deleteAllButton);
     buttonLayout->addStretch();
-    mainLayout->addLayout(buttonLayout);
+    contentLayout->addLayout(buttonLayout);
 
     // 生成按钮
     generateButton = new QPushButton("🚀 批量生成视频");
     generateButton->setCursor(Qt::PointingHandCursor);
     connect(generateButton, &QPushButton::clicked, this, &VideoBatchTab::generateBatch);
-    mainLayout->addWidget(generateButton);
+    contentLayout->addWidget(generateButton);
+
+    // 设置滚动区域
+    scrollArea->setWidget(contentWidget);
+    mainLayout->addWidget(scrollArea);
 
     // 初始化UI状态
     onModelVariantChanged(0);

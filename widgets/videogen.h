@@ -12,6 +12,7 @@
 #include <QTableWidget>
 #include <QListWidget>
 #include <QCheckBox>
+#include <QScrollArea>
 
 // 单个视频生成 Tab
 class VideoSingleTab : public QWidget
@@ -20,6 +21,9 @@ class VideoSingleTab : public QWidget
 
 public:
     explicit VideoSingleTab(QWidget *parent = nullptr);
+
+protected:
+    bool eventFilter(QObject *obj, QEvent *event) override;
 
 private slots:
     void generateVideo();
