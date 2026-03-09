@@ -1533,15 +1533,17 @@ void VideoSingleHistoryTab::setupListView()
 
     // 在表头"选择"列添加勾选框
     headerCheckBox = new QCheckBox(historyTable);
-    headerCheckBox->setStyleSheet("QCheckBox { margin-left: 15px; }");
     connect(headerCheckBox, &QCheckBox::checkStateChanged, this, &VideoSingleHistoryTab::onSelectAllChanged);
 
-    // 将勾选框放置在表头的正确位置
-    QHeaderView *header = historyTable->horizontalHeader();
-    int headerHeight = header->height();
-    int checkBoxSize = 20;
-    headerCheckBox->setGeometry((50 - checkBoxSize) / 2, (headerHeight - checkBoxSize) / 2, checkBoxSize, checkBoxSize);
-    headerCheckBox->raise();  // 确保勾选框在最上层
+    // 初始化勾选框位置
+    updateHeaderCheckBoxPosition();
+
+    // 监听表头的resize事件，动态调整勾选框位置
+    connect(historyTable->horizontalHeader(), &QHeaderView::sectionResized, this, [this](int logicalIndex, int, int) {
+        if (logicalIndex == 0) {
+            updateHeaderCheckBoxPosition();
+        }
+    });
 }
 
 void VideoSingleHistoryTab::setupThumbnailView()
@@ -2064,4 +2066,31 @@ void VideoSingleHistoryTab::onTaskStatusUpdated(const QString& taskId, const QSt
             break;
         }
     }
+}
+
+void VideoSingleHistoryTab::updateHeaderCheckBoxPosition()
+{
+    if (!headerCheckBox || !historyTable) {
+        return;
+    }
+
+    QHeaderView *header = historyTable->horizontalHeader();
+
+    // 获取第一列的位置和宽度
+    int columnWidth = header->sectionSize(0);
+    int columnPos = header->sectionViewportPosition(0);
+
+    // 获取表头高度
+    int headerHeight = header->height();
+
+    // 勾选框大小
+    int checkBoxSize = 20;
+
+    // 计算居中位置
+    int x = columnPos + (columnWidth - checkBoxSize) / 2;
+    int y = (headerHeight - checkBoxSize) / 2;
+
+    // 设置勾选框位置和大小
+    headerCheckBox->setGeometry(x, y, checkBoxSize, checkBoxSize);
+    headerCheckBox->raise();  // 确保勾选框在最上层
 }

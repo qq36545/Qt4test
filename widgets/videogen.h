@@ -157,6 +157,7 @@ private:
     void loadHistory(int offset = 0, int limit = 50);
     void setupListView();
     void setupThumbnailView();
+    void updateHeaderCheckBoxPosition();  // 更新表头勾选框位置
 
     QStackedWidget* viewStack;
     QWidget* listViewWidget;
