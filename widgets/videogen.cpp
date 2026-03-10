@@ -1,6 +1,6 @@
 #include "videogen.h"
 #include "../database/dbmanager.h"
-#include "../network/veo3api.h"
+#include "../network/videoapi.h"
 #include "../network/taskpollmanager.h"
 #include <QMessageBox>
 #include <QFileDialog>
@@ -113,10 +113,10 @@ VideoSingleTab::VideoSingleTab(QWidget *parent)
       suppressDuplicateWarning(false),
       parametersModified(false)
 {
-    veo3API = new Veo3API(this);
-    connect(veo3API, &Veo3API::videoCreated, this, &VideoSingleTab::onVideoCreated);
-    connect(veo3API, &Veo3API::taskStatusUpdated, this, &VideoSingleTab::onTaskStatusUpdated);
-    connect(veo3API, &Veo3API::errorOccurred, this, &VideoSingleTab::onApiError);
+    veo3API = new VideoAPI(this);
+    connect(veo3API, &VideoAPI::videoCreated, this, &VideoSingleTab::onVideoCreated);
+    connect(veo3API, &VideoAPI::taskStatusUpdated, this, &VideoSingleTab::onTaskStatusUpdated);
+    connect(veo3API, &VideoAPI::errorOccurred, this, &VideoSingleTab::onApiError);
 
     setupUI();
     loadApiKeys();
@@ -285,25 +285,36 @@ void VideoSingleTab::setupUI()
     QHBoxLayout *paramsLayout = new QHBoxLayout();
 
     QVBoxLayout *resLayout = new QVBoxLayout();
-    QLabel *resLabel = new QLabel("分辨率");
-    resLabel->setStyleSheet("font-size: 14px;");
+    resolutionLabel = new QLabel("分辨率");
+    resolutionLabel->setStyleSheet("font-size: 14px;");
     resolutionCombo = new QComboBox();
     resolutionCombo->addItem("横屏 16:9 (1280x720)", "1280x720");
     resolutionCombo->addItem("竖屏 9:16 (720x1280)", "720x1280");
-    resLayout->addWidget(resLabel);
+    resLayout->addWidget(resolutionLabel);
     resLayout->addWidget(resolutionCombo);
 
     QVBoxLayout *durLayout = new QVBoxLayout();
-    QLabel *durLabel = new QLabel("时长（秒）");
-    durLabel->setStyleSheet("font-size: 14px;");
+    durationLabel = new QLabel("时长（秒）");
+    durationLabel->setStyleSheet("font-size: 14px;");
     durationCombo = new QComboBox();
     durationCombo->addItem("8秒（固定）", "8");
     durationCombo->setEnabled(false); // VEO3 固定 8 秒
-    durLayout->addWidget(durLabel);
+    durLayout->addWidget(durationLabel);
     durLayout->addWidget(durationCombo);
 
+    QVBoxLayout *sizeLayout = new QVBoxLayout();
+    sizeLabel = new QLabel("分辨率规格");
+    sizeLabel->setStyleSheet("font-size: 14px;");
+    sizeCombo = new QComboBox();
+    sizeCombo->addItem("720P", "720P");
+    sizeCombo->addItem("1080P", "1080P");
+    sizeCombo->setVisible(false); // 默认隐藏，Grok模型时显示
+    sizeLabel->setVisible(false);
+    sizeLayout->addWidget(sizeLabel);
+    sizeLayout->addWidget(sizeCombo);
+
     QVBoxLayout *watermarkLayout = new QVBoxLayout();
-    QLabel *watermarkLabel = new QLabel("水印");
+    watermarkLabel = new QLabel("水印");
     watermarkLabel->setStyleSheet("font-size: 14px;");
     watermarkCheckBox = new QCheckBox("添加水印");
     watermarkCheckBox->setStyleSheet("color: white; font-size: 12px;");
@@ -312,6 +323,7 @@ void VideoSingleTab::setupUI()
 
     paramsLayout->addLayout(resLayout);
     paramsLayout->addLayout(durLayout);
+    paramsLayout->addLayout(sizeLayout);
     paramsLayout->addLayout(watermarkLayout);
     paramsLayout->addStretch();
 
@@ -421,7 +433,68 @@ void VideoSingleTab::resetForm()
 
 void VideoSingleTab::onModelChanged(int index)
 {
-    // 模型切换时可以重新加载对应的密钥
+    QString modelName = modelCombo->currentText();
+
+    // 根据模型类型切换UI
+    if (modelName.contains("Grok", Qt::CaseInsensitive)) {
+        // Grok模型：切换到Grok参数
+        // 1. 更新模型变体下拉列表
+        modelVariantCombo->clear();
+        modelVariantCombo->addItem("grok-video-3-15s (15秒)", "grok-video-3-15s");
+        modelVariantCombo->addItem("grok-video-3-10s (10秒)", "grok-video-3-10s");
+        modelVariantCombo->addItem("grok-video-3 (6秒)", "grok-video-3");
+
+        // 2. 隐藏VEO3专用参数
+        durationCombo->setVisible(false);
+        durationLabel->setVisible(false);
+        watermarkCheckBox->setVisible(false);
+        watermarkLabel->setVisible(false);
+
+        // 3. 修改分辨率标签和选项为宽高比
+        resolutionLabel->setText("宽高比");
+        resolutionCombo->clear();
+        resolutionCombo->addItem("2:3 竖屏", "2:3");
+        resolutionCombo->addItem("3:2 横屏", "3:2");
+        resolutionCombo->addItem("1:1 方屏", "1:1");
+
+        // 4. 显示Grok专用的size参数
+        sizeCombo->setVisible(true);
+        sizeLabel->setVisible(true);
+
+    } else {
+        // VEO3模型：恢复VEO3参数
+        // 1. 恢复VEO3模型变体
+        modelVariantCombo->clear();
+        modelVariantCombo->addItem("veo_3_1-fast", "veo_3_1-fast");
+        modelVariantCombo->addItem("veo_3_1", "veo_3_1");
+        modelVariantCombo->addItem("veo_3_1-fast-4K", "veo_3_1-fast-4K");
+        modelVariantCombo->addItem("veo_3_1-fast-components-4K", "veo_3_1-fast-components-4K");
+        modelVariantCombo->addItem("veo3.1-fast", "veo3.1-fast");
+        modelVariantCombo->addItem("veo3.1", "veo3.1");
+        modelVariantCombo->addItem("veo3.1-fast-components", "veo3.1-fast-components");
+        modelVariantCombo->addItem("veo3.1-components", "veo3.1-components");
+        modelVariantCombo->addItem("veo3.1-4k", "veo3.1-4k");
+        modelVariantCombo->addItem("veo3-pro-frames", "veo3-pro-frames");
+        modelVariantCombo->addItem("veo3.1-components-4k", "veo3.1-components-4k");
+
+        // 2. 显示VEO3专用参数
+        durationCombo->setVisible(true);
+        durationLabel->setVisible(true);
+        watermarkCheckBox->setVisible(true);
+        watermarkLabel->setVisible(true);
+
+        // 3. 恢复分辨率标签和选项
+        resolutionLabel->setText("分辨率");
+        resolutionCombo->clear();
+        resolutionCombo->addItem("1280x720 (横屏)", "1280x720");
+        resolutionCombo->addItem("720x1280 (竖屏)", "720x1280");
+
+        // 4. 隐藏Grok专用的size参数
+        sizeCombo->setVisible(false);
+        sizeLabel->setVisible(false);
+    }
+
+    // 模型切换时重新加载对应的密钥
     loadApiKeys();
 }
 
@@ -644,17 +717,39 @@ void VideoSingleTab::generateVideo()
     previewLabel->setText("⏳ 正在提交视频生成任务...\n\n请稍候，任务创建成功后会自动更新状态。");
     previewLabel->setStyleSheet("color: #0066cc; font-size: 14px;");
 
-    // 调用 API 创建任务
-    veo3API->createVideo(
-        apiKeyData.apiKey,
-        server,
-        modelVariant,
-        prompt,
-        uploadedImagePaths,
-        resolution,
-        duration,
-        watermark
-    );
+    // 根据模型类型调用不同的API
+    if (model.contains("Grok", Qt::CaseInsensitive)) {
+        // Grok模型：传递aspectRatio和size参数
+        QString aspectRatio = resolution; // Grok使用resolution字段存储aspectRatio
+        QString size = sizeCombo->currentData().toString();
+
+        veo3API->createVideo(
+            apiKeyData.apiKey,
+            server,
+            model,  // modelName
+            modelVariant,
+            prompt,
+            uploadedImagePaths,
+            size,
+            "",  // seconds (Grok不需要)
+            false,  // watermark (Grok不需要)
+            aspectRatio  // aspectRatio
+        );
+    } else {
+        // VEO3模型：传递原有参数
+        veo3API->createVideo(
+            apiKeyData.apiKey,
+            server,
+            model,  // modelName
+            modelVariant,
+            prompt,
+            uploadedImagePaths,
+            resolution,
+            duration,
+            watermark,
+            ""  // aspectRatio (VEO3不需要)
+        );
+    }
 
     // 注意：任务创建成功后会触发 onVideoCreated 回调
     // 在那里插入数据库并启动轮询
@@ -690,6 +785,12 @@ void VideoSingleTab::onVideoCreated(const QString &taskId, const QString &status
     task.resolution = resolutionCombo->currentData().toString();
     task.duration = durationCombo->currentText().remove("秒").toInt();
     task.watermark = watermarkCheckBox->isChecked();
+
+    // Grok专用参数
+    if (task.modelName.contains("Grok", Qt::CaseInsensitive)) {
+        task.aspectRatio = resolutionCombo->currentData().toString(); // Grok的aspectRatio
+        task.size = sizeCombo->currentData().toString(); // Grok的size
+    }
 
     // 序列化图片路径为JSON
     QJsonArray imageArray;
@@ -824,6 +925,28 @@ void VideoSingleTab::loadFromTask(const VideoTask& task)
 
     // 8. 设置水印
     watermarkCheckBox->setChecked(task.watermark);
+
+    // 8.5. 设置Grok专用参数（如果是Grok模型）
+    if (task.modelName.contains("Grok", Qt::CaseInsensitive)) {
+        // 设置aspectRatio（存储在resolution字段中）
+        if (!task.aspectRatio.isEmpty()) {
+            for (int i = 0; i < resolutionCombo->count(); ++i) {
+                if (resolutionCombo->itemData(i).toString() == task.aspectRatio) {
+                    resolutionCombo->setCurrentIndex(i);
+                    break;
+                }
+            }
+        }
+        // 设置size
+        if (!task.size.isEmpty()) {
+            for (int i = 0; i < sizeCombo->count(); ++i) {
+                if (sizeCombo->itemData(i).toString() == task.size) {
+                    sizeCombo->setCurrentIndex(i);
+                    break;
+                }
+            }
+        }
+    }
 
     // 9. 解析并设置图片路径
     uploadedImagePaths.clear();
@@ -1622,10 +1745,10 @@ VideoSingleHistoryTab::VideoSingleHistoryTab(QWidget *parent)
     loadHistory();
 
     // 创建API实例用于重新查询
-    veo3API = new Veo3API(this);
-    connect(veo3API, &Veo3API::taskStatusUpdated,
+    veo3API = new VideoAPI(this);
+    connect(veo3API, &VideoAPI::taskStatusUpdated,
             this, &VideoSingleHistoryTab::onApiTaskStatusUpdated);
-    connect(veo3API, &Veo3API::errorOccurred,
+    connect(veo3API, &VideoAPI::errorOccurred,
             this, &VideoSingleHistoryTab::onQueryError);
 
     // 连接TaskPollManager的状态更新信号
@@ -2135,7 +2258,7 @@ void VideoSingleHistoryTab::onRetryQuery(const QString& taskId)
     currentRefreshingTaskId = taskId;
 
     // 调用API重新查询任务状态
-    veo3API->queryTask(selectedKey.apiKey, baseUrl, taskId);
+    veo3API->queryTask(selectedKey.apiKey, baseUrl, task.modelName, taskId);
 }
 
 void VideoSingleHistoryTab::onRegenerate(const QString& taskId)

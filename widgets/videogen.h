@@ -68,8 +68,13 @@ private:
     QComboBox *serverCombo;
     QComboBox *modelVariantCombo;
     QComboBox *resolutionCombo;
+    QLabel *resolutionLabel;  // 分辨率标签
     QComboBox *durationCombo;
+    QLabel *durationLabel;  // 时长标签
+    QComboBox *sizeCombo;  // Grok专用：720P/1080P
+    QLabel *sizeLabel;  // size标签
     QCheckBox *watermarkCheckBox;
+    QLabel *watermarkLabel;  // 水印标签
     QLabel *imageLabel;
     QLabel *imagePreviewLabel;
     QPushButton *uploadImageButton;
@@ -83,7 +88,7 @@ private:
     QPushButton *generateButton;
     QPushButton *resetButton;
 
-    class Veo3API *veo3API;  // API 实例
+    class VideoAPI *veo3API;  // API 实例（保留变量名兼容性）
     QString currentTaskId;   // 当前任务 ID
     QString lastSubmittedParamsHash;  // 上次提交的参数哈希
     bool suppressDuplicateWarning;    // 本次会话是否抑制重复提交警告
@@ -188,7 +193,7 @@ private:
     QSet<QString> selectedTaskIds;  // 存储选中的任务ID
     bool isListView;
     int currentOffset;
-    class Veo3API* veo3API;  // API实例，用于重新查询任务状态
+    class VideoAPI* veo3API;  // API实例，用于重新查询任务状态
     QString currentRefreshingTaskId;  // 当前正在刷新的任务ID
 };
 

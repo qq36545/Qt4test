@@ -140,7 +140,9 @@ bool DBManager::createTables()
         "duration INTEGER",
         "watermark INTEGER DEFAULT 0",
         "image_paths TEXT",
-        "end_frame_image_path TEXT"
+        "end_frame_image_path TEXT",
+        "aspect_ratio TEXT",
+        "size TEXT"
     };
 
     for (const QString& columnDef : newColumns) {

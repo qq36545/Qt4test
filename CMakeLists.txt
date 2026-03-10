@@ -23,7 +23,8 @@ set(SOURCES
     widgets/configwidget.cpp
     widgets/aboutwidget.cpp
     database/dbmanager.cpp
-    network/veo3api.cpp
+    network/videoapi.cpp
+    network/imageuploader.cpp
     network/taskpollmanager.cpp
 )
 
@@ -35,7 +36,8 @@ set(HEADERS
     widgets/configwidget.h
     widgets/aboutwidget.h
     database/dbmanager.h
-    network/veo3api.h
+    network/videoapi.h
+    network/imageuploader.h
     network/taskpollmanager.h
 )
 

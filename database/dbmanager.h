@@ -52,6 +52,8 @@ struct VideoTask {
     bool watermark;           // 是否添加水印
     QString imagePaths;       // 图片路径（JSON字符串）
     QString endFrameImagePath; // 尾帧图片路径
+    QString aspectRatio;      // 宽高比（Grok专用，如 "2:3", "3:2", "1:1"）
+    QString size;             // 分辨率规格（Grok专用，如 "720P", "1080P"）
 };
 
 class DBManager : public QObject
