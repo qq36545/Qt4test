@@ -317,15 +317,25 @@ void VideoSingleTab::setupUI()
     previewLabel = new QLabel();
     previewLabel->setObjectName("videoPreviewLabel");
     previewLabel->setAlignment(Qt::AlignCenter);
-    previewLabel->setText("💡 生成结果将显示在这里");
+    previewLabel->setText("💡 生成结果将在【生成历史记录】");
     previewLabel->setMinimumHeight(150);
     contentLayout->addWidget(previewLabel);
 
-    // 生成按钮
+    // 按钮布局（生成按钮和重置按钮并排）
+    QHBoxLayout *buttonLayout = new QHBoxLayout();
+    buttonLayout->setSpacing(10);
+
     generateButton = new QPushButton("🚀 生成视频");
     generateButton->setCursor(Qt::PointingHandCursor);
     connect(generateButton, &QPushButton::clicked, this, &VideoSingleTab::generateVideo);
-    contentLayout->addWidget(generateButton);
+    buttonLayout->addWidget(generateButton);
+
+    resetButton = new QPushButton("🔄 重置");
+    resetButton->setCursor(Qt::PointingHandCursor);
+    connect(resetButton, &QPushButton::clicked, this, &VideoSingleTab::resetForm);
+    buttonLayout->addWidget(resetButton);
+
+    contentLayout->addLayout(buttonLayout);
 
     // 设置滚动区域
     scrollArea->setWidget(contentWidget);
@@ -377,6 +387,32 @@ void VideoSingleTab::loadApiKeys()
 void VideoSingleTab::refreshApiKeys()
 {
     loadApiKeys();
+}
+
+void VideoSingleTab::resetForm()
+{
+    // 清空提示词
+    promptInput->clear();
+
+    // 清空首帧图片
+    uploadedImagePaths.clear();
+    imagePreviewLabel->clear();
+    imagePreviewLabel->setText("📷 未上传图片");
+    imagePreviewLabel->setAlignment(Qt::AlignCenter);
+
+    // 清空尾帧图片
+    uploadedEndFrameImagePath.clear();
+    if (endFramePreviewLabel) {
+        endFramePreviewLabel->clear();
+        endFramePreviewLabel->setText("📷 未上传尾帧图片");
+        endFramePreviewLabel->setAlignment(Qt::AlignCenter);
+    }
+
+    // 清空预览区域
+    previewLabel->setText("💡 生成结果将在【生成历史记录】");
+
+    // 标记参数已修改
+    parametersModified = true;
 }
 
 void VideoSingleTab::onModelChanged(int index)
@@ -600,10 +636,9 @@ void VideoSingleTab::generateVideo()
         return;
     }
 
-    // 立即显示提交提示，提升用户体验
-    QMessageBox::information(this, "提交中",
-        "正在提交视频生成任务...\n\n"
-        "请稍候，任务创建成功后会有提示。");
+    // 在预览区域显示提交状态，避免阻塞式弹窗
+    previewLabel->setText("⏳ 正在提交视频生成任务...\n\n请稍候，任务创建成功后会自动更新状态。");
+    previewLabel->setStyleSheet("color: #0066cc; font-size: 14px;");
 
     // 调用 API 创建任务
     veo3API->createVideo(
@@ -1444,7 +1479,9 @@ void VideoHistoryWidget::setupUI()
 
     // 创建 Tab Widget
     tabWidget = new QTabWidget();
-    tabWidget->setDocumentMode(true);  // 移除边框
+
+    // tab居中对齐
+    tabWidget->tabBar()->setExpanding(true);
 
     // 创建 4 个子 tab
     videoSingleTab = new VideoSingleHistoryTab();

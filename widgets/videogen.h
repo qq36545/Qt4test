@@ -33,6 +33,7 @@ protected:
 
 private slots:
     void generateVideo();
+    void resetForm();
     void onModelChanged(int index);
     void onModelVariantChanged(int index);
     void uploadImage();
@@ -76,6 +77,7 @@ private:
     QString uploadedEndFrameImagePath;
     QLabel *previewLabel;
     QPushButton *generateButton;
+    QPushButton *resetButton;
 
     class Veo3API *veo3API;  // API 实例
     QString currentTaskId;   // 当前任务 ID
