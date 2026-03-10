@@ -1390,11 +1390,12 @@ VideoHistoryWidget::VideoHistoryWidget(QWidget *parent)
 void VideoHistoryWidget::setupUI()
 {
     QVBoxLayout *mainLayout = new QVBoxLayout(this);
-    mainLayout->setContentsMargins(0, 20, 0, 20);  // 移除左右边距，保留上下边距
-    mainLayout->setSpacing(15);
+    mainLayout->setContentsMargins(0, 0, 0, 0);  // 完全移除所有边距
+    mainLayout->setSpacing(0);
 
     // 创建 Tab Widget
     tabWidget = new QTabWidget();
+    tabWidget->setDocumentMode(true);  // 移除边框
 
     // 创建 4 个子 tab
     videoSingleTab = new VideoSingleHistoryTab();
@@ -1423,8 +1424,8 @@ VideoSingleHistoryTab::VideoSingleHistoryTab(QWidget *parent)
 void VideoSingleHistoryTab::setupUI()
 {
     QVBoxLayout *mainLayout = new QVBoxLayout(this);
-    mainLayout->setContentsMargins(0, 20, 0, 20);  // 移除左右边距，保留上下边距
-    mainLayout->setSpacing(15);
+    mainLayout->setContentsMargins(0, 0, 0, 0);  // 完全移除所有边距
+    mainLayout->setSpacing(10);
 
     // 标题
     QLabel *titleLabel = new QLabel("📜 AI生成历史记录");
@@ -1480,6 +1481,7 @@ void VideoSingleHistoryTab::setupListView()
     layout->setContentsMargins(0, 0, 0, 0);
 
     historyTable = new QTableWidget();
+    historyTable->setFrameShape(QFrame::NoFrame);  // 移除边框
     historyTable->setColumnCount(9);  // 增加一列用于勾选框
     historyTable->setHorizontalHeaderLabels({
         "", "序号", "任务ID", "提示词", "状态", "进度", "创建时间", "视频类型", "操作"
