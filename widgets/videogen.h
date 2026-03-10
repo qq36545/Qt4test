@@ -139,6 +139,9 @@ class VideoSingleHistoryTab : public QWidget
 public:
     explicit VideoSingleHistoryTab(QWidget *parent = nullptr);
 
+public slots:
+    void refreshApiKeys();
+
 protected:
     void showEvent(QShowEvent *event) override;  // tab显示时自动刷新
 
@@ -153,7 +156,9 @@ private slots:
     void onDeleteSelected();  // 删除选中的记录
     void onSelectAllChanged(int state);  // 全选/取消全选
     void onCheckBoxStateChanged();  // 单个勾选框状态变化
-    void onTaskStatusUpdated(const QString& taskId, const QString& status, int progress);  // 任务状态更新
+    void onTaskStatusUpdated(const QString& taskId, const QString& status, int progress);  // 任务状态更新（TaskPollManager）
+    void onApiTaskStatusUpdated(const QString& taskId, const QString& status, const QString& videoUrl, int progress);  // 任务状态更新（Veo3API）
+    void onQueryError(const QString& error);  // 查询错误处理
 
 private:
     void setupUI();
@@ -161,6 +166,7 @@ private:
     void setupListView();
     void setupThumbnailView();
     void updateHeaderCheckBoxPosition();  // 更新表头勾选框位置
+    void loadApiKeys();
 
     QStackedWidget* viewStack;
     QWidget* listViewWidget;
@@ -173,9 +179,13 @@ private:
     QPushButton* refreshButton;
     QPushButton* deleteButton;  // 删除按钮
     QCheckBox* headerCheckBox;  // 表头全选勾选框
+    QComboBox* apiKeyCombo;  // 密钥选择下拉列表
+    QComboBox* serverCombo;  // 服务器选择下拉列表
     QSet<QString> selectedTaskIds;  // 存储选中的任务ID
     bool isListView;
     int currentOffset;
+    class Veo3API* veo3API;  // API实例，用于重新查询任务状态
+    QString currentRefreshingTaskId;  // 当前正在刷新的任务ID
 };
 
 // 历史记录容器 Widget (4 tab)
@@ -185,6 +195,7 @@ class VideoHistoryWidget : public QWidget
 
 public:
     explicit VideoHistoryWidget(QWidget *parent = nullptr);
+    VideoSingleHistoryTab* getVideoSingleTab() const { return videoSingleTab; }
 
 private:
     void setupUI();
@@ -225,6 +236,7 @@ public:
     explicit VideoGenWidget(QWidget *parent = nullptr);
     VideoSingleTab* getSingleTab() const { return singleTab; }
     VideoBatchTab* getBatchTab() const { return batchTab; }
+    VideoHistoryWidget* getHistoryWidget() const { return historyWidget; }
 
 protected:
     void resizeEvent(QResizeEvent *event) override;

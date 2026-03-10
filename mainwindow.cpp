@@ -143,6 +143,12 @@ void MainWindow::setupContentArea()
             videoGenWidget->getSingleTab(), &VideoSingleTab::refreshApiKeys);
     connect(configWidget, &ConfigWidget::apiKeysChanged,
             videoGenWidget->getBatchTab(), &VideoBatchTab::refreshApiKeys);
+
+    // 连接配置页面的密钥变化信号到历史记录页面
+    connect(configWidget, &ConfigWidget::apiKeysChanged,
+            videoGenWidget->getHistoryWidget()->getVideoSingleTab(), &VideoSingleHistoryTab::refreshApiKeys);
+    connect(configWidget, &ConfigWidget::apiKeysChanged,
+            historyWidget, &VideoSingleHistoryTab::refreshApiKeys);
 }
 
 void MainWindow::showVideoGen()

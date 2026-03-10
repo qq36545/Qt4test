@@ -1502,6 +1502,13 @@ VideoSingleHistoryTab::VideoSingleHistoryTab(QWidget *parent)
     setupUI();
     loadHistory();
 
+    // 创建API实例用于重新查询
+    veo3API = new Veo3API(this);
+    connect(veo3API, &Veo3API::taskStatusUpdated,
+            this, &VideoSingleHistoryTab::onApiTaskStatusUpdated);
+    connect(veo3API, &Veo3API::errorOccurred,
+            this, &VideoSingleHistoryTab::onQueryError);
+
     // 连接TaskPollManager的状态更新信号
     connect(TaskPollManager::getInstance(), &TaskPollManager::taskStatusUpdated,
             this, &VideoSingleHistoryTab::onTaskStatusUpdated);
@@ -1513,16 +1520,25 @@ void VideoSingleHistoryTab::setupUI()
     mainLayout->setContentsMargins(0, 0, 0, 0);  // 完全移除所有边距
     mainLayout->setSpacing(10);
 
-    // 标题
-    QLabel *titleLabel = new QLabel("📜 AI生成历史记录");
-    titleLabel->setStyleSheet("font-size: 24px; font-weight: bold;");
-    mainLayout->addWidget(titleLabel);
-
     // 顶部工具栏
     QHBoxLayout *toolbarLayout = new QHBoxLayout();
 
     switchViewButton = new QPushButton("📷 缩略图视图");
     connect(switchViewButton, &QPushButton::clicked, this, &VideoSingleHistoryTab::switchView);
+
+    // 查询密钥标签和下拉列表
+    QLabel *apiKeyLabel = new QLabel("查询密钥:");
+    apiKeyCombo = new QComboBox();
+    apiKeyCombo->setMinimumWidth(150);
+    loadApiKeys();
+
+    // 服务器选择
+    QLabel *serverLabel = new QLabel("服务器:");
+    serverCombo = new QComboBox();
+    serverCombo->addItem("【主站】https://ai.kegeai.top", "https://ai.kegeai.top");
+    serverCombo->addItem("【备用】https://api.kuai.host", "https://api.kuai.host");
+    serverCombo->setCurrentIndex(0);
+    serverCombo->setMinimumWidth(150);
 
     refreshButton = new QPushButton("🔄 刷新");
     connect(refreshButton, &QPushButton::clicked, this, &VideoSingleHistoryTab::refreshHistory);
@@ -1531,6 +1547,10 @@ void VideoSingleHistoryTab::setupUI()
     connect(deleteButton, &QPushButton::clicked, this, &VideoSingleHistoryTab::onDeleteSelected);
 
     toolbarLayout->addWidget(switchViewButton);
+    toolbarLayout->addWidget(apiKeyLabel);
+    toolbarLayout->addWidget(apiKeyCombo);
+    toolbarLayout->addWidget(serverLabel);
+    toolbarLayout->addWidget(serverCombo);
     toolbarLayout->addStretch();
     toolbarLayout->addWidget(refreshButton);
     toolbarLayout->addWidget(deleteButton);
@@ -1558,6 +1578,27 @@ void VideoSingleHistoryTab::showEvent(QShowEvent *event)
     QWidget::showEvent(event);
     // tab显示时自动刷新历史记录
     refreshHistory();
+}
+
+void VideoSingleHistoryTab::loadApiKeys()
+{
+    apiKeyCombo->clear();
+    QList<ApiKey> keys = DBManager::instance()->getAllApiKeys();
+
+    if (keys.isEmpty()) {
+        apiKeyCombo->addItem("无可用密钥");
+        apiKeyCombo->setEnabled(false);
+    } else {
+        apiKeyCombo->setEnabled(true);
+        for (const ApiKey& key : keys) {
+            apiKeyCombo->addItem(key.name, key.id);
+        }
+    }
+}
+
+void VideoSingleHistoryTab::refreshApiKeys()
+{
+    loadApiKeys();
 }
 
 void VideoSingleHistoryTab::setupListView()
@@ -1938,19 +1979,44 @@ void VideoSingleHistoryTab::onBrowseFile(const QString& taskId)
 
 void VideoSingleHistoryTab::onRetryQuery(const QString& taskId)
 {
+    // 获取当前选择的密钥
+    if (!apiKeyCombo || apiKeyCombo->currentIndex() < 0) {
+        QMessageBox::warning(this, "错误", "请先选择一个API密钥");
+        return;
+    }
+
+    int apiKeyId = apiKeyCombo->currentData().toInt();
+    if (apiKeyId <= 0) {
+        QMessageBox::warning(this, "错误", "无效的API密钥");
+        return;
+    }
+
+    // 从数据库获取密钥详细信息
+    ApiKey selectedKey = DBManager::instance()->getApiKey(apiKeyId);
+    if (selectedKey.apiKey.isEmpty()) {
+        QMessageBox::warning(this, "错误", "未找到选择的API密钥");
+        return;
+    }
+
+    // 获取服务器URL
+    QString baseUrl = serverCombo->currentData().toString();
+    if (baseUrl.isEmpty()) {
+        QMessageBox::warning(this, "错误", "请选择服务器");
+        return;
+    }
+
     // 查询任务信息
     VideoTask task = DBManager::instance()->getTaskById(taskId);
-
     if (task.taskId.isEmpty()) {
         QMessageBox::warning(this, "错误", "未找到任务记录");
         return;
     }
 
-    // 重新启动轮询（需要 API Key 和 baseUrl）
-    // TODO: 从数据库或配置中获取这些信息
-    QMessageBox::information(this, "提示",
-        "重新查询功能需要存储 API Key 和服务器信息\n"
-        "当前版本暂不支持，请重新生成任务");
+    // 记录当前正在刷新的任务ID
+    currentRefreshingTaskId = taskId;
+
+    // 调用API重新查询任务状态
+    veo3API->queryTask(selectedKey.apiKey, baseUrl, taskId);
 }
 
 void VideoSingleHistoryTab::onRegenerate(const QString& taskId)
@@ -2110,7 +2176,10 @@ void VideoSingleHistoryTab::onCheckBoxStateChanged()
 
 void VideoSingleHistoryTab::onTaskStatusUpdated(const QString& taskId, const QString& status, int progress)
 {
-    // 只在列表视图时更新
+    // 更新数据库
+    DBManager::instance()->updateTaskStatus(taskId, status, progress);
+
+    // 只在列表视图时更新UI
     if (!isListView) {
         return;
     }
@@ -2154,6 +2223,56 @@ void VideoSingleHistoryTab::onTaskStatusUpdated(const QString& taskId, const QSt
 
             break;
         }
+    }
+}
+
+void VideoSingleHistoryTab::onApiTaskStatusUpdated(const QString& taskId, const QString& status, const QString& videoUrl, int progress)
+{
+    // 更新数据库（包括videoUrl）
+    DBManager::instance()->updateTaskStatus(taskId, status, progress, videoUrl);
+
+    // 调用原有的更新方法处理UI更新
+    onTaskStatusUpdated(taskId, status, progress);
+
+    // 如果是手动刷新的任务，显示成功提示
+    if (taskId == currentRefreshingTaskId && !currentRefreshingTaskId.isEmpty()) {
+        // 显示气泡提示
+        QLabel *toast = new QLabel("✅ 刷新成功", this);
+        toast->setStyleSheet(
+            "QLabel {"
+            "    background-color: #4CAF50;"
+            "    color: white;"
+            "    padding: 10px 20px;"
+            "    border-radius: 5px;"
+            "    font-size: 14px;"
+            "}"
+        );
+        toast->setAlignment(Qt::AlignCenter);
+        toast->setWindowFlags(Qt::ToolTip | Qt::FramelessWindowHint);
+        toast->setAttribute(Qt::WA_TranslucentBackground);
+
+        // 计算位置（屏幕中央偏上）
+        QPoint globalPos = mapToGlobal(rect().center());
+        toast->move(globalPos.x() - 50, globalPos.y() - 100);
+        toast->show();
+
+        // 2秒后自动消失
+        QTimer::singleShot(2000, toast, &QLabel::deleteLater);
+
+        // 清空刷新任务ID
+        currentRefreshingTaskId.clear();
+    }
+}
+
+void VideoSingleHistoryTab::onQueryError(const QString& error)
+{
+    // 如果是手动刷新的任务，显示错误弹窗
+    if (!currentRefreshingTaskId.isEmpty()) {
+        QMessageBox::critical(this, "刷新失败",
+            QString("查询任务状态失败\n\n错误原因：%1").arg(error));
+
+        // 清空刷新任务ID
+        currentRefreshingTaskId.clear();
     }
 }
 
