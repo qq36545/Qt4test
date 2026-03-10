@@ -592,6 +592,11 @@ void VideoSingleTab::generateVideo()
         return;
     }
 
+    // 立即显示提交提示，提升用户体验
+    QMessageBox::information(this, "提交中",
+        "正在提交视频生成任务...\n\n"
+        "请稍候，任务创建成功后会有提示。");
+
     // 调用 API 创建任务
     veo3API->createVideo(
         apiKeyData.apiKey,
