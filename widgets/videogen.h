@@ -41,6 +41,7 @@ private slots:
 
 private:
     void setupUI();
+    void connectSignals();
     void loadApiKeys();
     void updateResolutionOptions(bool is4K);
     void updateImageUploadUI(const QString &modelName);

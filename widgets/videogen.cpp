@@ -117,6 +117,9 @@ VideoSingleTab::VideoSingleTab(QWidget *parent)
     setupUI();
     loadApiKeys();
     loadSettings();
+
+    // 在加载配置后再连接信号，避免加载时触发保存
+    connectSignals();
 }
 
 bool VideoSingleTab::eventFilter(QObject *obj, QEvent *event)
@@ -330,13 +333,17 @@ void VideoSingleTab::setupUI()
 
     // 初始化UI状态
     onModelVariantChanged(0);
+}
 
+void VideoSingleTab::connectSignals()
+{
     // 连接参数变化信号 - 用于重复提交检测
     connect(promptInput, &QTextEdit::textChanged, this, &VideoSingleTab::onAnyParameterChanged);
     connect(modelCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &VideoSingleTab::onAnyParameterChanged);
     connect(modelVariantCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &VideoSingleTab::onAnyParameterChanged);
     connect(resolutionCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &VideoSingleTab::onAnyParameterChanged);
     connect(watermarkCheckBox, &QCheckBox::checkStateChanged, this, &VideoSingleTab::onAnyParameterChanged);
+    connect(durationCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &VideoSingleTab::onAnyParameterChanged);
 
     // 连接参数变化信号 - 自动保存设置
     connect(promptInput, &QTextEdit::textChanged, this, &VideoSingleTab::saveSettings);
@@ -346,6 +353,7 @@ void VideoSingleTab::setupUI()
     connect(serverCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &VideoSingleTab::saveSettings);
     connect(resolutionCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &VideoSingleTab::saveSettings);
     connect(watermarkCheckBox, &QCheckBox::checkStateChanged, this, &VideoSingleTab::saveSettings);
+    connect(durationCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &VideoSingleTab::saveSettings);
 }
 
 void VideoSingleTab::loadApiKeys()
@@ -681,17 +689,38 @@ void VideoSingleTab::saveSettings()
     settings.setValue("server", serverCombo->currentIndex());
     settings.setValue("resolution", resolutionCombo->currentIndex());
     settings.setValue("watermark", watermarkCheckBox->isChecked());
+    settings.setValue("duration", durationCombo->currentIndex());
     settings.setValue("imagePaths", uploadedImagePaths);
     settings.setValue("endFrameImagePath", uploadedEndFrameImagePath);
     settings.setValue("lastSubmittedHash", lastSubmittedParamsHash);
 
     settings.endGroup();
+    settings.sync();  // 强制立即写入磁盘
+
+    // 调试日志
+    qDebug() << "[VideoSingleTab] Settings saved:"
+             << "prompt=" << promptInput->toPlainText().left(20)
+             << "model=" << modelCombo->currentIndex()
+             << "resolution=" << resolutionCombo->currentIndex()
+             << "watermark=" << watermarkCheckBox->isChecked();
 }
 
 void VideoSingleTab::loadSettings()
 {
     QSettings settings("ChickenAI", "VideoGen");
     settings.beginGroup("VideoSingleTab");
+
+    // 调试日志 - 读取配置
+    QString loadedPrompt = settings.value("prompt", "").toString();
+    int loadedModel = settings.value("model", 1).toInt();
+    int loadedResolution = settings.value("resolution", 1).toInt();
+    bool loadedWatermark = settings.value("watermark", false).toBool();
+
+    qDebug() << "[VideoSingleTab] Loading settings:"
+             << "prompt=" << loadedPrompt.left(30)
+             << "model=" << loadedModel
+             << "resolution=" << loadedResolution
+             << "watermark=" << loadedWatermark;
 
     // 阻止信号发射，避免加载时触发保存
     promptInput->blockSignals(true);
@@ -701,8 +730,9 @@ void VideoSingleTab::loadSettings()
     serverCombo->blockSignals(true);
     resolutionCombo->blockSignals(true);
     watermarkCheckBox->blockSignals(true);
+    durationCombo->blockSignals(true);
 
-    promptInput->setPlainText(settings.value("prompt", "").toString());
+    promptInput->setPlainText(loadedPrompt);
 
     int modelIndex = settings.value("model", 1).toInt();  // 默认 VEO3
     if (modelIndex >= 0 && modelIndex < modelCombo->count()) {
@@ -730,6 +760,11 @@ void VideoSingleTab::loadSettings()
     }
 
     watermarkCheckBox->setChecked(settings.value("watermark", false).toBool());
+
+    int durationIndex = settings.value("duration", 0).toInt();
+    if (durationIndex >= 0 && durationIndex < durationCombo->count()) {
+        durationCombo->setCurrentIndex(durationIndex);
+    }
 
     // 加载图片路径，验证文件是否存在
     QStringList imagePaths = settings.value("imagePaths").toStringList();
@@ -776,6 +811,14 @@ void VideoSingleTab::loadSettings()
     serverCombo->blockSignals(false);
     resolutionCombo->blockSignals(false);
     watermarkCheckBox->blockSignals(false);
+    durationCombo->blockSignals(false);
+
+    // 调试日志 - 验证UI状态
+    qDebug() << "[VideoSingleTab] After loading, UI state:"
+             << "promptInput=" << promptInput->toPlainText().left(30)
+             << "modelCombo=" << modelCombo->currentIndex()
+             << "resolutionCombo=" << resolutionCombo->currentIndex()
+             << "watermarkCheckBox=" << watermarkCheckBox->isChecked();
 
     // 加载后标记为未修改
     parametersModified = false;
@@ -790,6 +833,7 @@ QString VideoSingleTab::calculateParamsHash() const
     hash.addData(QString::number(modelVariantCombo->currentIndex()).toUtf8());
     hash.addData(QString::number(resolutionCombo->currentIndex()).toUtf8());
     hash.addData(QString::number(watermarkCheckBox->isChecked()).toUtf8());
+    hash.addData(QString::number(durationCombo->currentIndex()).toUtf8());
 
     for (const QString &path : uploadedImagePaths) {
         hash.addData(path.toUtf8());
