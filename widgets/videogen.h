@@ -93,6 +93,7 @@ private:
     QString lastSubmittedParamsHash;  // 上次提交的参数哈希
     bool suppressDuplicateWarning;    // 本次会话是否抑制重复提交警告
     bool parametersModified;          // 参数是否被修改过
+    QLabel *imageUploadHintLabel;     // 垫图尺寸提示
 };
 
 // 批量视频生成 Tab

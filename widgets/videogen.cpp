@@ -18,6 +18,7 @@
 #include <QEvent>
 #include <QMouseEvent>
 #include <QScrollArea>
+#include <QRandomGenerator>
 #include <QStackedWidget>
 #include <QDesktopServices>
 #include <QUrl>
@@ -313,6 +314,13 @@ void VideoSingleTab::setupUI()
     sizeLayout->addWidget(sizeLabel);
     sizeLayout->addWidget(sizeCombo);
 
+    // Grok 垫图尺寸提示标签
+    imageUploadHintLabel = new QLabel("注意：垫图后视频尺寸跟着图片尺寸一样");
+    imageUploadHintLabel->setStyleSheet("font-size: 12px; color: #888888;");
+    imageUploadHintLabel->setWordWrap(true);
+    imageUploadHintLabel->setVisible(false);  // 默认隐藏
+    sizeLayout->addWidget(imageUploadHintLabel);
+
     QVBoxLayout *watermarkLayout = new QVBoxLayout();
     watermarkLabel = new QLabel("水印");
     watermarkLabel->setStyleSheet("font-size: 14px;");
@@ -460,6 +468,7 @@ void VideoSingleTab::onModelChanged(int index)
         // 4. 显示Grok专用的size参数
         sizeCombo->setVisible(true);
         sizeLabel->setVisible(true);
+        imageUploadHintLabel->setVisible(true);  // 显示垫图提示
 
     } else {
         // VEO3模型：恢复VEO3参数
@@ -492,6 +501,7 @@ void VideoSingleTab::onModelChanged(int index)
         // 4. 隐藏Grok专用的size参数
         sizeCombo->setVisible(false);
         sizeLabel->setVisible(false);
+        imageUploadHintLabel->setVisible(false);  // 隐藏垫图提示
     }
 
     // 模型切换时重新加载对应的密钥
@@ -700,6 +710,7 @@ void VideoSingleTab::generateVideo()
 
     QString model = modelCombo->currentText();
     QString modelVariant = modelVariantCombo->currentData().toString();
+    QString modelVariantText = modelVariantCombo->currentText();
     QString server = serverCombo->currentData().toString();
     QString resolution = resolutionCombo->currentData().toString();
     QString duration = durationCombo->currentData().toString();
@@ -712,6 +723,51 @@ void VideoSingleTab::generateVideo()
         QMessageBox::warning(this, "错误", "无法获取 API 密钥");
         return;
     }
+
+    // 生成临时 taskId
+    QString tempTaskId = QString("temp_%1_%2")
+        .arg(QDateTime::currentMSecsSinceEpoch())
+        .arg(QRandomGenerator::global()->bounded(10000));
+
+    // 构建任务对象
+    VideoTask task;
+    task.taskId = tempTaskId;
+    task.taskType = "video_single";
+    task.prompt = prompt;
+    task.modelVariant = modelVariantText;
+    task.modelName = model;
+    task.apiKeyName = apiKeyCombo->currentText();
+    task.serverUrl = server;
+    task.status = "submitting";
+    task.progress = 0;
+
+    // 填充参数
+    task.resolution = resolution;
+    task.duration = durationCombo->currentText().remove("秒").toInt();
+    task.watermark = watermark;
+
+    // Grok专用参数
+    if (model.contains("Grok", Qt::CaseInsensitive)) {
+        task.aspectRatio = resolution;
+        task.size = sizeCombo->currentData().toString();
+    }
+
+    // 序列化图片路径
+    QJsonArray imageArray;
+    for (const QString& path : uploadedImagePaths) {
+        imageArray.append(path);
+    }
+    task.imagePaths = QString::fromUtf8(QJsonDocument(imageArray).toJson(QJsonDocument::Compact));
+    task.endFrameImagePath = uploadedEndFrameImagePath;
+
+    // 插入数据库
+    int dbId = DBManager::instance()->insertVideoTask(task);
+    if (dbId < 0) {
+        QMessageBox::critical(this, "错误", "无法保存任务记录");
+        return;
+    }
+
+    currentTaskId = tempTaskId;
 
     // 在预览区域显示提交状态，避免阻塞式弹窗
     previewLabel->setText("⏳ 正在提交视频生成任务...\n\n请稍候，任务创建成功后会自动更新状态。");
@@ -752,55 +808,25 @@ void VideoSingleTab::generateVideo()
     }
 
     // 注意：任务创建成功后会触发 onVideoCreated 回调
-    // 在那里插入数据库并启动轮询
+    // 在那里更新 taskId 并启动轮询
 }
 
 void VideoSingleTab::onVideoCreated(const QString &taskId, const QString &status)
 {
+    // 更新 taskId（从临时ID更新为真实ID）
+    if (!currentTaskId.isEmpty() && currentTaskId != taskId) {
+        DBManager::instance()->updateTaskId(currentTaskId, taskId);
+    }
+
     currentTaskId = taskId;
 
-    // 复制图片到持久化存储
-    QString persistentImagePath = copyImagesToPersistentStorage(taskId);
+    // 更新状态为 pending
+    DBManager::instance()->updateTaskStatus(taskId, "pending", 0, "");
 
     // 获取当前参数
-    QString prompt = promptInput->toPlainText().trimmed();
-    QString modelVariantText = modelVariantCombo->currentText();  // 获取模型变体显示文本
     int keyId = apiKeyCombo->currentData().toInt();
     ApiKey apiKeyData = DBManager::instance()->getApiKey(keyId);
     QString server = serverCombo->currentData().toString();
-
-    // 插入数据库
-    VideoTask task;
-    task.taskId = taskId;
-    task.taskType = "video_single";
-    task.prompt = prompt;
-    task.modelVariant = modelVariantText;  // 保存模型变体
-    task.status = "pending";
-    task.progress = 0;
-
-    // 填充重新生成所需的完整参数
-    task.modelName = modelCombo->currentText();
-    task.apiKeyName = apiKeyCombo->currentText();
-    task.serverUrl = server;
-    task.resolution = resolutionCombo->currentData().toString();
-    task.duration = durationCombo->currentText().remove("秒").toInt();
-    task.watermark = watermarkCheckBox->isChecked();
-
-    // Grok专用参数
-    if (task.modelName.contains("Grok", Qt::CaseInsensitive)) {
-        task.aspectRatio = resolutionCombo->currentData().toString(); // Grok的aspectRatio
-        task.size = sizeCombo->currentData().toString(); // Grok的size
-    }
-
-    // 序列化图片路径为JSON
-    QJsonArray imageArray;
-    for (const QString& path : uploadedImagePaths) {
-        imageArray.append(path);
-    }
-    task.imagePaths = QString::fromUtf8(QJsonDocument(imageArray).toJson(QJsonDocument::Compact));
-    task.endFrameImagePath = uploadedEndFrameImagePath;
-
-    DBManager::instance()->insertVideoTask(task);
 
     // 启动轮询
     TaskPollManager::getInstance()->startPolling(taskId, "video_single", apiKeyData.apiKey, server);
@@ -830,7 +856,15 @@ void VideoSingleTab::onTaskStatusUpdated(const QString &taskId, const QString &s
 
 void VideoSingleTab::onApiError(const QString &error)
 {
+    // 更新状态为 failed
+    if (!currentTaskId.isEmpty()) {
+        DBManager::instance()->updateTaskStatus(currentTaskId, "failed", 0, "");
+        DBManager::instance()->updateTaskErrorMessage(currentTaskId, error);
+    }
+
     QMessageBox::critical(this, "错误", QString("API 调用失败:\n%1").arg(error));
+
+    previewLabel->setText("💡 生成结果将在【生成历史记录】");
 }
 
 void VideoSingleTab::saveSettings()
@@ -839,13 +873,24 @@ void VideoSingleTab::saveSettings()
     settings.beginGroup("VideoSingleTab");
 
     settings.setValue("prompt", promptInput->toPlainText());
-    settings.setValue("model", modelCombo->currentIndex());
-    settings.setValue("modelVariant", modelVariantCombo->currentIndex());
+
+    // 保存模型类型（文本而非索引）
+    QString modelType = modelCombo->currentText();
+    settings.setValue("modelType", modelType);
+    settings.setValue("modelVariant", modelVariantCombo->currentData().toString());
     settings.setValue("apiKey", apiKeyCombo->currentIndex());
     settings.setValue("server", serverCombo->currentIndex());
-    settings.setValue("resolution", resolutionCombo->currentIndex());
+
+    // 根据模型类型保存对应参数
+    if (modelType.contains("Grok", Qt::CaseInsensitive)) {
+        settings.setValue("grok_aspectRatio", resolutionCombo->currentData().toString());
+        settings.setValue("grok_size", sizeCombo->currentData().toString());
+    } else {
+        settings.setValue("veo_resolution", resolutionCombo->currentData().toString());
+        settings.setValue("duration", durationCombo->currentData().toString());
+    }
+
     settings.setValue("watermark", watermarkCheckBox->isChecked());
-    settings.setValue("duration", durationCombo->currentIndex());
     settings.setValue("imagePaths", uploadedImagePaths);
     settings.setValue("endFrameImagePath", uploadedEndFrameImagePath);
     settings.setValue("lastSubmittedHash", lastSubmittedParamsHash);
@@ -856,8 +901,8 @@ void VideoSingleTab::saveSettings()
     // 调试日志
     qDebug() << "[VideoSingleTab] Settings saved:"
              << "prompt=" << promptInput->toPlainText().left(20)
-             << "model=" << modelCombo->currentIndex()
-             << "resolution=" << resolutionCombo->currentIndex()
+             << "modelType=" << modelType
+             << "resolution=" << resolutionCombo->currentData().toString()
              << "watermark=" << watermarkCheckBox->isChecked();
 }
 
@@ -987,18 +1032,6 @@ void VideoSingleTab::loadSettings()
     QSettings settings("ChickenAI", "VideoGen");
     settings.beginGroup("VideoSingleTab");
 
-    // 调试日志 - 读取配置
-    QString loadedPrompt = settings.value("prompt", "").toString();
-    int loadedModel = settings.value("model", 1).toInt();
-    int loadedResolution = settings.value("resolution", 1).toInt();
-    bool loadedWatermark = settings.value("watermark", false).toBool();
-
-    qDebug() << "[VideoSingleTab] Loading settings:"
-             << "prompt=" << loadedPrompt.left(30)
-             << "model=" << loadedModel
-             << "resolution=" << loadedResolution
-             << "watermark=" << loadedWatermark;
-
     // 阻止信号发射，避免加载时触发保存
     promptInput->blockSignals(true);
     modelCombo->blockSignals(true);
@@ -1008,19 +1041,36 @@ void VideoSingleTab::loadSettings()
     resolutionCombo->blockSignals(true);
     watermarkCheckBox->blockSignals(true);
     durationCombo->blockSignals(true);
+    sizeCombo->blockSignals(true);
 
+    // 加载提示词
+    QString loadedPrompt = settings.value("prompt", "").toString();
     promptInput->setPlainText(loadedPrompt);
 
-    int modelIndex = settings.value("model", 1).toInt();  // 默认 VEO3
-    if (modelIndex >= 0 && modelIndex < modelCombo->count()) {
-        modelCombo->setCurrentIndex(modelIndex);
+    // 恢复模型类型（文本匹配）
+    QString savedModelType = settings.value("modelType", "VEO3视频").toString();
+    for (int i = 0; i < modelCombo->count(); ++i) {
+        if (modelCombo->itemText(i) == savedModelType) {
+            modelCombo->setCurrentIndex(i);
+            break;
+        }
     }
 
-    int variantIndex = settings.value("modelVariant", 0).toInt();
-    if (variantIndex >= 0 && variantIndex < modelVariantCombo->count()) {
-        modelVariantCombo->setCurrentIndex(variantIndex);
+    // 手动触发 onModelChanged 以更新 UI 状态（因为信号被阻塞）
+    onModelChanged(modelCombo->currentIndex());
+
+    // 恢复模型变体（值匹配）
+    QString savedVariant = settings.value("modelVariant", "").toString();
+    if (!savedVariant.isEmpty()) {
+        for (int i = 0; i < modelVariantCombo->count(); ++i) {
+            if (modelVariantCombo->itemData(i).toString() == savedVariant) {
+                modelVariantCombo->setCurrentIndex(i);
+                break;
+            }
+        }
     }
 
+    // 恢复 API Key 和 Server（索引）
     int apiKeyIndex = settings.value("apiKey", 0).toInt();
     if (apiKeyIndex >= 0 && apiKeyIndex < apiKeyCombo->count()) {
         apiKeyCombo->setCurrentIndex(apiKeyIndex);
@@ -1031,17 +1081,50 @@ void VideoSingleTab::loadSettings()
         serverCombo->setCurrentIndex(serverIndex);
     }
 
-    int resIndex = settings.value("resolution", 1).toInt();  // 默认竖屏
-    if (resIndex >= 0 && resIndex < resolutionCombo->count()) {
-        resolutionCombo->setCurrentIndex(resIndex);
+    // 根据模型类型恢复对应参数
+    if (savedModelType.contains("Grok", Qt::CaseInsensitive)) {
+        // Grok 模型：恢复 aspectRatio 和 size
+        QString aspectRatio = settings.value("grok_aspectRatio", "1:1").toString();
+        for (int i = 0; i < resolutionCombo->count(); ++i) {
+            if (resolutionCombo->itemData(i).toString() == aspectRatio) {
+                resolutionCombo->setCurrentIndex(i);
+                break;
+            }
+        }
+
+        QString size = settings.value("grok_size", "720P").toString();
+        for (int i = 0; i < sizeCombo->count(); ++i) {
+            if (sizeCombo->itemData(i).toString() == size) {
+                sizeCombo->setCurrentIndex(i);
+                break;
+            }
+        }
+    } else {
+        // VEO3 模型：恢复 resolution 和 duration
+        QString resolution = settings.value("veo_resolution", "1080x1920").toString();
+        for (int i = 0; i < resolutionCombo->count(); ++i) {
+            if (resolutionCombo->itemData(i).toString() == resolution) {
+                resolutionCombo->setCurrentIndex(i);
+                break;
+            }
+        }
+
+        QString duration = settings.value("duration", "5s").toString();
+        for (int i = 0; i < durationCombo->count(); ++i) {
+            if (durationCombo->itemData(i).toString() == duration) {
+                durationCombo->setCurrentIndex(i);
+                break;
+            }
+        }
     }
 
     watermarkCheckBox->setChecked(settings.value("watermark", false).toBool());
 
-    int durationIndex = settings.value("duration", 0).toInt();
-    if (durationIndex >= 0 && durationIndex < durationCombo->count()) {
-        durationCombo->setCurrentIndex(durationIndex);
-    }
+    qDebug() << "[VideoSingleTab] Loading settings:"
+             << "prompt=" << loadedPrompt.left(30)
+             << "modelType=" << savedModelType
+             << "resolution=" << resolutionCombo->currentData().toString()
+             << "watermark=" << watermarkCheckBox->isChecked();
 
     // 加载图片路径，验证文件是否存在
     QStringList imagePaths = settings.value("imagePaths").toStringList();

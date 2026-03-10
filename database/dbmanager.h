@@ -81,6 +81,8 @@ public:
     int insertVideoTask(const VideoTask& task);
     bool updateTaskStatus(const QString& taskId, const QString& status, int progress, const QString& videoUrl = QString());
     bool updateVideoPath(const QString& taskId, const QString& videoPath, const QString& thumbnailPath, const QString& downloadStatus);
+    bool updateTaskId(const QString& oldTaskId, const QString& newTaskId);
+    bool updateTaskErrorMessage(const QString& taskId, const QString& errorMessage);
     QList<VideoTask> getTasksByType(const QString& taskType, int offset = 0, int limit = 50);
     VideoTask getTaskById(const QString& taskId);  // 根据 taskId 查询
     int getTaskCount(const QString& taskType);

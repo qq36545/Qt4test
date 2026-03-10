@@ -142,7 +142,8 @@ bool DBManager::createTables()
         "image_paths TEXT",
         "end_frame_image_path TEXT",
         "aspect_ratio TEXT",
-        "size TEXT"
+        "size TEXT",
+        "error_message TEXT"
     };
 
     for (const QString& columnDef : newColumns) {
@@ -626,5 +627,33 @@ QList<VideoTask> DBManager::getPendingTasks()
     }
 
     return tasks;
+}
+
+bool DBManager::updateTaskId(const QString& oldTaskId, const QString& newTaskId)
+{
+    QSqlQuery query;
+    query.prepare("UPDATE video_history SET task_id = :new_id WHERE task_id = :old_id");
+    query.bindValue(":new_id", newTaskId);
+    query.bindValue(":old_id", oldTaskId);
+
+    if (!query.exec()) {
+        qCritical() << "Failed to update task ID:" << query.lastError().text();
+        return false;
+    }
+    return true;
+}
+
+bool DBManager::updateTaskErrorMessage(const QString& taskId, const QString& errorMessage)
+{
+    QSqlQuery query;
+    query.prepare("UPDATE video_history SET error_message = :error WHERE task_id = :task_id");
+    query.bindValue(":error", errorMessage);
+    query.bindValue(":task_id", taskId);
+
+    if (!query.exec()) {
+        qCritical() << "Failed to update task error message:" << query.lastError().text();
+        return false;
+    }
+    return true;
 }
 
