@@ -42,6 +42,16 @@ struct VideoTask {
     QString downloadStatus;   // "not_started", "downloading", "completed", "failed"
     QDateTime createdAt;
     QDateTime completedAt;
+
+    // 重新生成所需的完整参数
+    QString modelName;        // 模型名称（如 "Veo 2.0"）
+    QString apiKeyName;       // API密钥名称
+    QString serverUrl;        // 服务器URL
+    QString resolution;       // 分辨率（如 "1280x720"）
+    int duration;             // 时长（秒）
+    bool watermark;           // 是否添加水印
+    QString imagePaths;       // 图片路径（JSON字符串）
+    QString endFrameImagePath; // 尾帧图片路径
 };
 
 class DBManager : public QObject

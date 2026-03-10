@@ -8,6 +8,9 @@
 #include <QPushButton>
 #include <QLabel>
 #include <QVBoxLayout>
+
+// 前向声明
+struct VideoTask;
 #include <QHBoxLayout>
 #include <QTableWidget>
 #include <QListWidget>
@@ -24,6 +27,7 @@ class VideoSingleTab : public QWidget
 
 public:
     explicit VideoSingleTab(QWidget *parent = nullptr);
+    void loadFromTask(const VideoTask& task);  // 从历史任务加载参数
 
 public slots:
     void refreshApiKeys();

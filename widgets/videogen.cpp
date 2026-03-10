@@ -28,6 +28,10 @@
 #include <QCheckBox>
 #include <QSet>
 #include <QCoreApplication>
+#include <QJsonDocument>
+#include <QJsonArray>
+#include <QJsonObject>
+#include <QFile>
 #include <QStandardPaths>
 #include <QMenu>
 #include <QClipboard>
@@ -679,6 +683,22 @@ void VideoSingleTab::onVideoCreated(const QString &taskId, const QString &status
     task.status = "pending";
     task.progress = 0;
 
+    // 填充重新生成所需的完整参数
+    task.modelName = modelCombo->currentText();
+    task.apiKeyName = apiKeyCombo->currentText();
+    task.serverUrl = server;
+    task.resolution = resolutionCombo->currentData().toString();
+    task.duration = durationCombo->currentText().remove("秒").toInt();
+    task.watermark = watermarkCheckBox->isChecked();
+
+    // 序列化图片路径为JSON
+    QJsonArray imageArray;
+    for (const QString& path : uploadedImagePaths) {
+        imageArray.append(path);
+    }
+    task.imagePaths = QString::fromUtf8(QJsonDocument(imageArray).toJson(QJsonDocument::Compact));
+    task.endFrameImagePath = uploadedEndFrameImagePath;
+
     DBManager::instance()->insertVideoTask(task);
 
     // 启动轮询
@@ -738,6 +758,105 @@ void VideoSingleTab::saveSettings()
              << "model=" << modelCombo->currentIndex()
              << "resolution=" << resolutionCombo->currentIndex()
              << "watermark=" << watermarkCheckBox->isChecked();
+}
+
+void VideoSingleTab::loadFromTask(const VideoTask& task)
+{
+    // 阻止信号触发，避免触发参数保存
+    blockSignals(true);
+
+    // 1. 设置提示词
+    promptInput->setPlainText(task.prompt);
+
+    // 2. 设置模型（通过文本匹配）
+    for (int i = 0; i < modelCombo->count(); ++i) {
+        if (modelCombo->itemText(i) == task.modelName) {
+            modelCombo->setCurrentIndex(i);
+            break;
+        }
+    }
+
+    // 3. 设置模型变体（通过文本匹配）
+    for (int i = 0; i < modelVariantCombo->count(); ++i) {
+        if (modelVariantCombo->itemText(i) == task.modelVariant) {
+            modelVariantCombo->setCurrentIndex(i);
+            break;
+        }
+    }
+
+    // 4. 设置API密钥（通过名称匹配，如果不存在则用第一个）
+    bool apiKeyFound = false;
+    for (int i = 0; i < apiKeyCombo->count(); ++i) {
+        if (apiKeyCombo->itemText(i) == task.apiKeyName) {
+            apiKeyCombo->setCurrentIndex(i);
+            apiKeyFound = true;
+            break;
+        }
+    }
+    if (!apiKeyFound && apiKeyCombo->count() > 0) {
+        apiKeyCombo->setCurrentIndex(0);
+    }
+
+    // 5. 设置服务器URL（通过data匹配）
+    for (int i = 0; i < serverCombo->count(); ++i) {
+        if (serverCombo->itemData(i).toString() == task.serverUrl) {
+            serverCombo->setCurrentIndex(i);
+            break;
+        }
+    }
+
+    // 6. 设置分辨率（通过data匹配）
+    for (int i = 0; i < resolutionCombo->count(); ++i) {
+        if (resolutionCombo->itemData(i).toString() == task.resolution) {
+            resolutionCombo->setCurrentIndex(i);
+            break;
+        }
+    }
+
+    // 7. 设置时长（通过文本匹配）
+    QString durationText = QString::number(task.duration) + "秒";
+    for (int i = 0; i < durationCombo->count(); ++i) {
+        if (durationCombo->itemText(i) == durationText) {
+            durationCombo->setCurrentIndex(i);
+            break;
+        }
+    }
+
+    // 8. 设置水印
+    watermarkCheckBox->setChecked(task.watermark);
+
+    // 9. 解析并设置图片路径
+    uploadedImagePaths.clear();
+    if (!task.imagePaths.isEmpty()) {
+        QJsonDocument doc = QJsonDocument::fromJson(task.imagePaths.toUtf8());
+        if (doc.isArray()) {
+            QJsonArray imageArray = doc.array();
+            for (const QJsonValue& value : imageArray) {
+                QString path = value.toString();
+                if (QFile::exists(path)) {
+                    uploadedImagePaths.append(path);
+                }
+            }
+        }
+    }
+
+    // 10. 设置尾帧图片
+    uploadedEndFrameImagePath = task.endFrameImagePath;
+    if (!uploadedEndFrameImagePath.isEmpty() && !QFile::exists(uploadedEndFrameImagePath)) {
+        uploadedEndFrameImagePath.clear();
+    }
+
+    // 11. 更新图片预览
+    updateImagePreview();
+
+    // 12. 重置参数修改标记和哈希
+    parametersModified = false;
+    lastSubmittedParamsHash.clear();
+
+    // 恢复信号
+    blockSignals(false);
+
+    qDebug() << "[VideoSingleTab] Loaded task parameters:" << task.taskId;
 }
 
 void VideoSingleTab::loadSettings()
@@ -2021,36 +2140,45 @@ void VideoSingleHistoryTab::onRetryQuery(const QString& taskId)
 
 void VideoSingleHistoryTab::onRegenerate(const QString& taskId)
 {
-    // 获取任务信息
-    QList<VideoTask> tasks = DBManager::instance()->getTasksByType("video_single");
-    VideoTask targetTask;
-    bool found = false;
+    // 使用getTaskById直接获取完整任务信息
+    VideoTask task = DBManager::instance()->getTaskById(taskId);
 
-    for (const VideoTask& task : tasks) {
-        if (task.taskId == taskId) {
-            targetTask = task;
-            found = true;
-            break;
-        }
-    }
-
-    if (!found) {
+    if (task.taskId.isEmpty()) {
         QMessageBox::warning(this, "错误", "未找到任务信息");
         return;
     }
 
-    // 确认对话框
-    QMessageBox::StandardButton reply = QMessageBox::question(
-        this,
-        "确认重新生成",
-        "确定要使用相同的提示词重新生成视频吗？",
-        QMessageBox::Yes | QMessageBox::No
-    );
+    // 向上遍历找到VideoGenWidget
+    // 层级：VideoSingleHistoryTab -> QTabWidget -> VideoHistoryWidget -> QTabWidget -> VideoGenWidget
+    QWidget* current = this;
+    VideoGenWidget* videoGenWidget = nullptr;
 
-    if (reply == QMessageBox::Yes) {
-        // TODO: 调用 API 重新生成视频
-        // 这里需要根据实际的 API 调用逻辑来实现
-        QMessageBox::information(this, "提示", "重新生成功能待实现");
+    // 最多向上查找10层
+    for (int i = 0; i < 10 && current; ++i) {
+        current = current->parentWidget();
+        videoGenWidget = qobject_cast<VideoGenWidget*>(current);
+        if (videoGenWidget) {
+            break;
+        }
+    }
+
+    if (!videoGenWidget) {
+        QMessageBox::critical(this, "错误", "无法获取主窗口引用");
+        return;
+    }
+
+    // 查找VideoGenWidget内部的QTabWidget并切换到index 0
+    QTabWidget* mainTabWidget = videoGenWidget->findChild<QTabWidget*>();
+    if (mainTabWidget) {
+        mainTabWidget->setCurrentIndex(0);
+    }
+
+    // 获取VideoSingleTab并加载参数
+    VideoSingleTab* singleTab = videoGenWidget->getSingleTab();
+    if (singleTab) {
+        singleTab->loadFromTask(task);
+    } else {
+        QMessageBox::critical(this, "错误", "无法获取单个视频生成标签页");
     }
 }
 

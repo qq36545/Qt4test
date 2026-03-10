@@ -131,6 +131,38 @@ bool DBManager::createTables()
         }
     }
 
+    // 添加重新生成所需的完整参数列（兼容旧数据）
+    QStringList newColumns = {
+        "model_name TEXT",
+        "api_key_name TEXT",
+        "server_url TEXT",
+        "resolution TEXT",
+        "duration INTEGER",
+        "watermark INTEGER DEFAULT 0",
+        "image_paths TEXT",
+        "end_frame_image_path TEXT"
+    };
+
+    for (const QString& columnDef : newColumns) {
+        QString columnName = columnDef.split(' ').first();
+        query.exec("PRAGMA table_info(video_history)");
+        bool hasColumn = false;
+        while (query.next()) {
+            if (query.value(1).toString() == columnName) {
+                hasColumn = true;
+                break;
+            }
+        }
+        if (!hasColumn) {
+            QString alterSql = QString("ALTER TABLE video_history ADD COLUMN %1").arg(columnDef);
+            if (!query.exec(alterSql)) {
+                qWarning() << "Failed to add column" << columnName << ":" << query.lastError().text();
+            } else {
+                qDebug() << "Added column:" << columnName;
+            }
+        }
+    }
+
     // 插入默认 API Key（如果表为空）
     query.exec("SELECT COUNT(*) FROM api_keys");
     if (query.next() && query.value(0).toInt() == 0) {
@@ -327,8 +359,10 @@ int DBManager::insertVideoTask(const VideoTask& task)
     QSqlQuery query;
     query.prepare(R"(
         INSERT INTO video_history
-        (task_id, task_type, prompt, model_variant, status, progress, video_url, video_path, thumbnail_path, download_status, completed_at)
-        VALUES (:task_id, :task_type, :prompt, :model_variant, :status, :progress, :video_url, :video_path, :thumbnail_path, :download_status, :completed_at)
+        (task_id, task_type, prompt, model_variant, status, progress, video_url, video_path, thumbnail_path, download_status, completed_at,
+         model_name, api_key_name, server_url, resolution, duration, watermark, image_paths, end_frame_image_path)
+        VALUES (:task_id, :task_type, :prompt, :model_variant, :status, :progress, :video_url, :video_path, :thumbnail_path, :download_status, :completed_at,
+                :model_name, :api_key_name, :server_url, :resolution, :duration, :watermark, :image_paths, :end_frame_image_path)
     )");
 
     query.bindValue(":task_id", task.taskId);
@@ -342,6 +376,14 @@ int DBManager::insertVideoTask(const VideoTask& task)
     query.bindValue(":thumbnail_path", task.thumbnailPath);
     query.bindValue(":download_status", task.downloadStatus);
     query.bindValue(":completed_at", task.completedAt);
+    query.bindValue(":model_name", task.modelName);
+    query.bindValue(":api_key_name", task.apiKeyName);
+    query.bindValue(":server_url", task.serverUrl);
+    query.bindValue(":resolution", task.resolution);
+    query.bindValue(":duration", task.duration);
+    query.bindValue(":watermark", task.watermark ? 1 : 0);
+    query.bindValue(":image_paths", task.imagePaths);
+    query.bindValue(":end_frame_image_path", task.endFrameImagePath);
 
     if (!query.exec()) {
         qCritical() << "Failed to insert video task:" << query.lastError().text();
@@ -407,7 +449,8 @@ QList<VideoTask> DBManager::getTasksByType(const QString& taskType, int offset, 
     QSqlQuery query;
     query.prepare(R"(
         SELECT id, task_id, task_type, prompt, model_variant, status, progress, video_url, video_path,
-               thumbnail_path, download_status, created_at, completed_at
+               thumbnail_path, download_status, created_at, completed_at,
+               model_name, api_key_name, server_url, resolution, duration, watermark, image_paths, end_frame_image_path
         FROM video_history
         WHERE task_type = :task_type
         ORDER BY created_at DESC
@@ -438,6 +481,14 @@ QList<VideoTask> DBManager::getTasksByType(const QString& taskType, int offset, 
         task.downloadStatus = query.value(10).toString();
         task.createdAt = query.value(11).toDateTime();
         task.completedAt = query.value(12).toDateTime();
+        task.modelName = query.value(13).toString();
+        task.apiKeyName = query.value(14).toString();
+        task.serverUrl = query.value(15).toString();
+        task.resolution = query.value(16).toString();
+        task.duration = query.value(17).toInt();
+        task.watermark = query.value(18).toInt() == 1;
+        task.imagePaths = query.value(19).toString();
+        task.endFrameImagePath = query.value(20).toString();
         tasks.append(task);
     }
 
@@ -490,7 +541,8 @@ VideoTask DBManager::getTaskById(const QString& taskId)
     QSqlQuery query;
     query.prepare(R"(
         SELECT id, task_id, task_type, prompt, model_variant, status, progress, video_url, video_path,
-               thumbnail_path, download_status, created_at, completed_at
+               thumbnail_path, download_status, created_at, completed_at,
+               model_name, api_key_name, server_url, resolution, duration, watermark, image_paths, end_frame_image_path
         FROM video_history
         WHERE task_id = :task_id
     )");
@@ -511,6 +563,14 @@ VideoTask DBManager::getTaskById(const QString& taskId)
         task.downloadStatus = query.value(10).toString();
         task.createdAt = query.value(11).toDateTime();
         task.completedAt = query.value(12).toDateTime();
+        task.modelName = query.value(13).toString();
+        task.apiKeyName = query.value(14).toString();
+        task.serverUrl = query.value(15).toString();
+        task.resolution = query.value(16).toString();
+        task.duration = query.value(17).toInt();
+        task.watermark = query.value(18).toInt() == 1;
+        task.imagePaths = query.value(19).toString();
+        task.endFrameImagePath = query.value(20).toString();
     }
 
     return task;
