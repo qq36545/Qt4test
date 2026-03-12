@@ -60,27 +60,15 @@ void ConfigWidget::setupApiKeyTab(QWidget *tab)
     apiKeyTable = new QTableWidget();
     apiKeyTable->setObjectName("apiKeyTable");
     apiKeyTable->setColumnCount(5);
-    apiKeyTable->setHorizontalHeaderLabels({"序号", "名称", "密钥", "操作", ""});
+    apiKeyTable->setHorizontalHeaderLabels({"序号", "名称", "密钥", "操作", "查看"});
+    setupTableStyle(apiKeyTable);
 
-    apiKeyTable->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Fixed);
-    apiKeyTable->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Fixed);
-    apiKeyTable->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Fixed);
-    apiKeyTable->horizontalHeader()->setSectionResizeMode(3, QHeaderView::Fixed);
-    apiKeyTable->horizontalHeader()->setSectionResizeMode(4, QHeaderView::Fixed);
-    apiKeyTable->setColumnWidth(0, 80);
-    apiKeyTable->setSelectionBehavior(QAbstractItemView::SelectRows);
-    apiKeyTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
-    apiKeyTable->verticalHeader()->setVisible(false);
-    apiKeyTable->setMinimumHeight(300);
-
-    QFont tableFont = apiKeyTable->font();
-    tableFont.setPointSize(12);
-    apiKeyTable->setFont(tableFont);
-    apiKeyTable->horizontalHeader()->setFont(tableFont);
-
-    layout->addWidget(apiKeyTable);
-    updateRowHeight();
-    updateColumnWidths();
+    // 表格宽度占 80%，左右各留 10% 空白
+    QHBoxLayout *tableLayout = new QHBoxLayout();
+    tableLayout->addStretch(1);
+    tableLayout->addWidget(apiKeyTable, 8);
+    tableLayout->addStretch(1);
+    layout->addLayout(tableLayout);
 }
 
 void ConfigWidget::setupImgbbTab(QWidget *tab)
@@ -110,22 +98,14 @@ void ConfigWidget::setupImgbbTab(QWidget *tab)
     imgbbKeyTable->setObjectName("imgbbKeyTable");
     imgbbKeyTable->setColumnCount(5);
     imgbbKeyTable->setHorizontalHeaderLabels({"序号", "名称", "密钥", "操作", "应用状态"});
-    imgbbKeyTable->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
-    imgbbKeyTable->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Fixed);
-    imgbbKeyTable->horizontalHeader()->setSectionResizeMode(4, QHeaderView::Fixed);
-    imgbbKeyTable->setColumnWidth(0, 60);
-    imgbbKeyTable->setColumnWidth(4, 80);
-    imgbbKeyTable->setSelectionBehavior(QAbstractItemView::SelectRows);
-    imgbbKeyTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
-    imgbbKeyTable->verticalHeader()->setVisible(false);
-    imgbbKeyTable->setMinimumHeight(200);
+    setupTableStyle(imgbbKeyTable);
 
-    QFont tableFont = imgbbKeyTable->font();
-    tableFont.setPointSize(12);
-    imgbbKeyTable->setFont(tableFont);
-    imgbbKeyTable->horizontalHeader()->setFont(tableFont);
-
-    layout->addWidget(imgbbKeyTable);
+    // 表格宽度占 80%，左右各留 10% 空白
+    QHBoxLayout *tableLayout = new QHBoxLayout();
+    tableLayout->addStretch(1);
+    tableLayout->addWidget(imgbbKeyTable, 8);
+    tableLayout->addStretch(1);
+    layout->addLayout(tableLayout);
 
     // 引导区
     QLabel *hint1 = new QLabel("1. 获取上传临时图床密钥注册地址，<a href=\"https://imgbb.com/signup\">注册</a>");
@@ -158,12 +138,13 @@ double ConfigWidget::calculateScaleFactor()
 
 void ConfigWidget::updateRowHeight()
 {
-    if (!apiKeyTable) return;
-    int buttonHeight = static_cast<int>(36 * scaleFactor);
-    int rowHeight = buttonHeight + 10 + 14;
-    apiKeyTable->verticalHeader()->setDefaultSectionSize(rowHeight);
-    for (int i = 0; i < apiKeyTable->rowCount(); ++i)
-        apiKeyTable->setRowHeight(i, rowHeight);
+    int rowHeight = static_cast<int>(36 * scaleFactor) + 10 + 14;
+    for (QTableWidget *table : {apiKeyTable, imgbbKeyTable}) {
+        if (!table) continue;
+        table->verticalHeader()->setDefaultSectionSize(rowHeight);
+        for (int i = 0; i < table->rowCount(); ++i)
+            table->setRowHeight(i, rowHeight);
+    }
 }
 
 void ConfigWidget::resizeEvent(QResizeEvent *event)
@@ -175,20 +156,33 @@ void ConfigWidget::resizeEvent(QResizeEvent *event)
 
 void ConfigWidget::updateColumnWidths()
 {
-    if (!apiKeyTable) return;
-    int tableWidth = apiKeyTable->width();
-    int idColumnWidth = 80;
-    int viewColumnWidth = 80;
-    int availableWidth = tableWidth - idColumnWidth - viewColumnWidth;
-    int nameColumnWidth = availableWidth * 0.10;
-    int remainingWidth = availableWidth - nameColumnWidth;
-    int keyColumnWidth = remainingWidth * 0.5;
-    int actionColumnWidth = remainingWidth * 0.5;
-    apiKeyTable->setColumnWidth(0, idColumnWidth);
-    apiKeyTable->setColumnWidth(1, nameColumnWidth);
-    apiKeyTable->setColumnWidth(2, keyColumnWidth);
-    apiKeyTable->setColumnWidth(3, actionColumnWidth);
-    apiKeyTable->setColumnWidth(4, viewColumnWidth);
+    // 序号/名称：内容自适应；密钥：拉伸填满；操作/最后列：固定（约为内容宽度的2倍）
+    const int actionColWidth = 160;  // 操作列（编辑+删除按钮）
+    const int lastColWidth = 100;    // 查看/应用状态列
+    for (QTableWidget *table : {apiKeyTable, imgbbKeyTable}) {
+        if (!table) continue;
+        table->horizontalHeader()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
+        table->horizontalHeader()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
+        table->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Stretch);
+        table->horizontalHeader()->setSectionResizeMode(3, QHeaderView::Fixed);
+        table->horizontalHeader()->setSectionResizeMode(4, QHeaderView::Fixed);
+        table->setColumnWidth(3, actionColWidth);
+        table->setColumnWidth(4, lastColWidth);
+    }
+}
+
+void ConfigWidget::setupTableStyle(QTableWidget *table)
+{
+    table->setSelectionBehavior(QAbstractItemView::SelectRows);
+    table->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    table->verticalHeader()->setVisible(false);
+    table->horizontalHeader()->setStretchLastSection(false);
+    table->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+
+    QFont tableFont = table->font();
+    tableFont.setPointSize(12);
+    table->setFont(tableFont);
+    table->horizontalHeader()->setFont(tableFont);
 }
 
 void ConfigWidget::loadApiKeys()
@@ -246,6 +240,8 @@ void ConfigWidget::loadApiKeys()
         viewLayout->addWidget(viewBtn);
         apiKeyTable->setCellWidget(i, 4, viewWidget);
     }
+    updateColumnWidths();
+    updateRowHeight();
 }
 
 void ConfigWidget::loadImgbbKeys()
@@ -300,6 +296,8 @@ void ConfigWidget::loadImgbbKeys()
         radioLayout->addWidget(radio);
         imgbbKeyTable->setCellWidget(i, 4, radioWidget);
     }
+    updateColumnWidths();
+    updateRowHeight();
 }
 
 QString ConfigWidget::maskApiKey(const QString& apiKey)

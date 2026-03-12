@@ -41,6 +41,7 @@ private:
     void setupUI();
     void setupApiKeyTab(QWidget *tab);
     void setupImgbbTab(QWidget *tab);
+    void setupTableStyle(QTableWidget *table);
     void loadApiKeys();
     void loadImgbbKeys();
     void updateColumnWidths();
