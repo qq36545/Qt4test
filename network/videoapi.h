@@ -27,7 +27,8 @@ public:
                      const QString &size,
                      const QString &seconds,
                      bool watermark,
-                     const QString &aspectRatio = QString());
+                     const QString &aspectRatio = QString(),
+                     const QString &imgbbApiKey = QString());
 
     // 统一的查询任务接口
     void queryTask(const QString &apiKey,
@@ -70,7 +71,7 @@ private:
                          const QString &baseUrl,
                          const QString &model,
                          const QString &prompt,
-                         const QStringList &imageUrls,
+                         const QStringList &imagePaths,
                          const QString &aspectRatio,
                          const QString &size);
 
@@ -86,6 +87,7 @@ private:
         QString prompt;
         QString aspectRatio;
         QString size;
+        QString imgbbApiKey;
         QStringList localImagePaths;
         QStringList uploadedUrls;
         int uploadIndex;

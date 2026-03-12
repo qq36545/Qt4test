@@ -32,7 +32,8 @@ void VideoAPI::createVideo(const QString &apiKey,
                            const QString &size,
                            const QString &seconds,
                            bool watermark,
-                           const QString &aspectRatio)
+                           const QString &aspectRatio,
+                           const QString &imgbbApiKey)
 {
     // 根据模型名称分发到不同的实现
     if (modelName.contains("Grok", Qt::CaseInsensitive)) {
@@ -43,13 +44,14 @@ void VideoAPI::createVideo(const QString &apiKey,
         currentGrokRequest.prompt = prompt;
         currentGrokRequest.aspectRatio = aspectRatio;
         currentGrokRequest.size = size;
+        currentGrokRequest.imgbbApiKey = imgbbApiKey;
         currentGrokRequest.localImagePaths = imagePaths;
         currentGrokRequest.uploadedUrls.clear();
         currentGrokRequest.uploadIndex = 0;
 
-        // 开始上传第一张图片
+        // 开始上传第一张图片到 imgbb
         if (!imagePaths.isEmpty()) {
-            imageUploader->uploadImage(imagePaths.first());
+            imageUploader->uploadToImgbb(imagePaths.first(), imgbbApiKey);
         } else {
             emit errorOccurred("Grok模型需要至少一张图片");
         }
@@ -139,7 +141,7 @@ void VideoAPI::createGrokVideo(const QString &apiKey,
                                 const QString &baseUrl,
                                 const QString &model,
                                 const QString &prompt,
-                                const QStringList &imageUrls,
+                                const QStringList &imagePaths,
                                 const QString &aspectRatio,
                                 const QString &size)
 {
@@ -148,6 +150,8 @@ void VideoAPI::createGrokVideo(const QString &apiKey,
     request.setRawHeader("Authorization", QString("Bearer %1").arg(apiKey).toUtf8());
     request.setRawHeader("Content-Type", "application/json");
     request.setRawHeader("Accept", "application/json");
+    // 阿里云 oss:// 临时URL必须加此请求头，否则服务端无法解析
+    request.setRawHeader("X-DashScope-OssResourceResolve", "enable");
 
     // 构建JSON请求体
     QJsonObject jsonObj;
@@ -157,8 +161,8 @@ void VideoAPI::createGrokVideo(const QString &apiKey,
     jsonObj["size"] = size;
 
     QJsonArray imagesArray;
-    for (const QString &url : imageUrls) {
-        imagesArray.append(url);
+    for (const QString &imageUrl : imagePaths) {
+        imagesArray.append(imageUrl);
     }
     jsonObj["images"] = imagesArray;
 
@@ -172,8 +176,8 @@ void VideoAPI::createGrokVideo(const QString &apiKey,
     qDebug() << "  Prompt:" << prompt;
     qDebug() << "  Aspect Ratio:" << aspectRatio;
     qDebug() << "  Size:" << size;
-    qDebug() << "  Images:" << imageUrls;
-    qDebug() << "  JSON Body:" << jsonData;
+    qDebug() << "  Image count:" << imagePaths.size();
+    qDebug() << "  JSON Body size:" << jsonData.size();
 
     QNetworkReply *reply = networkManager->post(request, jsonData);
     replyMap[reply] = "create";
@@ -232,9 +236,11 @@ void VideoAPI::onImageUploadSuccess(const QString &url)
 
     // 检查是否还有更多图片需要上传
     if (currentGrokRequest.uploadIndex < currentGrokRequest.localImagePaths.size()) {
-        imageUploader->uploadImage(currentGrokRequest.localImagePaths[currentGrokRequest.uploadIndex]);
+        imageUploader->uploadToImgbb(
+            currentGrokRequest.localImagePaths[currentGrokRequest.uploadIndex],
+            currentGrokRequest.imgbbApiKey);
     } else {
-        // 所有图片上传完成，调用Grok API
+        // 所有图片上传完成，调用Grok API（传 uploadedUrls）
         createGrokVideo(currentGrokRequest.apiKey,
                         currentGrokRequest.baseUrl,
                         currentGrokRequest.model,
@@ -255,8 +261,9 @@ void VideoAPI::onCreateVideoFinished()
     QNetworkReply *reply = qobject_cast<QNetworkReply*>(sender());
     if (!reply) return;
 
+    QByteArray responseData = reply->readAll();
+
     if (reply->error() == QNetworkReply::NoError) {
-        QByteArray responseData = reply->readAll();
         QJsonDocument jsonDoc = QJsonDocument::fromJson(responseData);
         QJsonObject jsonObj = jsonDoc.object();
 
@@ -265,7 +272,11 @@ void VideoAPI::onCreateVideoFinished()
 
         emit videoCreated(taskId, status);
     } else {
-        emit errorOccurred(QString("创建视频失败: %1").arg(reply->errorString()));
+        int statusCode = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        qDebug() << "[VideoAPI] create video failed:" << statusCode << responseData;
+        emit errorOccurred(QString("创建视频失败(HTTP %1): %2")
+                           .arg(statusCode)
+                           .arg(responseData.isEmpty() ? reply->errorString() : QString::fromUtf8(responseData)));
     }
 
     replyMap.remove(reply);

@@ -448,9 +448,9 @@ void VideoSingleTab::onModelChanged(int index)
         // Grok模型：切换到Grok参数
         // 1. 更新模型变体下拉列表
         modelVariantCombo->clear();
-        modelVariantCombo->addItem("grok-video-3-15s (15秒)", "grok-video-3-15s");
-        modelVariantCombo->addItem("grok-video-3-10s (10秒)", "grok-video-3-10s");
-        modelVariantCombo->addItem("grok-video-3 (6秒)", "grok-video-3");
+        modelVariantCombo->addItem("grok-video-3-15s（15秒）", "grok-video-3-15s");
+        modelVariantCombo->addItem("grok-video-3-10s（10秒）", "grok-video-3-10s");
+        modelVariantCombo->addItem("grok-video-3（6秒）", "grok-video-3");
 
         // 2. 隐藏VEO3专用参数
         durationCombo->setVisible(false);
@@ -461,9 +461,9 @@ void VideoSingleTab::onModelChanged(int index)
         // 3. 修改分辨率标签和选项为宽高比
         resolutionLabel->setText("宽高比");
         resolutionCombo->clear();
-        resolutionCombo->addItem("2:3 竖屏", "2:3");
-        resolutionCombo->addItem("3:2 横屏", "3:2");
-        resolutionCombo->addItem("1:1 方屏", "1:1");
+        resolutionCombo->addItem("2:3（竖屏）", "2:3");
+        resolutionCombo->addItem("3:2（横屏）", "3:2");
+        resolutionCombo->addItem("1:1（方形）", "1:1");
 
         // 4. 显示Grok专用的size参数
         sizeCombo->setVisible(true);
@@ -775,6 +775,13 @@ void VideoSingleTab::generateVideo()
 
     // 根据模型类型调用不同的API
     if (model.contains("Grok", Qt::CaseInsensitive)) {
+        // Grok模型：校验imgbb密钥
+        ImgbbKey activeImgbbKey = DBManager::instance()->getActiveImgbbKey();
+        if (activeImgbbKey.apiKey.isEmpty()) {
+            QMessageBox::warning(this, "提示", "请先到设置页应用临时图床密钥");
+            return;
+        }
+
         // Grok模型：传递aspectRatio和size参数
         QString aspectRatio = resolution; // Grok使用resolution字段存储aspectRatio
         QString size = sizeCombo->currentData().toString();
@@ -789,7 +796,8 @@ void VideoSingleTab::generateVideo()
             size,
             "",  // seconds (Grok不需要)
             false,  // watermark (Grok不需要)
-            aspectRatio  // aspectRatio
+            aspectRatio,  // aspectRatio
+            activeImgbbKey.apiKey  // imgbbApiKey
         );
     } else {
         // VEO3模型：传递原有参数

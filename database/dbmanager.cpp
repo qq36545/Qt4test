@@ -172,6 +172,22 @@ bool DBManager::createTables()
         addApiKey("sora2密钥", "sk-***********jshfg");
     }
 
+    // 创建 imgbb_keys 表
+    QString createImgbbKeysTable = R"(
+        CREATE TABLE IF NOT EXISTS imgbb_keys (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            api_key TEXT NOT NULL,
+            is_active INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    )";
+
+    if (!query.exec(createImgbbKeysTable)) {
+        qCritical() << "Failed to create imgbb_keys table:" << query.lastError().text();
+        return false;
+    }
+
     return true;
 }
 
@@ -655,5 +671,89 @@ bool DBManager::updateTaskErrorMessage(const QString& taskId, const QString& err
         return false;
     }
     return true;
+}
+
+// Imgbb Keys CRUD
+bool DBManager::addImgbbKey(const QString& name, const QString& apiKey)
+{
+    QSqlQuery query;
+    query.prepare("INSERT INTO imgbb_keys (name, api_key) VALUES (:name, :api_key)");
+    query.bindValue(":name", name);
+    query.bindValue(":api_key", apiKey);
+    if (!query.exec()) {
+        qCritical() << "Failed to add imgbb key:" << query.lastError().text();
+        return false;
+    }
+    return true;
+}
+
+bool DBManager::updateImgbbKey(int id, const QString& name, const QString& apiKey)
+{
+    QSqlQuery query;
+    query.prepare("UPDATE imgbb_keys SET name = :name, api_key = :api_key WHERE id = :id");
+    query.bindValue(":id", id);
+    query.bindValue(":name", name);
+    query.bindValue(":api_key", apiKey);
+    if (!query.exec()) {
+        qCritical() << "Failed to update imgbb key:" << query.lastError().text();
+        return false;
+    }
+    return true;
+}
+
+bool DBManager::deleteImgbbKey(int id)
+{
+    QSqlQuery query;
+    query.prepare("DELETE FROM imgbb_keys WHERE id = :id");
+    query.bindValue(":id", id);
+    if (!query.exec()) {
+        qCritical() << "Failed to delete imgbb key:" << query.lastError().text();
+        return false;
+    }
+    return true;
+}
+
+bool DBManager::setActiveImgbbKey(int id)
+{
+    db.transaction();
+    QSqlQuery query;
+    query.exec("UPDATE imgbb_keys SET is_active = 0");
+    query.prepare("UPDATE imgbb_keys SET is_active = 1 WHERE id = :id");
+    query.bindValue(":id", id);
+    if (!query.exec()) {
+        db.rollback();
+        qCritical() << "Failed to set active imgbb key:" << query.lastError().text();
+        return false;
+    }
+    db.commit();
+    return true;
+}
+
+QList<ImgbbKey> DBManager::getAllImgbbKeys()
+{
+    QList<ImgbbKey> keys;
+    QSqlQuery query("SELECT id, name, api_key, is_active FROM imgbb_keys ORDER BY id");
+    while (query.next()) {
+        ImgbbKey key;
+        key.id = query.value(0).toInt();
+        key.name = query.value(1).toString();
+        key.apiKey = query.value(2).toString();
+        key.isActive = query.value(3).toInt() == 1;
+        keys.append(key);
+    }
+    return keys;
+}
+
+ImgbbKey DBManager::getActiveImgbbKey()
+{
+    ImgbbKey key;
+    QSqlQuery query("SELECT id, name, api_key, is_active FROM imgbb_keys WHERE is_active = 1 LIMIT 1");
+    if (query.next()) {
+        key.id = query.value(0).toInt();
+        key.name = query.value(1).toString();
+        key.apiKey = query.value(2).toString();
+        key.isActive = true;
+    }
+    return key;
 }
 
