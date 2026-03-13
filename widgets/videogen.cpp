@@ -170,6 +170,12 @@ QString unresolvedVideoStateMessage(const VideoTask& task, const VideoTaskDispla
     }
 }
 
+bool shouldShowRetryDownloadButton(const VideoTaskDisplayState& displayState)
+{
+    return displayState.resolvedState == VideoResolvedState::DownloadFailed
+           && displayState.canDownload;
+}
+
 } // namespace
 
 // VideoGenWidget 实现
@@ -201,6 +207,13 @@ void VideoGenWidget::setupUI()
     tabWidget->addTab(singleTab, "AI视频生成-单个");
     tabWidget->addTab(batchTab, "AI视频生成-批量");
     tabWidget->addTab(historyWidget, "生成历史记录");
+
+    // 单向同步：生成页密钥 -> 历史页查询密钥
+    if (historyWidget->getVideoSingleTab()) {
+        connect(singleTab, &VideoSingleTab::apiKeySelectionChanged,
+                historyWidget->getVideoSingleTab(),
+                &VideoSingleHistoryTab::refreshApiKeys);
+    }
 
     mainLayout->addWidget(tabWidget);
 
@@ -586,6 +599,24 @@ void VideoSingleTab::connectSignals()
     connect(durationCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &VideoSingleTab::saveSettings);
     connect(enhancePromptCheckBox, &QCheckBox::checkStateChanged, this, &VideoSingleTab::saveSettings);
     connect(enableUpsampleCheckBox, &QCheckBox::checkStateChanged, this, &VideoSingleTab::saveSettings);
+
+    // 单向同步：生成页当前 key 值 -> 历史页查询 key
+    connect(apiKeyCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int) {
+        QString selectedApiKeyValue;
+        int keyId = apiKeyCombo->currentData().toInt();
+        if (keyId > 0) {
+            const ApiKey key = DBManager::instance()->getApiKey(keyId);
+            selectedApiKeyValue = key.apiKey;
+        }
+
+        QSettings settings("ChickenAI", "VideoGen");
+        settings.beginGroup("VideoSingleTab");
+        settings.setValue("selectedApiKeyValue", selectedApiKeyValue);
+        settings.endGroup();
+        settings.sync();
+
+        emit apiKeySelectionChanged(selectedApiKeyValue);
+    });
 
     // 单选按钮切换
     connect(variantType1Radio, &QRadioButton::toggled, this, &VideoSingleTab::onVariantTypeChanged);
@@ -1260,6 +1291,14 @@ void VideoSingleTab::saveSettings()
     settings.setValue("modelVariant", modelVariantCombo->currentData().toString());
     settings.setValue("apiKey", apiKeyCombo->currentIndex());
     settings.setValue("server", serverCombo->currentIndex());
+
+    QString selectedApiKeyValue;
+    int keyId = apiKeyCombo->currentData().toInt();
+    if (keyId > 0) {
+        const ApiKey key = DBManager::instance()->getApiKey(keyId);
+        selectedApiKeyValue = key.apiKey;
+    }
+    settings.setValue("selectedApiKeyValue", selectedApiKeyValue);
 
     // 根据模型类型保存对应参数
     if (modelType.contains("Grok", Qt::CaseInsensitive)) {
@@ -2373,11 +2412,41 @@ void VideoSingleHistoryTab::loadApiKeys()
             apiKeyCombo->addItem(key.name, key.id);
         }
     }
+
+    applySyncedQueryApiKeyFromSettings();
 }
 
 void VideoSingleHistoryTab::refreshApiKeys()
 {
     loadApiKeys();
+    applySyncedQueryApiKeyFromSettings();
+}
+
+void VideoSingleHistoryTab::applySyncedQueryApiKeyFromSettings()
+{
+    if (!apiKeyCombo || !apiKeyCombo->isEnabled() || apiKeyCombo->count() <= 0) {
+        return;
+    }
+
+    QSettings settings("ChickenAI", "VideoGen");
+    settings.beginGroup("VideoSingleTab");
+    const QString syncedApiKeyValue = settings.value("selectedApiKeyValue").toString().trimmed();
+    settings.endGroup();
+
+    if (syncedApiKeyValue.isEmpty()) {
+        return;
+    }
+
+    const QList<ApiKey> keys = DBManager::instance()->getAllApiKeys();
+    for (const ApiKey& key : keys) {
+        if (key.apiKey == syncedApiKeyValue) {
+            const int targetIndex = apiKeyCombo->findData(key.id);
+            if (targetIndex >= 0) {
+                apiKeyCombo->setCurrentIndex(targetIndex);
+            }
+            return;
+        }
+    }
 }
 
 void VideoSingleHistoryTab::setupListView()
@@ -2543,13 +2612,17 @@ void VideoSingleHistoryTab::loadHistory(int offset, int limit)
 
             QPushButton *viewBtn = new QPushButton("查看");
             QPushButton *browseBtn = new QPushButton("浏览");
+            QPushButton *retryDownloadBtn = new QPushButton("重新下载");
             QPushButton *refreshBtn = new QPushButton("刷新");
             QPushButton *regenerateBtn = new QPushButton("重新生成");
 
             viewBtn->setMaximumWidth(60);
             browseBtn->setMaximumWidth(60);
+            retryDownloadBtn->setMinimumWidth(80);
+            retryDownloadBtn->setMaximumWidth(80);
             refreshBtn->setMaximumWidth(60);
-            regenerateBtn->setMaximumWidth(80);
+            regenerateBtn->setMinimumWidth(110);
+            regenerateBtn->setMaximumWidth(110);
 
             viewBtn->setEnabled(displayState.canPlay);
             if (!displayState.canPlay) {
@@ -2558,6 +2631,11 @@ void VideoSingleHistoryTab::loadHistory(int offset, int limit)
             browseBtn->setEnabled(displayState.canBrowse);
             if (!displayState.canBrowse) {
                 browseBtn->setToolTip("本地视频不可用");
+            }
+            const bool showRetryDownload = shouldShowRetryDownloadButton(displayState);
+            retryDownloadBtn->setVisible(showRetryDownload);
+            if (!showRetryDownload) {
+                retryDownloadBtn->setEnabled(false);
             }
             refreshBtn->setEnabled(displayState.canRefresh);
             if (!displayState.canRefresh) {
@@ -2570,6 +2648,9 @@ void VideoSingleHistoryTab::loadHistory(int offset, int limit)
             connect(browseBtn, &QPushButton::clicked, [this, task]() {
                 onBrowseFile(task.taskId);
             });
+            connect(retryDownloadBtn, &QPushButton::clicked, [this, task]() {
+                onRetryDownload(task.taskId);
+            });
             connect(refreshBtn, &QPushButton::clicked, [this, task]() {
                 onRetryQuery(task.taskId);
             });
@@ -2579,6 +2660,9 @@ void VideoSingleHistoryTab::loadHistory(int offset, int limit)
 
             btnLayout->addWidget(viewBtn);
             btnLayout->addWidget(browseBtn);
+            if (showRetryDownload) {
+                btnLayout->addWidget(retryDownloadBtn);
+            }
             btnLayout->addWidget(refreshBtn);
             btnLayout->addWidget(regenerateBtn);
 
@@ -2648,8 +2732,10 @@ void VideoSingleHistoryTab::loadHistory(int offset, int limit)
             QHBoxLayout* btnLayout = new QHBoxLayout();
             QPushButton* viewBtn = new QPushButton("查看");
             QPushButton* browseBtn = new QPushButton("浏览");
-            viewBtn->setMaximumWidth(70);
-            browseBtn->setMaximumWidth(70);
+            QPushButton* retryDownloadBtn = new QPushButton("重新下载");
+            viewBtn->setMaximumWidth(60);
+            browseBtn->setMaximumWidth(60);
+            retryDownloadBtn->setMaximumWidth(60);
 
             viewBtn->setEnabled(displayState.canPlay);
             if (!displayState.canPlay) {
@@ -2659,6 +2745,11 @@ void VideoSingleHistoryTab::loadHistory(int offset, int limit)
             if (!displayState.canBrowse) {
                 browseBtn->setToolTip("本地视频不可用");
             }
+            const bool showRetryDownload = shouldShowRetryDownloadButton(displayState);
+            retryDownloadBtn->setVisible(showRetryDownload);
+            if (!showRetryDownload) {
+                retryDownloadBtn->setEnabled(false);
+            }
 
             connect(viewBtn, &QPushButton::clicked, [this, task]() {
                 onViewVideo(task.taskId);
@@ -2666,9 +2757,15 @@ void VideoSingleHistoryTab::loadHistory(int offset, int limit)
             connect(browseBtn, &QPushButton::clicked, [this, task]() {
                 onBrowseFile(task.taskId);
             });
+            connect(retryDownloadBtn, &QPushButton::clicked, [this, task]() {
+                onRetryDownload(task.taskId);
+            });
 
             btnLayout->addWidget(viewBtn);
             btnLayout->addWidget(browseBtn);
+            if (showRetryDownload) {
+                btnLayout->addWidget(retryDownloadBtn);
+            }
 
             // 组装卡片
             cardLayout->addWidget(thumbLabel);
@@ -2705,6 +2802,7 @@ void VideoSingleHistoryTab::switchView()
 
 void VideoSingleHistoryTab::refreshHistory()
 {
+    applySyncedQueryApiKeyFromSettings();
     loadHistory(0, isListView ? 50 : 20);
 }
 
@@ -2792,8 +2890,15 @@ void VideoSingleHistoryTab::onBrowseFile(const QString& taskId)
 #endif
 }
 
+void VideoSingleHistoryTab::onRetryDownload(const QString& taskId)
+{
+    onViewVideo(taskId);
+}
+
 void VideoSingleHistoryTab::onRetryQuery(const QString& taskId)
 {
+    applySyncedQueryApiKeyFromSettings();
+
     // 获取当前选择的密钥
     if (!apiKeyCombo || apiKeyCombo->currentIndex() < 0) {
         QMessageBox::warning(this, "错误", "请先选择一个API密钥");

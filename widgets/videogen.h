@@ -32,6 +32,9 @@ public:
     explicit VideoSingleTab(QWidget *parent = nullptr);
     void loadFromTask(const VideoTask& task);  // 从历史任务加载参数
 
+signals:
+    void apiKeySelectionChanged(const QString& apiKeyValue);
+
 public slots:
     void refreshApiKeys();
 
@@ -184,6 +187,7 @@ private slots:
     void switchView();  // 切换列表/缩略图视图
     void onViewVideo(const QString& taskId);
     void onBrowseFile(const QString& taskId);
+    void onRetryDownload(const QString& taskId);
     void onRetryQuery(const QString& taskId);
     void onRegenerate(const QString& taskId);
     void showContextMenu(const QPoint &pos);  // 显示右键菜单
@@ -201,6 +205,7 @@ private:
     void setupThumbnailView();
     void updateHeaderCheckBoxPosition();  // 更新表头勾选框位置
     void loadApiKeys();
+    void applySyncedQueryApiKeyFromSettings();
 
     QStackedWidget* viewStack;
     QWidget* listViewWidget;
