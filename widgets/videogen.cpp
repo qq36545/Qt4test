@@ -260,7 +260,8 @@ VideoSingleTab::VideoSingleTab(QWidget *parent)
     : QWidget(parent),
       suppressDuplicateWarning(false),
       parametersModified(false),
-      pendingSaveSettings(false)
+      pendingSaveSettings(false),
+      suppressAutoSave(false)
 {
     veo3API = new VideoAPI(this);
     connect(veo3API, &VideoAPI::videoCreated, this, &VideoSingleTab::onVideoCreated);
@@ -494,14 +495,21 @@ void VideoSingleTab::setupUI()
     sizeCombo->setVisible(false); // 默认隐藏，Grok模型时显示
     sizeLabel->setVisible(false);
     sizeLayout->addWidget(sizeLabel);
-    sizeLayout->addWidget(sizeCombo);
 
-    // Grok 垫图尺寸提示标签
+    QHBoxLayout *sizeRowLayout = new QHBoxLayout();
+    sizeRowLayout->setContentsMargins(0, 0, 0, 0);
+    sizeRowLayout->setSpacing(8);
+    sizeRowLayout->addWidget(sizeCombo);
+
+    // Grok 垫图尺寸提示标签（与分辨率规格同一行）
     imageUploadHintLabel = new QLabel("注意：垫图后视频尺寸跟着图片尺寸一样");
     imageUploadHintLabel->setStyleSheet("font-size: 12px; color: #888888;");
-    imageUploadHintLabel->setWordWrap(true);
+    imageUploadHintLabel->setWordWrap(false);
     imageUploadHintLabel->setVisible(false);  // 默认隐藏
-    sizeLayout->addWidget(imageUploadHintLabel);
+    sizeRowLayout->addWidget(imageUploadHintLabel);
+    sizeRowLayout->addStretch();
+
+    sizeLayout->addLayout(sizeRowLayout);
 
     QVBoxLayout *watermarkLayout = new QVBoxLayout();
     watermarkLabel = new QLabel("水印");
@@ -610,12 +618,6 @@ void VideoSingleTab::connectSignals()
             selectedApiKeyValue = key.apiKey;
         }
 
-        QSettings settings("ChickenAI", "VideoGen");
-        settings.beginGroup("VideoSingleTab");
-        settings.setValue("selectedApiKeyValue", selectedApiKeyValue);
-        settings.endGroup();
-        settings.sync();
-
         emit apiKeySelectionChanged(selectedApiKeyValue);
     });
 
@@ -674,6 +676,8 @@ void VideoSingleTab::resetForm()
 
 void VideoSingleTab::onModelChanged(int index)
 {
+    Q_UNUSED(index);
+    suppressAutoSave = true;
     QString modelName = modelCombo->currentText();
 
     // 根据模型类型切换UI
@@ -751,6 +755,11 @@ void VideoSingleTab::onModelChanged(int index)
 
     // 模型切换时重新加载对应的密钥
     loadApiKeys();
+
+    suppressAutoSave = false;
+    if (!modelCombo->signalsBlocked()) {
+        queueSaveSettings();
+    }
 }
 
 void VideoSingleTab::onVariantTypeChanged()
@@ -850,7 +859,7 @@ void VideoSingleTab::uploadMiddleFrameImage()
 
     QFileInfo fileInfo(fileName);
     settings.setValue("lastImageUploadDir", fileInfo.absolutePath());
-    saveSettings();
+    queueSaveSettings();
 }
 
 
@@ -901,7 +910,7 @@ void VideoSingleTab::uploadImage()
     updateImagePreview();
     QFileInfo fileInfo(fileName);
     settings.setValue("lastImageUploadDir", fileInfo.absolutePath());
-    saveSettings();
+    queueSaveSettings();
 }
 
 void VideoSingleTab::removeImage(int index)
@@ -909,7 +918,7 @@ void VideoSingleTab::removeImage(int index)
     if (index >= 0 && index < uploadedImagePaths.size()) {
         uploadedImagePaths.removeAt(index);
         updateImagePreview();
-        saveSettings();  // 保存更改
+        queueSaveSettings();  // 保存更改
     }
 }
 
@@ -987,7 +996,7 @@ void VideoSingleTab::uploadEndFrameImage()
 
     QFileInfo fileInfo(fileName);
     settings.setValue("lastImageUploadDir", fileInfo.absolutePath());
-    saveSettings();
+    queueSaveSettings();
 }
 
 void VideoSingleTab::onModelVariantChanged(int index)
@@ -1281,6 +1290,10 @@ void VideoSingleTab::onApiError(const QString &error)
 
 void VideoSingleTab::queueSaveSettings()
 {
+    if (suppressAutoSave) {
+        return;
+    }
+
     if (pendingSaveSettings) {
         return;
     }
@@ -1292,8 +1305,47 @@ void VideoSingleTab::queueSaveSettings()
     });
 }
 
+QString VideoSingleTab::buildSettingsSnapshot() const
+{
+    QString selectedApiKeyValue;
+    int keyId = apiKeyCombo->currentData().toInt();
+    if (keyId > 0) {
+        const ApiKey key = DBManager::instance()->getApiKey(keyId);
+        selectedApiKeyValue = key.apiKey;
+    }
+
+    const QStringList snapshotParts = {
+        modelCombo->currentText(),
+        modelVariantCombo->currentData().toString(),
+        apiKeyCombo->currentData().toString(),
+        selectedApiKeyValue,
+        serverCombo->currentData().toString(),
+        promptInput->toPlainText(),
+        resolutionCombo->currentData().toString(),
+        durationCombo->currentData().toString(),
+        sizeCombo->currentData().toString(),
+        QString::number(watermarkCheckBox->isChecked()),
+        QString::number(variantType1Radio->isChecked() ? 1 : 2),
+        QString::number(enhancePromptCheckBox->isChecked()),
+        QString::number(enableUpsampleCheckBox->isChecked()),
+        uploadedImagePaths.join("\n"),
+        uploadedEndFrameImagePath,
+        uploadedMiddleFrameImagePath
+    };
+
+    QCryptographicHash hash(QCryptographicHash::Sha256);
+    hash.addData(snapshotParts.join("\x1F").toUtf8());
+    return QString(hash.result().toHex());
+}
+
 void VideoSingleTab::saveSettings()
 {
+    const QString snapshot = buildSettingsSnapshot();
+    if (!lastSavedSettingsSnapshot.isEmpty() && snapshot == lastSavedSettingsSnapshot) {
+        qDebug() << "[VideoSingleTab] Skip save, snapshot unchanged:" << snapshot.left(8);
+        return;
+    }
+
     QSettings settings("ChickenAI", "VideoGen");
     settings.beginGroup("VideoSingleTab");
 
@@ -1336,9 +1388,11 @@ void VideoSingleTab::saveSettings()
 
     settings.endGroup();
     settings.sync();  // 强制立即写入磁盘
+    lastSavedSettingsSnapshot = snapshot;
 
     // 调试日志
     qDebug() << "[VideoSingleTab] Settings saved:"
+             << "snapshot=" << snapshot.left(8)
              << "prompt=" << promptInput->toPlainText().left(20)
              << "modelType=" << modelType
              << "resolution=" << resolutionCombo->currentData().toString()
@@ -1641,6 +1695,9 @@ void VideoSingleTab::loadSettings()
     lastSubmittedParamsHash = settings.value("lastSubmittedHash", "").toString();
 
     settings.endGroup();
+
+    // 读取完成后记录当前快照，避免无变更重复写盘
+    lastSavedSettingsSnapshot = buildSettingsSnapshot();
 
     // 恢复信号发射
     promptInput->blockSignals(false);
