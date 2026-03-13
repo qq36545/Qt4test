@@ -1,4 +1,4 @@
-# openai 创建视频，带图片
+# OpenAI 视频格式：创建视频 带图片
 
 ## OpenAPI Specification
 
