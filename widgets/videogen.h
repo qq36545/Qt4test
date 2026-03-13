@@ -8,6 +8,8 @@
 #include <QPushButton>
 #include <QLabel>
 #include <QVBoxLayout>
+#include <QRadioButton>
+#include <QButtonGroup>
 
 // 前向声明
 struct VideoTask;
@@ -19,6 +21,7 @@ struct VideoTask;
 #include <QStackedWidget>
 #include <QGridLayout>
 #include <QShowEvent>
+#include <QTimer>
 
 // 单个视频生成 Tab
 class VideoSingleTab : public QWidget
@@ -40,15 +43,17 @@ private slots:
     void resetForm();
     void onModelChanged(int index);
     void onModelVariantChanged(int index);
+    void onVariantTypeChanged();
     void uploadImage();
     void uploadEndFrameImage();
+    void uploadMiddleFrameImage();
     void removeImage(int index);
 
 private:
     void setupUI();
     void connectSignals();
     void loadApiKeys();
-    void updateResolutionOptions(bool is4K);
+    void updateResolutionOptions(bool is4K, bool isVariant2 = false);
     void updateImageUploadUI(const QString &modelName);
     void updateImagePreview();
     void onVideoCreated(const QString &taskId, const QString &status);
@@ -84,6 +89,24 @@ private:
     QLabel *endFramePreviewLabel;
     QPushButton *uploadEndFrameButton;
     QString uploadedEndFrameImagePath;
+
+    // 中间帧上传（components 模型用）
+    QWidget *middleFrameWidget;
+    QLabel *middleFrameLabel;
+    QLabel *middleFramePreviewLabel;
+    QPushButton *uploadMiddleFrameButton;
+    QString uploadedMiddleFrameImagePath;
+
+    // 变体类型单选按钮
+    QWidget *variantTypeWidget;
+    QRadioButton *variantType1Radio;  // OpenAI格式
+    QRadioButton *variantType2Radio;  // 统一格式
+
+    // Variant 2 专用控件
+    QCheckBox *enhancePromptCheckBox;
+    QLabel *enhancePromptLabel;
+    QCheckBox *enableUpsampleCheckBox;
+    QLabel *enableUpsampleLabel;
     QLabel *previewLabel;
     QPushButton *generateButton;
     QPushButton *resetButton;
@@ -154,6 +177,7 @@ public slots:
 
 protected:
     void showEvent(QShowEvent *event) override;  // tab显示时自动刷新
+    bool eventFilter(QObject *obj, QEvent *event) override;
 
 private slots:
     void refreshHistory();
@@ -196,6 +220,7 @@ private:
     int currentOffset;
     class VideoAPI* veo3API;  // API实例，用于重新查询任务状态
     QString currentRefreshingTaskId;  // 当前正在刷新的任务ID
+    QTimer* tooltipHideTimer;  // 状态tooltip 3秒自动消失计时器
 };
 
 // 历史记录容器 Widget (4 tab)

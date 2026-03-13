@@ -42,13 +42,15 @@ TaskPollManager::~TaskPollManager()
 }
 
 void TaskPollManager::startPolling(const QString& taskId, const QString& taskType,
-                                   const QString& apiKey, const QString& baseUrl)
+                                   const QString& apiKey, const QString& baseUrl,
+                                   const QString& modelName)
 {
     TaskInfo info;
     info.taskId = taskId;
     info.taskType = taskType;
     info.apiKey = apiKey;
     info.baseUrl = baseUrl;
+    info.modelName = modelName;
     info.startTime = QDateTime::currentDateTime();
     info.retryCount = 0;
     info.downloadRetryCount = 0;
@@ -86,7 +88,13 @@ void TaskPollManager::onPollTimer()
 
         // 查询任务状态
         QNetworkRequest request;
-        QString url = info.baseUrl + "/v1/videos/" + info.taskId;
+        QString url;
+        // taskId 以 "video_" 开头 → OpenAI格式查询；否则 → 统一格式查询
+        if (info.taskId.startsWith("video_")) {
+            url = info.baseUrl + "/v1/videos/" + info.taskId;
+        } else {
+            url = info.baseUrl + "/v1/video/query?id=" + info.taskId;
+        }
         request.setUrl(QUrl(url));
         request.setRawHeader("Authorization", QString("Bearer %1").arg(info.apiKey).toUtf8());
 
@@ -121,11 +129,19 @@ void TaskPollManager::onQueryFinished()
     QString status = obj["status"].toString();
     int progress = obj["progress"].toInt();
     QString videoUrl = obj["video_url"].toString();
+    // OpenAI格式失败信息在 "message"，统一格式可能在 "error" 或 "message"
+    QString errorMessage = obj["message"].toString();
+    if (errorMessage.isEmpty()) errorMessage = obj["error"].toString();
 
     qDebug() << "Task" << taskId << "status:" << status << "progress:" << progress;
 
     // 更新数据库
     DBManager::instance()->updateTaskStatus(taskId, status, progress, videoUrl);
+
+    // 如果有错误信息，存入数据库
+    if (!errorMessage.isEmpty() && (status == "failed" || status.isEmpty())) {
+        DBManager::instance()->updateTaskErrorMessage(taskId, errorMessage);
+    }
 
     // 发出状态更新信号，通知UI刷新
     emit taskStatusUpdated(taskId, status, progress);
@@ -141,7 +157,7 @@ void TaskPollManager::onQueryFinished()
         emit taskCompleted(taskId, videoUrl);
     } else if (status == "failed") {
         stopPolling(taskId);
-        emit taskFailed(taskId, obj["error"].toString());
+        emit taskFailed(taskId, errorMessage.isEmpty() ? obj["error"].toString() : errorMessage);
     }
 }
 

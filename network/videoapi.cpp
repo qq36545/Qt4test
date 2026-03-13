@@ -33,21 +33,26 @@ void VideoAPI::createVideo(const QString &apiKey,
                            const QString &seconds,
                            bool watermark,
                            const QString &aspectRatio,
-                           const QString &imgbbApiKey)
+                           const QString &imgbbApiKey,
+                           bool enhancePrompt,
+                           bool enableUpsample)
 {
     // 根据模型名称分发到不同的实现
     if (modelName.contains("Grok", Qt::CaseInsensitive)) {
         // Grok模型：需要先上传图片获取URL
-        currentGrokRequest.apiKey = apiKey;
-        currentGrokRequest.baseUrl = baseUrl;
-        currentGrokRequest.model = model;
-        currentGrokRequest.prompt = prompt;
-        currentGrokRequest.aspectRatio = aspectRatio;
-        currentGrokRequest.size = size;
-        currentGrokRequest.imgbbApiKey = imgbbApiKey;
-        currentGrokRequest.localImagePaths = imagePaths;
-        currentGrokRequest.uploadedUrls.clear();
-        currentGrokRequest.uploadIndex = 0;
+        currentRequest.apiKey = apiKey;
+        currentRequest.baseUrl = baseUrl;
+        currentRequest.model = model;
+        currentRequest.prompt = prompt;
+        currentRequest.aspectRatio = aspectRatio;
+        currentRequest.size = size;
+        currentRequest.imgbbApiKey = imgbbApiKey;
+        currentRequest.localImagePaths = imagePaths;
+        currentRequest.uploadedUrls.clear();
+        currentRequest.uploadIndex = 0;
+        currentRequest.enhancePrompt = enhancePrompt;
+        currentRequest.enableUpsample = enableUpsample;
+        currentRequest.targetMethod = "grok";
 
         // 开始上传第一张图片到 imgbb
         if (!imagePaths.isEmpty()) {
@@ -55,9 +60,32 @@ void VideoAPI::createVideo(const QString &apiKey,
         } else {
             emit errorOccurred("Grok模型需要至少一张图片");
         }
-    } else {
-        // VEO3模型：直接上传文件
+    } else if (model.startsWith("veo_")) {
+        // VEO3 OpenAI格式：直接上传文件
         createVeo3Video(apiKey, baseUrl, model, prompt, imagePaths, size, seconds, watermark);
+    } else {
+        // VEO3 统一格式：需要先上传图片到 imgbb 获取 URL
+        currentRequest.apiKey = apiKey;
+        currentRequest.baseUrl = baseUrl;
+        currentRequest.model = model;
+        currentRequest.prompt = prompt;
+        currentRequest.aspectRatio = aspectRatio;
+        currentRequest.size = size;
+        currentRequest.imgbbApiKey = imgbbApiKey;
+        currentRequest.localImagePaths = imagePaths;
+        currentRequest.uploadedUrls.clear();
+        currentRequest.uploadIndex = 0;
+        currentRequest.enhancePrompt = enhancePrompt;
+        currentRequest.enableUpsample = enableUpsample;
+        currentRequest.targetMethod = "veo3_unified";
+
+        if (!imagePaths.isEmpty()) {
+            imageUploader->uploadToImgbb(imagePaths.first(), imgbbApiKey);
+        } else {
+            // 无图片直接调用
+            createVeo3UnifiedVideo(apiKey, baseUrl, model, prompt, QStringList(),
+                                   aspectRatio, enhancePrompt, enableUpsample);
+        }
     }
 }
 
@@ -136,6 +164,52 @@ void VideoAPI::createVeo3Video(const QString &apiKey,
 
     connect(reply, &QNetworkReply::finished, this, &VideoAPI::onCreateVideoFinished);
 }
+
+void VideoAPI::createVeo3UnifiedVideo(const QString &apiKey,
+                                      const QString &baseUrl,
+                                      const QString &model,
+                                      const QString &prompt,
+                                      const QStringList &imageUrls,
+                                      const QString &aspectRatio,
+                                      bool enhancePrompt,
+                                      bool enableUpsample)
+{
+    QUrl url(baseUrl + "/v1/video/create");
+    QNetworkRequest request(url);
+    request.setRawHeader("Authorization", QString("Bearer %1").arg(apiKey).toUtf8());
+    request.setRawHeader("Content-Type", "application/json");
+    request.setRawHeader("Accept", "application/json");
+
+    QJsonObject jsonObj;
+    jsonObj["model"] = model;
+    jsonObj["prompt"] = prompt;
+    jsonObj["aspect_ratio"] = aspectRatio;
+    jsonObj["enhance_prompt"] = enhancePrompt;
+    jsonObj["enable_upsample"] = enableUpsample;
+
+    QJsonArray imagesArray;
+    for (const QString &imageUrl : imageUrls) {
+        imagesArray.append(imageUrl);
+    }
+    jsonObj["images"] = imagesArray;
+
+    QJsonDocument jsonDoc(jsonObj);
+    QByteArray jsonData = jsonDoc.toJson();
+
+    qDebug() << "[VideoAPI] VEO3 Unified API Request:";
+    qDebug() << "  URL:" << url.toString();
+    qDebug() << "  Model:" << model;
+    qDebug() << "  Aspect Ratio:" << aspectRatio;
+    qDebug() << "  enhance_prompt:" << enhancePrompt;
+    qDebug() << "  enable_upsample:" << enableUpsample;
+    qDebug() << "  Image count:" << imageUrls.size();
+
+    QNetworkReply *reply = networkManager->post(request, jsonData);
+    replyMap[reply] = "create";
+
+    connect(reply, &QNetworkReply::finished, this, &VideoAPI::onCreateVideoFinished);
+}
+
 
 void VideoAPI::createGrokVideo(const QString &apiKey,
                                 const QString &baseUrl,
@@ -231,23 +305,35 @@ void VideoAPI::downloadVideo(const QString &apiKey,
 void VideoAPI::onImageUploadSuccess(const QString &url)
 {
     // 图片上传成功，添加到URL列表
-    currentGrokRequest.uploadedUrls.append(url);
-    currentGrokRequest.uploadIndex++;
+    currentRequest.uploadedUrls.append(url);
+    currentRequest.uploadIndex++;
 
     // 检查是否还有更多图片需要上传
-    if (currentGrokRequest.uploadIndex < currentGrokRequest.localImagePaths.size()) {
+    if (currentRequest.uploadIndex < currentRequest.localImagePaths.size()) {
         imageUploader->uploadToImgbb(
-            currentGrokRequest.localImagePaths[currentGrokRequest.uploadIndex],
-            currentGrokRequest.imgbbApiKey);
+            currentRequest.localImagePaths[currentRequest.uploadIndex],
+            currentRequest.imgbbApiKey);
     } else {
-        // 所有图片上传完成，调用Grok API（传 uploadedUrls）
-        createGrokVideo(currentGrokRequest.apiKey,
-                        currentGrokRequest.baseUrl,
-                        currentGrokRequest.model,
-                        currentGrokRequest.prompt,
-                        currentGrokRequest.uploadedUrls,
-                        currentGrokRequest.aspectRatio,
-                        currentGrokRequest.size);
+        // 所有图片上传完成，根据 targetMethod 分发
+        if (currentRequest.targetMethod == "grok") {
+            createGrokVideo(currentRequest.apiKey,
+                            currentRequest.baseUrl,
+                            currentRequest.model,
+                            currentRequest.prompt,
+                            currentRequest.uploadedUrls,
+                            currentRequest.aspectRatio,
+                            currentRequest.size);
+        } else {
+            // veo3_unified
+            createVeo3UnifiedVideo(currentRequest.apiKey,
+                                   currentRequest.baseUrl,
+                                   currentRequest.model,
+                                   currentRequest.prompt,
+                                   currentRequest.uploadedUrls,
+                                   currentRequest.aspectRatio,
+                                   currentRequest.enhancePrompt,
+                                   currentRequest.enableUpsample);
+        }
     }
 }
 

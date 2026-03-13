@@ -14,6 +14,7 @@ struct TaskInfo {
     QString taskType;
     QString apiKey;
     QString baseUrl;
+    QString modelName;   // 用于选择查询端点
     QDateTime startTime;
     int retryCount;
     int downloadRetryCount;  // 下载重试次数
@@ -29,7 +30,8 @@ public:
 
     // 启动/停止轮询
     void startPolling(const QString& taskId, const QString& taskType,
-                     const QString& apiKey, const QString& baseUrl);
+                     const QString& apiKey, const QString& baseUrl,
+                     const QString& modelName = QString());
     void stopPolling(const QString& taskId);
 
     // 程序重启恢复

@@ -37,6 +37,7 @@
 #include <QMenu>
 #include <QClipboard>
 #include <QApplication>
+#include <QToolTip>
 
 // VideoGenWidget 实现
 VideoGenWidget::VideoGenWidget(QWidget *parent)
@@ -136,6 +137,9 @@ bool VideoSingleTab::eventFilter(QObject *obj, QEvent *event)
         } else if (obj == endFramePreviewLabel) {
             uploadEndFrameImage();
             return true;
+        } else if (obj == middleFramePreviewLabel) {
+            uploadMiddleFrameImage();
+            return true;
         }
     }
     return QWidget::eventFilter(obj, event);
@@ -172,6 +176,24 @@ void VideoSingleTab::setupUI()
     modelLayout->addWidget(modelCombo, 1);
     contentLayout->addLayout(modelLayout);
 
+    // 变体类型单选按钮（VEO3专用，默认隐藏）
+    variantTypeWidget = new QWidget();
+    QHBoxLayout *variantTypeLayout = new QHBoxLayout(variantTypeWidget);
+    variantTypeLayout->setContentsMargins(0, 0, 0, 0);
+    QLabel *variantTypeLabel = new QLabel("API格式:");
+    variantTypeLabel->setStyleSheet("font-size: 14px;");
+    variantType1Radio = new QRadioButton("OpenAI格式");
+    variantType2Radio = new QRadioButton("统一格式");
+    variantType1Radio->setStyleSheet("color: white; font-size: 14px;");
+    variantType2Radio->setStyleSheet("color: white; font-size: 14px;");
+    variantType1Radio->setChecked(true);
+    variantTypeLayout->addWidget(variantTypeLabel);
+    variantTypeLayout->addWidget(variantType1Radio);
+    variantTypeLayout->addWidget(variantType2Radio);
+    variantTypeLayout->addStretch();
+    contentLayout->addWidget(variantTypeWidget);
+    variantTypeWidget->setVisible(false);
+
     // VEO3 模型变体选择
     QHBoxLayout *variantLayout = new QHBoxLayout();
     QLabel *variantLabel = new QLabel("模型变体:");
@@ -181,20 +203,6 @@ void VideoSingleTab::setupUI()
     modelVariantCombo->addItem("veo_3_1", "veo_3_1");
     modelVariantCombo->addItem("veo_3_1-fast-4K", "veo_3_1-fast-4K");
     modelVariantCombo->addItem("veo_3_1-fast-components-4K", "veo_3_1-fast-components-4K");
-    modelVariantCombo->addItem("veo3.1-fast", "veo3.1-fast");
-    modelVariantCombo->addItem("veo3.1", "veo3.1");
-    modelVariantCombo->addItem("veo3.1-fast-components", "veo3.1-fast-components");
-    modelVariantCombo->addItem("veo3.1-components", "veo3.1-components");
-    modelVariantCombo->addItem("veo3.1-4k", "veo3.1-4k");
-    modelVariantCombo->addItem("veo3-pro-frames", "veo3-pro-frames");
-    modelVariantCombo->addItem("veo3.1-components-4k", "veo3.1-components-4k");
-    modelVariantCombo->addItem("veo3.1-pro", "veo3.1-pro");
-    modelVariantCombo->addItem("veo3.1-pro-4k", "veo3.1-pro-4k");
-    modelVariantCombo->addItem("veo3", "veo3");
-    modelVariantCombo->addItem("veo3-fast", "veo3-fast");
-    modelVariantCombo->addItem("veo3-fast-frames", "veo3-fast-frames");
-    modelVariantCombo->addItem("veo3-frames", "veo3-frames");
-    modelVariantCombo->addItem("veo3-pro", "veo3-pro");
     connect(modelVariantCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &VideoSingleTab::onModelVariantChanged);
     variantLayout->addWidget(variantLabel);
     variantLayout->addWidget(modelVariantCombo, 1);
@@ -282,6 +290,33 @@ void VideoSingleTab::setupUI()
     contentLayout->addWidget(endFrameWidget);
     endFrameWidget->setVisible(true); // 默认显示，支持首尾帧
 
+    // 中间帧图片上传区域（components 模型用，默认隐藏）
+    middleFrameWidget = new QWidget();
+    QVBoxLayout *middleFrameLayout = new QVBoxLayout(middleFrameWidget);
+    middleFrameLayout->setContentsMargins(0, 0, 0, 0);
+    middleFrameLayout->setSpacing(10);
+
+    middleFrameLabel = new QLabel("图片2（中间帧，可选）:");
+    middleFrameLabel->setStyleSheet("font-size: 14px;");
+    middleFrameLayout->addWidget(middleFrameLabel);
+
+    QHBoxLayout *middleFrameImageLayout = new QHBoxLayout();
+    middleFramePreviewLabel = new QLabel("未选择图片\n点击此处上传");
+    middleFramePreviewLabel->setObjectName("imagePreviewLabel");
+    middleFramePreviewLabel->setAlignment(Qt::AlignCenter);
+    middleFramePreviewLabel->setCursor(Qt::PointingHandCursor);
+    middleFramePreviewLabel->setScaledContents(false);
+    middleFramePreviewLabel->installEventFilter(this);
+    uploadMiddleFrameButton = new QPushButton("📁 选择图片2");
+    uploadMiddleFrameButton->setFixedWidth(150);
+    connect(uploadMiddleFrameButton, &QPushButton::clicked, this, &VideoSingleTab::uploadMiddleFrameImage);
+    middleFrameImageLayout->addWidget(middleFramePreviewLabel, 1);
+    middleFrameImageLayout->addWidget(uploadMiddleFrameButton);
+    middleFrameLayout->addLayout(middleFrameImageLayout);
+
+    contentLayout->addWidget(middleFrameWidget);
+    middleFrameWidget->setVisible(false);
+
     // 参数设置
     QHBoxLayout *paramsLayout = new QHBoxLayout();
 
@@ -324,15 +359,42 @@ void VideoSingleTab::setupUI()
     QVBoxLayout *watermarkLayout = new QVBoxLayout();
     watermarkLabel = new QLabel("水印");
     watermarkLabel->setStyleSheet("font-size: 14px;");
-    watermarkCheckBox = new QCheckBox("添加水印");
+    watermarkCheckBox = new QCheckBox("保留水印");
     watermarkCheckBox->setStyleSheet("color: white; font-size: 12px;");
+    watermarkCheckBox->setChecked(false);
     watermarkLayout->addWidget(watermarkLabel);
     watermarkLayout->addWidget(watermarkCheckBox);
+
+    // enhance_prompt / enable_upsample（Variant 2 专用，默认隐藏）
+    QVBoxLayout *enhanceLayout = new QVBoxLayout();
+    enhancePromptLabel = new QLabel("增强提示词");
+    enhancePromptLabel->setStyleSheet("font-size: 14px;");
+    enhancePromptCheckBox = new QCheckBox("enhance_prompt");
+    enhancePromptCheckBox->setStyleSheet("color: white; font-size: 12px;");
+    enhancePromptCheckBox->setChecked(true);
+    enhanceLayout->addWidget(enhancePromptLabel);
+    enhanceLayout->addWidget(enhancePromptCheckBox);
+
+    QVBoxLayout *upsampleLayout = new QVBoxLayout();
+    enableUpsampleLabel = new QLabel("超分辨率");
+    enableUpsampleLabel->setStyleSheet("font-size: 14px;");
+    enableUpsampleCheckBox = new QCheckBox("enable_upsample");
+    enableUpsampleCheckBox->setStyleSheet("color: white; font-size: 12px;");
+    enableUpsampleCheckBox->setChecked(true);
+    upsampleLayout->addWidget(enableUpsampleLabel);
+    upsampleLayout->addWidget(enableUpsampleCheckBox);
+
+    enhancePromptLabel->setVisible(false);
+    enhancePromptCheckBox->setVisible(false);
+    enableUpsampleLabel->setVisible(false);
+    enableUpsampleCheckBox->setVisible(false);
 
     paramsLayout->addLayout(resLayout);
     paramsLayout->addLayout(durLayout);
     paramsLayout->addLayout(sizeLayout);
     paramsLayout->addLayout(watermarkLayout);
+    paramsLayout->addLayout(enhanceLayout);
+    paramsLayout->addLayout(upsampleLayout);
     paramsLayout->addStretch();
 
     contentLayout->addLayout(paramsLayout);
@@ -365,8 +427,9 @@ void VideoSingleTab::setupUI()
     scrollArea->setWidget(contentWidget);
     mainLayout->addWidget(scrollArea);
 
-    // 初始化UI状态
-    onModelVariantChanged(0);
+    // 初始化UI状态（默认 VEO3 Variant 1）
+    variantTypeWidget->setVisible(true);
+    onVariantTypeChanged();
 }
 
 void VideoSingleTab::connectSignals()
@@ -388,6 +451,11 @@ void VideoSingleTab::connectSignals()
     connect(resolutionCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &VideoSingleTab::saveSettings);
     connect(watermarkCheckBox, &QCheckBox::checkStateChanged, this, &VideoSingleTab::saveSettings);
     connect(durationCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &VideoSingleTab::saveSettings);
+    connect(enhancePromptCheckBox, &QCheckBox::checkStateChanged, this, &VideoSingleTab::saveSettings);
+    connect(enableUpsampleCheckBox, &QCheckBox::checkStateChanged, this, &VideoSingleTab::saveSettings);
+
+    // 单选按钮切换
+    connect(variantType1Radio, &QRadioButton::toggled, this, &VideoSingleTab::onVariantTypeChanged);
 }
 
 void VideoSingleTab::loadApiKeys()
@@ -457,6 +525,11 @@ void VideoSingleTab::onModelChanged(int index)
         durationLabel->setVisible(false);
         watermarkCheckBox->setVisible(false);
         watermarkLabel->setVisible(false);
+        variantTypeWidget->setVisible(false);
+        enhancePromptCheckBox->setVisible(false);
+        enhancePromptLabel->setVisible(false);
+        enableUpsampleCheckBox->setVisible(false);
+        enableUpsampleLabel->setVisible(false);
 
         // 3. 修改分辨率标签和选项为宽高比
         resolutionLabel->setText("宽高比");
@@ -470,43 +543,140 @@ void VideoSingleTab::onModelChanged(int index)
         sizeLabel->setVisible(true);
         imageUploadHintLabel->setVisible(true);  // 显示垫图提示
 
+    } else if (modelName.contains("VEO3", Qt::CaseInsensitive)) {
+        // VEO3模型：显示单选按钮，默认 Variant 1
+        variantTypeWidget->setVisible(true);
+        variantType1Radio->setChecked(true);
+
+        // 隐藏Grok专用参数
+        sizeCombo->setVisible(false);
+        sizeLabel->setVisible(false);
+        imageUploadHintLabel->setVisible(false);
+
+        // 触发 onVariantTypeChanged 更新变体列表和控件
+        onVariantTypeChanged();
+
     } else {
-        // VEO3模型：恢复VEO3参数
-        // 1. 恢复VEO3模型变体
+        // 其他模型（sora/wan）：恢复VEO3默认参数
         modelVariantCombo->clear();
         modelVariantCombo->addItem("veo_3_1-fast", "veo_3_1-fast");
         modelVariantCombo->addItem("veo_3_1", "veo_3_1");
         modelVariantCombo->addItem("veo_3_1-fast-4K", "veo_3_1-fast-4K");
         modelVariantCombo->addItem("veo_3_1-fast-components-4K", "veo_3_1-fast-components-4K");
-        modelVariantCombo->addItem("veo3.1-fast", "veo3.1-fast");
-        modelVariantCombo->addItem("veo3.1", "veo3.1");
-        modelVariantCombo->addItem("veo3.1-fast-components", "veo3.1-fast-components");
-        modelVariantCombo->addItem("veo3.1-components", "veo3.1-components");
-        modelVariantCombo->addItem("veo3.1-4k", "veo3.1-4k");
-        modelVariantCombo->addItem("veo3-pro-frames", "veo3-pro-frames");
-        modelVariantCombo->addItem("veo3.1-components-4k", "veo3.1-components-4k");
 
-        // 2. 显示VEO3专用参数
         durationCombo->setVisible(true);
         durationLabel->setVisible(true);
         watermarkCheckBox->setVisible(true);
         watermarkLabel->setVisible(true);
+        variantTypeWidget->setVisible(false);
+        enhancePromptCheckBox->setVisible(false);
+        enhancePromptLabel->setVisible(false);
+        enableUpsampleCheckBox->setVisible(false);
+        enableUpsampleLabel->setVisible(false);
 
-        // 3. 恢复分辨率标签和选项
         resolutionLabel->setText("分辨率");
         resolutionCombo->clear();
         resolutionCombo->addItem("1280x720 (横屏)", "1280x720");
         resolutionCombo->addItem("720x1280 (竖屏)", "720x1280");
 
-        // 4. 隐藏Grok专用的size参数
         sizeCombo->setVisible(false);
         sizeLabel->setVisible(false);
-        imageUploadHintLabel->setVisible(false);  // 隐藏垫图提示
+        imageUploadHintLabel->setVisible(false);
     }
 
     // 模型切换时重新加载对应的密钥
     loadApiKeys();
 }
+
+void VideoSingleTab::onVariantTypeChanged()
+{
+    bool isVariant1 = variantType1Radio->isChecked();
+
+    modelVariantCombo->blockSignals(true);
+    modelVariantCombo->clear();
+
+    if (isVariant1) {
+        // Variant 1: OpenAI格式
+        modelVariantCombo->addItem("veo_3_1-fast", "veo_3_1-fast");
+        modelVariantCombo->addItem("veo_3_1", "veo_3_1");
+        modelVariantCombo->addItem("veo_3_1-fast-4K", "veo_3_1-fast-4K");
+        modelVariantCombo->addItem("veo_3_1-fast-components-4K", "veo_3_1-fast-components-4K");
+
+        durationCombo->setVisible(true);
+        durationLabel->setVisible(true);
+        watermarkCheckBox->setVisible(true);
+        watermarkLabel->setVisible(true);
+        enhancePromptCheckBox->setVisible(false);
+        enhancePromptLabel->setVisible(false);
+        enableUpsampleCheckBox->setVisible(false);
+        enableUpsampleLabel->setVisible(false);
+        resolutionLabel->setText("分辨率");
+    } else {
+        // Variant 2: 统一格式
+        modelVariantCombo->addItem("veo3.1-fast", "veo3.1-fast");
+        modelVariantCombo->addItem("veo3.1", "veo3.1");
+        modelVariantCombo->addItem("veo3.1-fast-components", "veo3.1-fast-components");
+        modelVariantCombo->addItem("veo3.1-components", "veo3.1-components");
+        modelVariantCombo->addItem("veo3.1-4k", "veo3.1-4k");
+        modelVariantCombo->addItem("veo3.1-components-4k", "veo3.1-components-4k");
+        modelVariantCombo->addItem("veo3-pro-frames", "veo3-pro-frames");
+        modelVariantCombo->addItem("veo3.1-pro", "veo3.1-pro");
+        modelVariantCombo->addItem("veo3.1-pro-4k", "veo3.1-pro-4k");
+
+        durationCombo->setVisible(false);
+        durationLabel->setVisible(false);
+        watermarkCheckBox->setVisible(false);
+        watermarkLabel->setVisible(false);
+        enhancePromptCheckBox->setVisible(true);
+        enhancePromptLabel->setVisible(true);
+        enableUpsampleCheckBox->setVisible(true);
+        enableUpsampleLabel->setVisible(true);
+        resolutionLabel->setText("宽高比");
+    }
+
+    modelVariantCombo->blockSignals(false);
+
+    // 触发变体变化以更新图片上传UI和分辨率
+    onModelVariantChanged(0);
+}
+
+void VideoSingleTab::uploadMiddleFrameImage()
+{
+    QSettings settings("ChickenAI", "VideoGen");
+    QString lastDir = settings.value("lastImageUploadDir",
+        QStandardPaths::writableLocation(QStandardPaths::PicturesLocation)).toString();
+    if (!QDir(lastDir).exists()) {
+        lastDir = QStandardPaths::writableLocation(QStandardPaths::PicturesLocation);
+    }
+
+    QString fileName = QFileDialog::getOpenFileName(
+        this, "选择图片2（中间帧）", lastDir,
+        "图片文件 (*.png *.jpg *.jpeg *.bmp *.gif)"
+    );
+
+    if (!fileName.isEmpty()) {
+        uploadedMiddleFrameImagePath = fileName;
+
+        QPixmap pixmap(fileName);
+        if (!pixmap.isNull()) {
+            QPixmap scaledPixmap = pixmap.scaled(200, 120, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+            middleFramePreviewLabel->setPixmap(scaledPixmap);
+            middleFramePreviewLabel->setText("");
+        } else {
+            middleFramePreviewLabel->setPixmap(QPixmap());
+            QFileInfo fileInfo(fileName);
+            middleFramePreviewLabel->setText("✓ " + fileInfo.fileName());
+        }
+        middleFramePreviewLabel->setProperty("hasImage", true);
+        middleFramePreviewLabel->style()->unpolish(middleFramePreviewLabel);
+        middleFramePreviewLabel->style()->polish(middleFramePreviewLabel);
+
+        QFileInfo fileInfo(fileName);
+        settings.setValue("lastImageUploadDir", fileInfo.absolutePath());
+        saveSettings();
+    }
+}
+
 
 void VideoSingleTab::uploadImage()
 {
@@ -647,7 +817,9 @@ void VideoSingleTab::onModelVariantChanged(int index)
 {
     QString modelName = modelVariantCombo->currentData().toString();
     updateImageUploadUI(modelName);
-    updateResolutionOptions(modelName.contains("4K") || modelName.contains("4k"));
+    bool is4K = modelName.contains("4K") || modelName.contains("4k");
+    bool isVariant2 = variantType2Radio && variantType2Radio->isChecked();
+    updateResolutionOptions(is4K, isVariant2);
 }
 
 void VideoSingleTab::updateImageUploadUI(const QString &modelName)
@@ -656,32 +828,49 @@ void VideoSingleTab::updateImageUploadUI(const QString &modelName)
     bool isFrames = modelName.contains("frames");
 
     if (isComponents) {
-        // 支持1-3张首帧图片
-        imageLabel->setText("首帧图片（1-3张）:");
-        uploadImageButton->setText("📁 选择首帧图片");
-        endFrameWidget->setVisible(false);
+        // 支持1-3张图片（图片1/图片2/图片3）
+        imageLabel->setText("图片1（首帧，1-3张）:");
+        uploadImageButton->setText("📁 选择图片1");
+        endFrameWidget->setVisible(true);
+        endFrameLabel->setText("图片3（尾帧，可选）:");
+        middleFrameWidget->setVisible(true);
     } else if (isFrames) {
         // 仅支持单张首帧
         imageLabel->setText("首帧图片（单张）:");
         uploadImageButton->setText("📁 选择首帧图片");
         endFrameWidget->setVisible(false);
+        middleFrameWidget->setVisible(false);
     } else {
         // 支持首尾帧
         imageLabel->setText("首帧图片:");
         uploadImageButton->setText("📁 选择首帧图片");
         endFrameWidget->setVisible(true);
+        endFrameLabel->setText("尾帧图片（可选）:");
+        middleFrameWidget->setVisible(false);
     }
 }
 
-void VideoSingleTab::updateResolutionOptions(bool is4K)
+void VideoSingleTab::updateResolutionOptions(bool is4K, bool isVariant2)
 {
     resolutionCombo->clear();
-    if (is4K) {
-        resolutionCombo->addItem("横屏 16:9 (3840x2160)", "3840x2160");
-        resolutionCombo->addItem("竖屏 9:16 (2160x3840)", "2160x3840");
+    if (isVariant2) {
+        // Variant 2: 宽高比模式
+        if (is4K) {
+            resolutionCombo->addItem("横屏 16:9 (3840x2160)", "16:9");
+            resolutionCombo->addItem("竖屏 9:16 (2160x3840)", "9:16");
+        } else {
+            resolutionCombo->addItem("横屏 16:9 (1280x720)", "16:9");
+            resolutionCombo->addItem("竖屏 9:16 (720x1280)", "9:16");
+        }
     } else {
-        resolutionCombo->addItem("横屏 16:9 (1280x720)", "1280x720");
-        resolutionCombo->addItem("竖屏 9:16 (720x1280)", "720x1280");
+        // Variant 1 / Grok: 像素值模式
+        if (is4K) {
+            resolutionCombo->addItem("横屏 16:9 (3840x2160)", "3840x2160");
+            resolutionCombo->addItem("竖屏 9:16 (2160x3840)", "2160x3840");
+        } else {
+            resolutionCombo->addItem("横屏 16:9 (1280x720)", "1280x720");
+            resolutionCombo->addItem("竖屏 9:16 (720x1280)", "720x1280");
+        }
     }
 }
 
@@ -714,7 +903,7 @@ void VideoSingleTab::generateVideo()
     QString server = serverCombo->currentData().toString();
     QString resolution = resolutionCombo->currentData().toString();
     QString duration = durationCombo->currentData().toString();
-    bool watermark = watermarkCheckBox->isChecked();
+    bool watermark = watermarkCheckBox->isChecked();  // "保留水印"勾选=加水印
     int keyId = apiKeyCombo->currentData().toInt();
 
     // 获取 API Key
@@ -799,8 +988,43 @@ void VideoSingleTab::generateVideo()
             aspectRatio,  // aspectRatio
             activeImgbbKey.apiKey  // imgbbApiKey
         );
+    } else if (variantType2Radio && variantType2Radio->isChecked()) {
+        // VEO3 Variant 2 统一格式：校验imgbb密钥，上传图片后 JSON POST
+        ImgbbKey activeImgbbKey = DBManager::instance()->getActiveImgbbKey();
+        if (activeImgbbKey.apiKey.isEmpty()) {
+            QMessageBox::warning(this, "提示", "请先到设置页应用临时图床密钥");
+            return;
+        }
+
+        // 合并所有图片路径：首帧 + 中间帧 + 尾帧
+        QStringList allImagePaths = uploadedImagePaths;
+        if (!uploadedMiddleFrameImagePath.isEmpty()) {
+            allImagePaths.append(uploadedMiddleFrameImagePath);
+        }
+        if (!uploadedEndFrameImagePath.isEmpty()) {
+            allImagePaths.append(uploadedEndFrameImagePath);
+        }
+
+        bool enhancePrompt = enhancePromptCheckBox->isChecked();
+        bool enableUpsample = enableUpsampleCheckBox->isChecked();
+
+        veo3API->createVideo(
+            apiKeyData.apiKey,
+            server,
+            model,  // modelName (不含 "Grok"，不以 "veo_" 开头)
+            modelVariant,
+            prompt,
+            allImagePaths,
+            "",  // size (Variant 2 不需要)
+            "",  // seconds (Variant 2 不需要)
+            false,  // watermark (Variant 2 不需要)
+            resolution,  // aspectRatio
+            activeImgbbKey.apiKey,
+            enhancePrompt,
+            enableUpsample
+        );
     } else {
-        // VEO3模型：传递原有参数
+        // VEO3 Variant 1 OpenAI格式：传递原有参数
         veo3API->createVideo(
             apiKeyData.apiKey,
             server,
@@ -811,7 +1035,7 @@ void VideoSingleTab::generateVideo()
             resolution,
             duration,
             watermark,
-            ""  // aspectRatio (VEO3不需要)
+            ""  // aspectRatio (VEO3 Variant 1 不需要)
         );
     }
 
@@ -837,7 +1061,8 @@ void VideoSingleTab::onVideoCreated(const QString &taskId, const QString &status
     QString server = serverCombo->currentData().toString();
 
     // 启动轮询
-    TaskPollManager::getInstance()->startPolling(taskId, "video_single", apiKeyData.apiKey, server);
+    TaskPollManager::getInstance()->startPolling(taskId, "video_single", apiKeyData.apiKey, server,
+                                                  modelCombo->currentText());
 
     // 保存当前参数哈希和设置
     lastSubmittedParamsHash = calculateParamsHash();
@@ -901,7 +1126,13 @@ void VideoSingleTab::saveSettings()
     settings.setValue("watermark", watermarkCheckBox->isChecked());
     settings.setValue("imagePaths", uploadedImagePaths);
     settings.setValue("endFrameImagePath", uploadedEndFrameImagePath);
+    settings.setValue("middleFrameImagePath", uploadedMiddleFrameImagePath);
     settings.setValue("lastSubmittedHash", lastSubmittedParamsHash);
+
+    // 保存 Variant 类型和 Variant 2 专用参数
+    settings.setValue("variantType", variantType1Radio->isChecked() ? 1 : 2);
+    settings.setValue("enhancePrompt", enhancePromptCheckBox->isChecked());
+    settings.setValue("enableUpsample", enableUpsampleCheckBox->isChecked());
 
     settings.endGroup();
     settings.sync();  // 强制立即写入磁盘
@@ -1050,6 +1281,10 @@ void VideoSingleTab::loadSettings()
     watermarkCheckBox->blockSignals(true);
     durationCombo->blockSignals(true);
     sizeCombo->blockSignals(true);
+    variantType1Radio->blockSignals(true);
+    variantType2Radio->blockSignals(true);
+    enhancePromptCheckBox->blockSignals(true);
+    enableUpsampleCheckBox->blockSignals(true);
 
     // 加载提示词
     QString loadedPrompt = settings.value("prompt", "").toString();
@@ -1066,6 +1301,22 @@ void VideoSingleTab::loadSettings()
 
     // 手动触发 onModelChanged 以更新 UI 状态（因为信号被阻塞）
     onModelChanged(modelCombo->currentIndex());
+
+    // 恢复 Variant 类型（VEO3模型时）
+    if (savedModelType.contains("VEO3", Qt::CaseInsensitive)) {
+        int variantType = settings.value("variantType", 1).toInt();
+        if (variantType == 2) {
+            variantType2Radio->setChecked(true);
+        } else {
+            variantType1Radio->setChecked(true);
+        }
+        // 手动触发以更新变体列表
+        onVariantTypeChanged();
+    }
+
+    // 恢复 enhance_prompt / enable_upsample
+    enhancePromptCheckBox->setChecked(settings.value("enhancePrompt", true).toBool());
+    enableUpsampleCheckBox->setChecked(settings.value("enableUpsample", true).toBool());
 
     // 恢复模型变体（值匹配）
     QString savedVariant = settings.value("modelVariant", "").toString();
@@ -1167,6 +1418,26 @@ void VideoSingleTab::loadSettings()
         endFramePreviewLabel->style()->polish(endFramePreviewLabel);
     }
 
+    // 加载中间帧图片路径
+    QString middleFramePath = settings.value("middleFrameImagePath").toString();
+    if (!middleFramePath.isEmpty() && QFile::exists(middleFramePath)) {
+        uploadedMiddleFrameImagePath = middleFramePath;
+
+        QPixmap pixmap(middleFramePath);
+        if (!pixmap.isNull()) {
+            QPixmap scaledPixmap = pixmap.scaled(200, 120, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+            middleFramePreviewLabel->setPixmap(scaledPixmap);
+            middleFramePreviewLabel->setText("");
+        } else {
+            middleFramePreviewLabel->setPixmap(QPixmap());
+            QFileInfo fileInfo(middleFramePath);
+            middleFramePreviewLabel->setText("✓ " + fileInfo.fileName());
+        }
+        middleFramePreviewLabel->setProperty("hasImage", true);
+        middleFramePreviewLabel->style()->unpolish(middleFramePreviewLabel);
+        middleFramePreviewLabel->style()->polish(middleFramePreviewLabel);
+    }
+
     lastSubmittedParamsHash = settings.value("lastSubmittedHash", "").toString();
 
     settings.endGroup();
@@ -1180,6 +1451,10 @@ void VideoSingleTab::loadSettings()
     resolutionCombo->blockSignals(false);
     watermarkCheckBox->blockSignals(false);
     durationCombo->blockSignals(false);
+    variantType1Radio->blockSignals(false);
+    variantType2Radio->blockSignals(false);
+    enhancePromptCheckBox->blockSignals(false);
+    enableUpsampleCheckBox->blockSignals(false);
 
     // 调试日志 - 验证UI状态
     qDebug() << "[VideoSingleTab] After loading, UI state:"
@@ -1845,6 +2120,15 @@ VideoSingleHistoryTab::VideoSingleHistoryTab(QWidget *parent)
     // 连接TaskPollManager的状态更新信号
     connect(TaskPollManager::getInstance(), &TaskPollManager::taskStatusUpdated,
             this, &VideoSingleHistoryTab::onTaskStatusUpdated);
+
+    // tooltip 3秒自动消失计时器
+    tooltipHideTimer = new QTimer(this);
+    tooltipHideTimer->setSingleShot(true);
+    tooltipHideTimer->setInterval(3000);
+    connect(tooltipHideTimer, &QTimer::timeout, []() { QToolTip::hideText(); });
+
+    // 安装事件过滤器，监听鼠标离开事件
+    historyTable->installEventFilter(this);
 }
 
 void VideoSingleHistoryTab::setupUI()
@@ -1911,6 +2195,21 @@ void VideoSingleHistoryTab::showEvent(QShowEvent *event)
     QWidget::showEvent(event);
     // tab显示时自动刷新历史记录
     refreshHistory();
+}
+
+bool VideoSingleHistoryTab::eventFilter(QObject *obj, QEvent *event)
+{
+    if (obj == historyTable) {
+        if (event->type() == QEvent::ToolTip) {
+            // 取消隐藏计时器（鼠标重新悬停）
+            tooltipHideTimer->stop();
+            // 让Qt正常处理tooltip显示
+        } else if (event->type() == QEvent::Leave) {
+            // 鼠标离开表格，3秒后隐藏tooltip
+            tooltipHideTimer->start();
+        }
+    }
+    return QWidget::eventFilter(obj, event);
 }
 
 void VideoSingleHistoryTab::loadApiKeys()
@@ -1986,6 +2285,7 @@ void VideoSingleHistoryTab::setupListView()
     historyTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
     historyTable->verticalHeader()->setVisible(false);
     historyTable->verticalHeader()->setDefaultSectionSize(90);  // 增加行高
+    historyTable->setMouseTracking(true);  // 启用鼠标追踪，触发 ToolTip 事件
 
     // 启用右键菜单
     historyTable->setContextMenuPolicy(Qt::CustomContextMenu);
@@ -2080,7 +2380,11 @@ void VideoSingleHistoryTab::loadHistory(int offset, int limit)
             else if (task.status == "failed") statusText = "❌ 失败";
             else if (task.status == "timeout") statusText = "⏱️ 超时";
             else statusText = task.status;  // 未知状态直接显示原始值
-            historyTable->setItem(row, 4, new QTableWidgetItem(statusText));
+            QTableWidgetItem *statusItem = new QTableWidgetItem(statusText);
+            if (!task.errorMessage.isEmpty()) {
+                statusItem->setToolTip(task.errorMessage);
+            }
+            historyTable->setItem(row, 4, statusItem);
 
             // 进度
             historyTable->setItem(row, 5, new QTableWidgetItem(QString::number(task.progress) + "%"));

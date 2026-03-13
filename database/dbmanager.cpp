@@ -469,7 +469,8 @@ QList<VideoTask> DBManager::getTasksByType(const QString& taskType, int offset, 
     query.prepare(R"(
         SELECT id, task_id, task_type, prompt, model_variant, status, progress, video_url, video_path,
                thumbnail_path, download_status, created_at, completed_at,
-               model_name, api_key_name, server_url, resolution, duration, watermark, image_paths, end_frame_image_path
+               model_name, api_key_name, server_url, resolution, duration, watermark, image_paths, end_frame_image_path,
+               error_message
         FROM video_history
         WHERE task_type = :task_type
         ORDER BY created_at DESC
@@ -508,6 +509,7 @@ QList<VideoTask> DBManager::getTasksByType(const QString& taskType, int offset, 
         task.watermark = query.value(18).toInt() == 1;
         task.imagePaths = query.value(19).toString();
         task.endFrameImagePath = query.value(20).toString();
+        task.errorMessage = query.value(21).toString();
         tasks.append(task);
     }
 
@@ -561,7 +563,8 @@ VideoTask DBManager::getTaskById(const QString& taskId)
     query.prepare(R"(
         SELECT id, task_id, task_type, prompt, model_variant, status, progress, video_url, video_path,
                thumbnail_path, download_status, created_at, completed_at,
-               model_name, api_key_name, server_url, resolution, duration, watermark, image_paths, end_frame_image_path
+               model_name, api_key_name, server_url, resolution, duration, watermark, image_paths, end_frame_image_path,
+               error_message
         FROM video_history
         WHERE task_id = :task_id
     )");
@@ -590,6 +593,7 @@ VideoTask DBManager::getTaskById(const QString& taskId)
         task.watermark = query.value(18).toInt() == 1;
         task.imagePaths = query.value(19).toString();
         task.endFrameImagePath = query.value(20).toString();
+        task.errorMessage = query.value(21).toString();
     }
 
     return task;

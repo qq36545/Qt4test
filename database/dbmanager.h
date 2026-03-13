@@ -61,6 +61,7 @@ struct VideoTask {
     QString endFrameImagePath; // 尾帧图片路径
     QString aspectRatio;      // 宽高比（Grok专用，如 "2:3", "3:2", "1:1"）
     QString size;             // 分辨率规格（Grok专用，如 "720P", "1080P"）
+    QString errorMessage;     // 失败原因（API返回的 message 字段）
 };
 
 class DBManager : public QObject
