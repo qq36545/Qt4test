@@ -39,6 +39,139 @@
 #include <QApplication>
 #include <QToolTip>
 
+namespace {
+
+bool hasLocalVideoFile(const VideoTask& task)
+{
+    return !task.videoPath.isEmpty() && QFile::exists(task.videoPath);
+}
+
+enum class VideoResolvedState {
+    CompletedLocal,
+    Failed,
+    Timeout,
+    Downloading,
+    Waiting,
+    Processing,
+    PendingDownload,
+    DownloadFailed,
+    Unknown
+};
+
+struct VideoTaskDisplayState {
+    VideoResolvedState resolvedState;
+    QString statusText;
+    QString statusIcon;
+    bool hasLocalFile;
+    bool canPlay;
+    bool canDelete;
+    bool canRefresh;
+    bool canBrowse;
+    bool canDownload;
+};
+
+VideoTaskDisplayState resolveVideoTaskDisplayState(const VideoTask& task)
+{
+    VideoTaskDisplayState displayState;
+    displayState.hasLocalFile = hasLocalVideoFile(task);
+    displayState.canDownload = false;
+    displayState.resolvedState = VideoResolvedState::Unknown;
+
+    if (displayState.hasLocalFile) {
+        displayState.resolvedState = VideoResolvedState::CompletedLocal;
+        displayState.statusText = "✅ 已完成";
+        displayState.statusIcon = "✅";
+    } else if (task.status == "failed") {
+        displayState.resolvedState = VideoResolvedState::Failed;
+        displayState.statusText = "❌ 失败";
+        displayState.statusIcon = "❌";
+    } else if (task.status == "timeout") {
+        displayState.resolvedState = VideoResolvedState::Timeout;
+        displayState.statusText = "⏱️ 超时";
+        displayState.statusIcon = "⏱️";
+    } else if (task.downloadStatus == "downloading") {
+        displayState.resolvedState = VideoResolvedState::Downloading;
+        displayState.statusText = "⬇️ 下载中";
+        displayState.statusIcon = "⬇️";
+    } else if (task.status == "queued" || task.status == "pending") {
+        displayState.resolvedState = VideoResolvedState::Waiting;
+        displayState.statusText = "⏳ 等待中";
+        displayState.statusIcon = "⏳";
+    } else if (task.status == "processing" || task.status == "video_generating") {
+        displayState.resolvedState = VideoResolvedState::Processing;
+        displayState.statusText = "🔄 处理中";
+        displayState.statusIcon = "🔄";
+    } else if (task.status == "completed") {
+        if (task.downloadStatus == "failed") {
+            displayState.resolvedState = VideoResolvedState::DownloadFailed;
+            displayState.statusText = "⚠️ 下载失败";
+            displayState.statusIcon = "⚠️";
+            displayState.canDownload = !task.videoUrl.isEmpty();
+        } else if (!task.videoUrl.isEmpty()) {
+            displayState.resolvedState = VideoResolvedState::PendingDownload;
+            displayState.statusText = "📥 已生成待下载";
+            displayState.statusIcon = "📥";
+            displayState.canDownload = true;
+        } else {
+            displayState.resolvedState = VideoResolvedState::Processing;
+            displayState.statusText = "🔄 处理中";
+            displayState.statusIcon = "🔄";
+        }
+    } else {
+        displayState.resolvedState = VideoResolvedState::Unknown;
+        displayState.statusText = task.status;
+        displayState.statusIcon = "❔";
+    }
+
+    displayState.canPlay = displayState.hasLocalFile || displayState.canDownload;
+    displayState.canBrowse = displayState.hasLocalFile;
+
+    switch (displayState.resolvedState) {
+    case VideoResolvedState::Waiting:
+    case VideoResolvedState::Processing:
+    case VideoResolvedState::Downloading:
+        // 进行中的状态禁止删除，避免用户误删仍在变更的任务
+        displayState.canDelete = false;
+        break;
+    default:
+        // Unknown 归入可删除：未知状态视为非进行中，优先保证用户可自行清理异常记录
+        displayState.canDelete = true;
+        break;
+    }
+
+    // 历史记录允许用户随时主动重查状态（包含已完成）
+    displayState.canRefresh = true;
+
+    return displayState;
+}
+
+QString unresolvedVideoStateMessage(const VideoTask& task, const VideoTaskDisplayState& displayState)
+{
+    Q_UNUSED(task);
+
+    if (displayState.hasLocalFile) {
+        return QString();
+    }
+    if (displayState.canDownload) {
+        return QString();
+    }
+
+    switch (displayState.resolvedState) {
+    case VideoResolvedState::Failed:
+        return "任务已失败，无法查看视频。";
+    case VideoResolvedState::Timeout:
+        return "任务已超时，当前没有可查看的视频。";
+    case VideoResolvedState::Downloading:
+        return "视频正在下载中，请稍后再试。";
+    case VideoResolvedState::Waiting:
+        return "视频仍在等待处理，请稍后再试。";
+    default:
+        return "视频尚未生成完成，请稍后再试。";
+    }
+}
+
+} // namespace
+
 // VideoGenWidget 实现
 VideoGenWidget::VideoGenWidget(QWidget *parent)
     : QWidget(parent)
@@ -642,6 +775,14 @@ void VideoSingleTab::onVariantTypeChanged()
 
 void VideoSingleTab::uploadMiddleFrameImage()
 {
+    // 如果已有图片，弹出确认对话框
+    if (!uploadedMiddleFrameImagePath.isEmpty()) {
+        int ret = QMessageBox::question(this, "重新选择图片",
+            "当前已有图片，是否重新选择？",
+            QMessageBox::Yes | QMessageBox::No);
+        if (ret != QMessageBox::Yes) return;
+    }
+
     QSettings settings("ChickenAI", "VideoGen");
     QString lastDir = settings.value("lastImageUploadDir",
         QStandardPaths::writableLocation(QStandardPaths::PicturesLocation)).toString();
@@ -654,27 +795,30 @@ void VideoSingleTab::uploadMiddleFrameImage()
         "图片文件 (*.png *.jpg *.jpeg *.bmp *.gif)"
     );
 
-    if (!fileName.isEmpty()) {
-        uploadedMiddleFrameImagePath = fileName;
-
-        QPixmap pixmap(fileName);
-        if (!pixmap.isNull()) {
-            QPixmap scaledPixmap = pixmap.scaled(200, 120, Qt::KeepAspectRatio, Qt::SmoothTransformation);
-            middleFramePreviewLabel->setPixmap(scaledPixmap);
-            middleFramePreviewLabel->setText("");
-        } else {
-            middleFramePreviewLabel->setPixmap(QPixmap());
-            QFileInfo fileInfo(fileName);
-            middleFramePreviewLabel->setText("✓ " + fileInfo.fileName());
+    if (fileName.isEmpty()) {
+        if (uploadedMiddleFrameImagePath.isEmpty()) {
+            QMessageBox::warning(this, "提示", "没有选择图片");
         }
-        middleFramePreviewLabel->setProperty("hasImage", true);
-        middleFramePreviewLabel->style()->unpolish(middleFramePreviewLabel);
-        middleFramePreviewLabel->style()->polish(middleFramePreviewLabel);
-
-        QFileInfo fileInfo(fileName);
-        settings.setValue("lastImageUploadDir", fileInfo.absolutePath());
-        saveSettings();
+        return;
     }
+
+    QPixmap pixmap(fileName);
+    if (pixmap.isNull()) {
+        QMessageBox::warning(this, "提示", "选择的文件不是图片格式");
+        return;
+    }
+
+    uploadedMiddleFrameImagePath = fileName;
+    QPixmap scaledPixmap = pixmap.scaled(200, 120, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+    middleFramePreviewLabel->setPixmap(scaledPixmap);
+    middleFramePreviewLabel->setText("");
+    middleFramePreviewLabel->setProperty("hasImage", true);
+    middleFramePreviewLabel->style()->unpolish(middleFramePreviewLabel);
+    middleFramePreviewLabel->style()->polish(middleFramePreviewLabel);
+
+    QFileInfo fileInfo(fileName);
+    settings.setValue("lastImageUploadDir", fileInfo.absolutePath());
+    saveSettings();
 }
 
 
@@ -682,50 +826,50 @@ void VideoSingleTab::uploadImage()
 {
     QString modelName = modelVariantCombo->currentData().toString();
     bool isComponents = modelName.contains("components");
+    bool isFrames = modelName.contains("frames");
+
+    // 非 components 模式（单张），已有图片时确认替换后清空，fall-through 到公共代码
+    if (!isComponents && !uploadedImagePaths.isEmpty()) {
+        int ret = QMessageBox::question(this, "重新选择图片",
+            isFrames ? "当前已有首帧图片，是否重新选择？" : "当前已有图片，是否重新选择？",
+            QMessageBox::Yes | QMessageBox::No);
+        if (ret != QMessageBox::Yes) return;
+        uploadedImagePaths.clear();
+    }
 
     if (isComponents && uploadedImagePaths.size() >= 3) {
         QMessageBox::warning(this, "提示", "components 模型最多支持 3 张图片");
         return;
     }
 
-    bool isFrames = modelName.contains("frames");
-    if (isFrames && uploadedImagePaths.size() >= 1) {
-        QMessageBox::warning(this, "提示", "frames 模型只支持单张图片");
-        return;
-    }
-
-    if (!isComponents && !isFrames && uploadedImagePaths.size() >= 1) {
-        QMessageBox::warning(this, "提示", "当前模型只支持单张首帧图片");
-        return;
-    }
-
-    // 读取上次图片上传路径
+    // 公共代码：打开对话框、验证、append、保存
     QSettings settings("ChickenAI", "VideoGen");
     QString lastDir = settings.value("lastImageUploadDir", QStandardPaths::writableLocation(QStandardPaths::PicturesLocation)).toString();
-
-    // 验证路径是否存在
     if (!QDir(lastDir).exists()) {
         lastDir = QStandardPaths::writableLocation(QStandardPaths::PicturesLocation);
     }
 
-    QString fileName = QFileDialog::getOpenFileName(
-        this,
-        "选择首帧图片",
-        lastDir,
-        "图片文件 (*.png *.jpg *.jpeg *.bmp *.gif)"
-    );
+    QString fileName = QFileDialog::getOpenFileName(this, "选择首帧图片", lastDir,
+        "图片文件 (*.png *.jpg *.jpeg *.bmp *.gif)");
 
-    if (!fileName.isEmpty()) {
-        uploadedImagePaths.append(fileName);
-        updateImagePreview();
-
-        // 保存图片所在目录
-        QFileInfo fileInfo(fileName);
-        settings.setValue("lastImageUploadDir", fileInfo.absolutePath());
-
-        // 保存图片路径到设置
-        saveSettings();
+    if (fileName.isEmpty()) {
+        if (uploadedImagePaths.isEmpty()) {
+            QMessageBox::warning(this, "提示", "没有选择图片");
+        }
+        return;
     }
+
+    QPixmap pixmap(fileName);
+    if (pixmap.isNull()) {
+        QMessageBox::warning(this, "提示", "选择的文件不是图片格式");
+        return;
+    }
+
+    uploadedImagePaths.append(fileName);
+    updateImagePreview();
+    QFileInfo fileInfo(fileName);
+    settings.setValue("lastImageUploadDir", fileInfo.absolutePath());
+    saveSettings();
 }
 
 void VideoSingleTab::removeImage(int index)
@@ -768,49 +912,50 @@ void VideoSingleTab::updateImagePreview()
 
 void VideoSingleTab::uploadEndFrameImage()
 {
+    // 如果已有图片，弹出确认对话框
+    if (!uploadedEndFrameImagePath.isEmpty()) {
+        int ret = QMessageBox::question(this, "重新选择图片",
+            "当前已有尾帧图片，是否重新选择？",
+            QMessageBox::Yes | QMessageBox::No);
+        if (ret != QMessageBox::Yes) return;
+    }
+
     // 读取上次图片上传路径（与首帧共享）
     QSettings settings("ChickenAI", "VideoGen");
     QString lastDir = settings.value("lastImageUploadDir", QStandardPaths::writableLocation(QStandardPaths::PicturesLocation)).toString();
-
-    // 验证路径是否存在
     if (!QDir(lastDir).exists()) {
         lastDir = QStandardPaths::writableLocation(QStandardPaths::PicturesLocation);
     }
 
     QString fileName = QFileDialog::getOpenFileName(
-        this,
-        "选择尾帧图片",
-        lastDir,
+        this, "选择尾帧图片", lastDir,
         "图片文件 (*.png *.jpg *.jpeg *.bmp *.gif)"
     );
 
-    if (!fileName.isEmpty()) {
-        uploadedEndFrameImagePath = fileName;
-
-        // 显示缩略图
-        QPixmap pixmap(fileName);
-        if (!pixmap.isNull()) {
-            QPixmap scaledPixmap = pixmap.scaled(200, 120, Qt::KeepAspectRatio, Qt::SmoothTransformation);
-            endFramePreviewLabel->setPixmap(scaledPixmap);
-            endFramePreviewLabel->setText("");
-        } else {
-            endFramePreviewLabel->setPixmap(QPixmap());
-            QFileInfo fileInfo(fileName);
-            endFramePreviewLabel->setText("✓ " + fileInfo.fileName());
+    if (fileName.isEmpty()) {
+        if (uploadedEndFrameImagePath.isEmpty()) {
+            QMessageBox::warning(this, "提示", "没有选择图片");
         }
-
-        endFramePreviewLabel->setProperty("hasImage", true);
-        // 强制刷新样式
-        endFramePreviewLabel->style()->unpolish(endFramePreviewLabel);
-        endFramePreviewLabel->style()->polish(endFramePreviewLabel);
-
-        // 保存图片所在目录
-        QFileInfo fileInfo(fileName);
-        settings.setValue("lastImageUploadDir", fileInfo.absolutePath());
-
-        // 保存图片路径到设置
-        saveSettings();
+        return;
     }
+
+    QPixmap pixmap(fileName);
+    if (pixmap.isNull()) {
+        QMessageBox::warning(this, "提示", "选择的文件不是图片格式");
+        return;
+    }
+
+    uploadedEndFrameImagePath = fileName;
+    QPixmap scaledPixmap = pixmap.scaled(200, 120, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+    endFramePreviewLabel->setPixmap(scaledPixmap);
+    endFramePreviewLabel->setText("");
+    endFramePreviewLabel->setProperty("hasImage", true);
+    endFramePreviewLabel->style()->unpolish(endFramePreviewLabel);
+    endFramePreviewLabel->style()->polish(endFramePreviewLabel);
+
+    QFileInfo fileInfo(fileName);
+    settings.setValue("lastImageUploadDir", fileInfo.absolutePath());
+    saveSettings();
 }
 
 void VideoSingleTab::onModelVariantChanged(int index)
@@ -958,9 +1103,8 @@ void VideoSingleTab::generateVideo()
 
     currentTaskId = tempTaskId;
 
-    // 在预览区域显示提交状态，避免阻塞式弹窗
-    previewLabel->setText("⏳ 正在提交视频生成任务...\n\n请稍候，任务创建成功后会自动更新状态。");
-    previewLabel->setStyleSheet("color: #0066cc; font-size: 14px;");
+    // 非阻塞提示：API 调用中
+    previewLabel->setText("⏳ 正在提交视频生成任务...");
 
     // 根据模型类型调用不同的API
     if (model.contains("Grok", Qt::CaseInsensitive)) {
@@ -1024,14 +1168,18 @@ void VideoSingleTab::generateVideo()
             enableUpsample
         );
     } else {
-        // VEO3 Variant 1 OpenAI格式：传递原有参数
+        // VEO3 Variant 1 OpenAI格式：合并首帧+尾帧图片路径
+        QStringList allImagePaths = uploadedImagePaths;
+        if (!uploadedEndFrameImagePath.isEmpty()) {
+            allImagePaths.append(uploadedEndFrameImagePath);
+        }
         veo3API->createVideo(
             apiKeyData.apiKey,
             server,
             model,  // modelName
             modelVariant,
             prompt,
-            uploadedImagePaths,
+            allImagePaths,
             resolution,
             duration,
             watermark,
@@ -1069,13 +1217,12 @@ void VideoSingleTab::onVideoCreated(const QString &taskId, const QString &status
     parametersModified = false;
     saveSettings();
 
-    // 显示提示
-    QMessageBox::information(this, "任务已创建",
-        QString("视频生成任务已创建！\n\n"
-                "任务 ID: %1\n\n"
-                "生成结果请在【生成历史记录】标签页查看。\n"
-                "系统将自动轮询任务状态并下载完成的视频。")
-        .arg(taskId));
+    // API 成功回调后弹窗，逻辑一致
+    QMessageBox::information(this, "任务已提交",
+        "视频生成任务已提交！\n\n"
+        "请前往【生成历史记录】标签页查看任务状态。\n"
+        "系统将自动轮询任务状态并下载完成的视频。");
+    previewLabel->setText("💡 生成结果将在【生成历史记录】");
 
     // 不清空输入，保留参数供用户继续使用
     // 参数已通过 saveSettings() 自动保存
@@ -2340,6 +2487,7 @@ void VideoSingleHistoryTab::loadHistory(int offset, int limit)
 
         int row = 0;
         for (const VideoTask& task : tasks) {
+            const VideoTaskDisplayState displayState = resolveVideoTaskDisplayState(task);
             historyTable->insertRow(row);
 
             // 勾选框
@@ -2349,10 +2497,9 @@ void VideoSingleHistoryTab::loadHistory(int offset, int limit)
             checkBoxLayout->setAlignment(Qt::AlignCenter);
             QCheckBox *checkBox = new QCheckBox();
             checkBox->setProperty("taskId", task.taskId);
-            // 处理中的任务禁用勾选框
-            if (task.status == "queued" || task.status == "pending" || task.status == "processing") {
+            if (!displayState.canDelete) {
                 checkBox->setEnabled(false);
-                checkBox->setToolTip("处理中的任务不能删除");
+                checkBox->setToolTip("当前状态不可删除");
             }
             connect(checkBox, &QCheckBox::checkStateChanged, this, &VideoSingleHistoryTab::onCheckBoxStateChanged);
             checkBoxLayout->addWidget(checkBox);
@@ -2372,15 +2519,7 @@ void VideoSingleHistoryTab::loadHistory(int offset, int limit)
             historyTable->setItem(row, 3, promptItem);
 
             // 状态
-            QString statusText;
-            if (task.status == "queued") statusText = "📋 排队中";
-            else if (task.status == "pending") statusText = "⏳ 等待中";
-            else if (task.status == "processing") statusText = "🔄 处理中";
-            else if (task.status == "completed") statusText = "✅ 已完成";
-            else if (task.status == "failed") statusText = "❌ 失败";
-            else if (task.status == "timeout") statusText = "⏱️ 超时";
-            else statusText = task.status;  // 未知状态直接显示原始值
-            QTableWidgetItem *statusItem = new QTableWidgetItem(statusText);
+            QTableWidgetItem *statusItem = new QTableWidgetItem(displayState.statusText);
             if (!task.errorMessage.isEmpty()) {
                 statusItem->setToolTip(task.errorMessage);
             }
@@ -2411,6 +2550,19 @@ void VideoSingleHistoryTab::loadHistory(int offset, int limit)
             browseBtn->setMaximumWidth(60);
             refreshBtn->setMaximumWidth(60);
             regenerateBtn->setMaximumWidth(80);
+
+            viewBtn->setEnabled(displayState.canPlay);
+            if (!displayState.canPlay) {
+                viewBtn->setToolTip(unresolvedVideoStateMessage(task, displayState));
+            }
+            browseBtn->setEnabled(displayState.canBrowse);
+            if (!displayState.canBrowse) {
+                browseBtn->setToolTip("本地视频不可用");
+            }
+            refreshBtn->setEnabled(displayState.canRefresh);
+            if (!displayState.canRefresh) {
+                refreshBtn->setToolTip("当前状态无需刷新");
+            }
 
             connect(viewBtn, &QPushButton::clicked, [this, task]() {
                 onViewVideo(task.taskId);
@@ -2457,6 +2609,7 @@ void VideoSingleHistoryTab::loadHistory(int offset, int limit)
         int colsPerRow = 4;  // 每行 4 个缩略图
 
         for (const VideoTask& task : tasks) {
+            const VideoTaskDisplayState displayState = resolveVideoTaskDisplayState(task);
             // 创建缩略图卡片
             QWidget* card = new QWidget();
             card->setFixedSize(200, 250);
@@ -2480,12 +2633,8 @@ void VideoSingleHistoryTab::loadHistory(int offset, int limit)
             }
 
             // 状态图标
-            QLabel* statusLabel = new QLabel();
-            if (task.status == "completed") statusLabel->setText("✅");
-            else if (task.status == "processing") statusLabel->setText("🔄");
-            else if (task.status == "pending") statusLabel->setText("⏳");
-            else if (task.status == "failed") statusLabel->setText("❌");
-            else if (task.status == "timeout") statusLabel->setText("⏱️");
+            QLabel* statusLabel = new QLabel(displayState.statusIcon);
+            statusLabel->setToolTip(displayState.statusText);
             statusLabel->setStyleSheet("font-size: 20px;");
 
             // 提示词摘要
@@ -2501,6 +2650,15 @@ void VideoSingleHistoryTab::loadHistory(int offset, int limit)
             QPushButton* browseBtn = new QPushButton("浏览");
             viewBtn->setMaximumWidth(70);
             browseBtn->setMaximumWidth(70);
+
+            viewBtn->setEnabled(displayState.canPlay);
+            if (!displayState.canPlay) {
+                viewBtn->setToolTip(unresolvedVideoStateMessage(task, displayState));
+            }
+            browseBtn->setEnabled(displayState.canBrowse);
+            if (!displayState.canBrowse) {
+                browseBtn->setToolTip("本地视频不可用");
+            }
 
             connect(viewBtn, &QPushButton::clicked, [this, task]() {
                 onViewVideo(task.taskId);
@@ -2560,27 +2718,47 @@ void VideoSingleHistoryTab::onViewVideo(const QString& taskId)
         return;
     }
 
-    // 检查视频是否已下载
-    if (task.videoPath.isEmpty() || !QFile::exists(task.videoPath)) {
-        // 视频未下载，尝试下载
-        if (task.videoUrl.isEmpty()) {
-            QMessageBox::warning(this, "提示", "视频尚未生成完成，请稍后再试");
-            return;
-        }
+    const VideoTaskDisplayState displayState = resolveVideoTaskDisplayState(task);
 
+    // 本地文件可用，直接打开
+    if (displayState.hasLocalFile) {
+        QDesktopServices::openUrl(QUrl::fromLocalFile(task.videoPath));
+        return;
+    }
+
+    // 已生成待下载 / 下载失败：触发下载
+    if (displayState.canDownload) {
         QMessageBox::StandardButton reply = QMessageBox::question(this, "下载视频",
             "视频尚未下载，是否立即下载？",
             QMessageBox::Yes | QMessageBox::No);
 
-        if (reply == QMessageBox::Yes) {
-            // TODO: 触发下载
-            QMessageBox::information(this, "提示", "下载功能待实现");
+        if (reply != QMessageBox::Yes) {
+            return;
         }
+
+        // 从 apiKeyName 查出实际 key 值
+        QString apiKey;
+        const auto allKeys = DBManager::instance()->getAllApiKeys();
+        for (const auto& k : allKeys) {
+            if (k.name == task.apiKeyName) {
+                apiKey = k.apiKey;
+                break;
+            }
+        }
+        if (apiKey.isEmpty()) {
+            QMessageBox::warning(this, "提示",
+                QString("未找到密钥 \"%1\"，请在设置中确认密钥是否存在。").arg(task.apiKeyName));
+            return;
+        }
+
+        TaskPollManager::getInstance()->triggerDownload(
+            task.taskId, task.videoUrl, apiKey, task.serverUrl, task.taskType);
+        QMessageBox::information(this, "提示", "已开始下载，请稍后刷新历史记录查看进度。");
         return;
     }
 
-    // 打开视频文件
-    QDesktopServices::openUrl(QUrl::fromLocalFile(task.videoPath));
+    // 其余状态按展示态给提示
+    QMessageBox::warning(this, "提示", unresolvedVideoStateMessage(task, displayState));
 }
 
 void VideoSingleHistoryTab::onBrowseFile(const QString& taskId)
@@ -2822,53 +3000,78 @@ void VideoSingleHistoryTab::onCheckBoxStateChanged()
 
 void VideoSingleHistoryTab::onTaskStatusUpdated(const QString& taskId, const QString& status, int progress)
 {
-    // 更新数据库
-    DBManager::instance()->updateTaskStatus(taskId, status, progress);
+    qDebug() << "[HISTORY] onTaskStatusUpdated received: taskId=" << taskId
+             << "status=" << status << "progress=" << progress;
 
-    // 只在列表视图时更新UI
+    const int displayProgress = qBound(0, progress, 100);
+
+    // 更新数据库
+    DBManager::instance()->updateTaskStatus(taskId, status, displayProgress);
+
+    // 基于数据库最新记录重新解析展示态，避免局部更新导致状态语义错乱
+    VideoTask task = DBManager::instance()->getTaskById(taskId);
+    if (task.taskId.isEmpty()) {
+        return;
+    }
+    const VideoTaskDisplayState displayState = resolveVideoTaskDisplayState(task);
+
+    // 只在列表视图时增量更新UI；缩略图视图下下次刷新时统一渲染
     if (!isListView) {
         return;
     }
 
-    // 遍历表格，找到对应的任务并更新状态和进度
+    // 遍历表格，找到对应任务并更新状态、进度、勾选框和按钮可用性
     for (int row = 0; row < historyTable->rowCount(); ++row) {
-        QTableWidgetItem *taskIdItem = historyTable->item(row, 2);  // 任务ID在第2列
-        if (taskIdItem && taskIdItem->text() == taskId) {
-            // 更新状态
-            QString statusText;
-            if (status == "queued") statusText = "📋 排队中";
-            else if (status == "pending") statusText = "⏳ 等待中";
-            else if (status == "processing") statusText = "🔄 处理中";
-            else if (status == "completed") statusText = "✅ 已完成";
-            else if (status == "failed") statusText = "❌ 失败";
-            else if (status == "timeout") statusText = "⏱️ 超时";
-            else statusText = status;  // 未知状态直接显示原始值
+        QTableWidgetItem *taskIdItem = historyTable->item(row, 2);
+        if (!taskIdItem || taskIdItem->text() != taskId) {
+            continue;
+        }
 
-            QTableWidgetItem *statusItem = historyTable->item(row, 4);  // 状态在第4列
-            if (statusItem) {
-                statusItem->setText(statusText);
+        QTableWidgetItem *statusItem = historyTable->item(row, 4);
+        if (statusItem) {
+            statusItem->setText(displayState.statusText);
+            if (!task.errorMessage.isEmpty()) {
+                statusItem->setToolTip(task.errorMessage);
+            } else {
+                statusItem->setToolTip(QString());
             }
+        }
 
-            // 更新进度
-            QTableWidgetItem *progressItem = historyTable->item(row, 5);  // 进度在第5列
-            if (progressItem) {
-                progressItem->setText(QString::number(progress) + "%");
+        QTableWidgetItem *progressItem = historyTable->item(row, 5);
+        if (progressItem) {
+            progressItem->setText(QString::number(displayProgress) + "%");
+        }
+
+        QWidget *checkWidget = historyTable->cellWidget(row, 0);
+        if (checkWidget) {
+            QCheckBox *checkBox = checkWidget->findChild<QCheckBox*>();
+            if (checkBox) {
+                checkBox->setEnabled(displayState.canDelete);
+                checkBox->setToolTip(displayState.canDelete ? QString() : "当前状态不可删除");
             }
+        }
 
-            // 如果任务完成或失败，启用勾选框
-            if (status == "completed" || status == "failed" || status == "timeout") {
-                QWidget *widget = historyTable->cellWidget(row, 0);
-                if (widget) {
-                    QCheckBox *checkBox = widget->findChild<QCheckBox*>();
-                    if (checkBox) {
-                        checkBox->setEnabled(true);
-                        checkBox->setToolTip("");
-                    }
+        QWidget *btnWidget = historyTable->cellWidget(row, 8);
+        if (btnWidget) {
+            const auto buttons = btnWidget->findChildren<QPushButton*>();
+            for (QPushButton* button : buttons) {
+                if (!button) {
+                    continue;
+                }
+                if (button->text() == "查看") {
+                    button->setEnabled(displayState.canPlay);
+                    button->setToolTip(displayState.canPlay ? QString() : unresolvedVideoStateMessage(task, displayState));
+                } else if (button->text() == "浏览") {
+                    button->setEnabled(displayState.canBrowse);
+                    button->setToolTip(displayState.canBrowse ? QString() : "本地视频不可用");
+                } else if (button->text() == "刷新") {
+                    button->setEnabled(displayState.canRefresh);
+                    button->setToolTip(displayState.canRefresh ? QString() : "当前状态无需刷新");
                 }
             }
-
-            break;
         }
+
+        break;
     }
 }
 

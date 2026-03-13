@@ -619,7 +619,7 @@ QList<VideoTask> DBManager::getPendingTasks()
         SELECT id, task_id, task_type, prompt, model_variant, status, progress, video_url, video_path,
                thumbnail_path, download_status, created_at, completed_at
         FROM video_history
-        WHERE status IN ('pending', 'processing')
+        WHERE status IN ('pending', 'processing', 'video_generating')
         ORDER BY created_at ASC
     )");
 
