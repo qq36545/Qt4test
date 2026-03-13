@@ -47,6 +47,7 @@ void ConfigWidget::setupApiKeyTab(QWidget *tab)
     layout->setContentsMargins(20, 20, 20, 20);
     layout->setSpacing(15);
 
+    QHBoxLayout *buttonContainerLayout = new QHBoxLayout();
     QHBoxLayout *buttonLayout = new QHBoxLayout();
     addButton = new QPushButton("➕ 添加密钥");
     addButton->setObjectName("primaryButton");
@@ -55,7 +56,10 @@ void ConfigWidget::setupApiKeyTab(QWidget *tab)
     connect(addButton, &QPushButton::clicked, this, &ConfigWidget::addApiKey);
     buttonLayout->addWidget(addButton);
     buttonLayout->addStretch();
-    layout->addLayout(buttonLayout);
+    buttonContainerLayout->addStretch(1);
+    buttonContainerLayout->addLayout(buttonLayout, 8);
+    buttonContainerLayout->addStretch(1);
+    layout->addLayout(buttonContainerLayout);
 
     apiKeyTable = new QTableWidget();
     apiKeyTable->setObjectName("apiKeyTable");
@@ -77,6 +81,7 @@ void ConfigWidget::setupImgbbTab(QWidget *tab)
     layout->setContentsMargins(20, 20, 20, 20);
     layout->setSpacing(15);
 
+    QHBoxLayout *buttonContainerLayout = new QHBoxLayout();
     QHBoxLayout *buttonLayout = new QHBoxLayout();
     addImgbbButton = new QPushButton("➕ 添加密钥");
     addImgbbButton->setObjectName("primaryButton");
@@ -92,7 +97,10 @@ void ConfigWidget::setupImgbbTab(QWidget *tab)
     buttonLayout->addWidget(addImgbbButton);
     buttonLayout->addWidget(applyBtn);
     buttonLayout->addStretch();
-    layout->addLayout(buttonLayout);
+    buttonContainerLayout->addStretch(1);
+    buttonContainerLayout->addLayout(buttonLayout, 8);
+    buttonContainerLayout->addStretch(1);
+    layout->addLayout(buttonContainerLayout);
 
     imgbbKeyTable = new QTableWidget();
     imgbbKeyTable->setObjectName("imgbbKeyTable");
