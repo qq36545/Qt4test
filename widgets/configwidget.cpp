@@ -10,6 +10,26 @@
 #include <QScreen>
 #include <QRadioButton>
 
+namespace {
+QVBoxLayout* createCenteredContentLayout(QWidget *parent, QVBoxLayout *parentLayout, int spacing)
+{
+    QHBoxLayout *containerLayout = new QHBoxLayout();
+    containerLayout->setContentsMargins(0, 0, 0, 0);
+
+    QWidget *contentWidget = new QWidget(parent);
+    QVBoxLayout *contentLayout = new QVBoxLayout(contentWidget);
+    contentLayout->setContentsMargins(0, 0, 0, 0);
+    contentLayout->setSpacing(spacing);
+
+    containerLayout->addStretch(1);
+    containerLayout->addWidget(contentWidget, 8);
+    containerLayout->addStretch(1);
+
+    parentLayout->addLayout(containerLayout);
+    return contentLayout;
+}
+}
+
 ConfigWidget::ConfigWidget(QWidget *parent)
     : QWidget(parent), scaleFactor(1.0)
 {
@@ -47,8 +67,11 @@ void ConfigWidget::setupApiKeyTab(QWidget *tab)
     layout->setContentsMargins(20, 20, 20, 20);
     layout->setSpacing(15);
 
-    QHBoxLayout *buttonContainerLayout = new QHBoxLayout();
-    QHBoxLayout *buttonLayout = new QHBoxLayout();
+    QVBoxLayout *contentLayout = createCenteredContentLayout(tab, layout, 15);
+
+    QWidget *buttonRow = new QWidget();
+    QHBoxLayout *buttonLayout = new QHBoxLayout(buttonRow);
+    buttonLayout->setContentsMargins(0, 0, 0, 0);
     addButton = new QPushButton("➕ 添加密钥");
     addButton->setObjectName("primaryButton");
     addButton->setFixedHeight(40);
@@ -56,23 +79,14 @@ void ConfigWidget::setupApiKeyTab(QWidget *tab)
     connect(addButton, &QPushButton::clicked, this, &ConfigWidget::addApiKey);
     buttonLayout->addWidget(addButton);
     buttonLayout->addStretch();
-    buttonContainerLayout->addStretch(1);
-    buttonContainerLayout->addLayout(buttonLayout, 8);
-    buttonContainerLayout->addStretch(1);
-    layout->addLayout(buttonContainerLayout);
+    contentLayout->addWidget(buttonRow);
 
     apiKeyTable = new QTableWidget();
     apiKeyTable->setObjectName("apiKeyTable");
     apiKeyTable->setColumnCount(5);
     apiKeyTable->setHorizontalHeaderLabels({"序号", "名称", "密钥", "操作", "查看"});
     setupTableStyle(apiKeyTable);
-
-    // 表格宽度占 80%，左右各留 10% 空白
-    QHBoxLayout *tableLayout = new QHBoxLayout();
-    tableLayout->addStretch(1);
-    tableLayout->addWidget(apiKeyTable, 8);
-    tableLayout->addStretch(1);
-    layout->addLayout(tableLayout);
+    contentLayout->addWidget(apiKeyTable);
 }
 
 void ConfigWidget::setupImgbbTab(QWidget *tab)
@@ -81,8 +95,11 @@ void ConfigWidget::setupImgbbTab(QWidget *tab)
     layout->setContentsMargins(20, 20, 20, 20);
     layout->setSpacing(15);
 
-    QHBoxLayout *buttonContainerLayout = new QHBoxLayout();
-    QHBoxLayout *buttonLayout = new QHBoxLayout();
+    QVBoxLayout *contentLayout = createCenteredContentLayout(tab, layout, 15);
+
+    QWidget *buttonRow = new QWidget();
+    QHBoxLayout *buttonLayout = new QHBoxLayout(buttonRow);
+    buttonLayout->setContentsMargins(0, 0, 0, 0);
     addImgbbButton = new QPushButton("➕ 添加密钥");
     addImgbbButton->setObjectName("primaryButton");
     addImgbbButton->setFixedHeight(40);
@@ -97,23 +114,14 @@ void ConfigWidget::setupImgbbTab(QWidget *tab)
     buttonLayout->addWidget(addImgbbButton);
     buttonLayout->addWidget(applyBtn);
     buttonLayout->addStretch();
-    buttonContainerLayout->addStretch(1);
-    buttonContainerLayout->addLayout(buttonLayout, 8);
-    buttonContainerLayout->addStretch(1);
-    layout->addLayout(buttonContainerLayout);
+    contentLayout->addWidget(buttonRow);
 
     imgbbKeyTable = new QTableWidget();
     imgbbKeyTable->setObjectName("imgbbKeyTable");
     imgbbKeyTable->setColumnCount(5);
     imgbbKeyTable->setHorizontalHeaderLabels({"序号", "名称", "密钥", "操作", "应用状态"});
     setupTableStyle(imgbbKeyTable);
-
-    // 表格宽度占 80%，左右各留 10% 空白
-    QHBoxLayout *tableLayout = new QHBoxLayout();
-    tableLayout->addStretch(1);
-    tableLayout->addWidget(imgbbKeyTable, 8);
-    tableLayout->addStretch(1);
-    layout->addLayout(tableLayout);
+    contentLayout->addWidget(imgbbKeyTable);
 
     // 引导区
     QLabel *hint1 = new QLabel("1. 获取上传临时图床密钥注册地址，<a href=\"https://imgbb.com/signup\">注册</a>");
