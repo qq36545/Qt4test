@@ -62,6 +62,7 @@ private:
     void onVideoCreated(const QString &taskId, const QString &status);
     void onTaskStatusUpdated(const QString &taskId, const QString &status, const QString &videoUrl, int progress);
     void onApiError(const QString &error);
+    void queueSaveSettings();
     void saveSettings();
     void loadSettings();
     QString calculateParamsHash() const;
@@ -119,6 +120,7 @@ private:
     QString lastSubmittedParamsHash;  // 上次提交的参数哈希
     bool suppressDuplicateWarning;    // 本次会话是否抑制重复提交警告
     bool parametersModified;          // 参数是否被修改过
+    bool pendingSaveSettings;         // 是否有待处理的延迟保存
     QLabel *imageUploadHintLabel;     // 垫图尺寸提示
 };
 

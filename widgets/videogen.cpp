@@ -259,7 +259,8 @@ void VideoGenWidget::updateTabWidths()
 VideoSingleTab::VideoSingleTab(QWidget *parent)
     : QWidget(parent),
       suppressDuplicateWarning(false),
-      parametersModified(false)
+      parametersModified(false),
+      pendingSaveSettings(false)
 {
     veo3API = new VideoAPI(this);
     connect(veo3API, &VideoAPI::videoCreated, this, &VideoSingleTab::onVideoCreated);
@@ -589,16 +590,16 @@ void VideoSingleTab::connectSignals()
     connect(durationCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &VideoSingleTab::onAnyParameterChanged);
 
     // 连接参数变化信号 - 自动保存设置
-    connect(promptInput, &QTextEdit::textChanged, this, &VideoSingleTab::saveSettings);
-    connect(modelCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &VideoSingleTab::saveSettings);
-    connect(modelVariantCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &VideoSingleTab::saveSettings);
-    connect(apiKeyCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &VideoSingleTab::saveSettings);
-    connect(serverCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &VideoSingleTab::saveSettings);
-    connect(resolutionCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &VideoSingleTab::saveSettings);
-    connect(watermarkCheckBox, &QCheckBox::checkStateChanged, this, &VideoSingleTab::saveSettings);
-    connect(durationCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &VideoSingleTab::saveSettings);
-    connect(enhancePromptCheckBox, &QCheckBox::checkStateChanged, this, &VideoSingleTab::saveSettings);
-    connect(enableUpsampleCheckBox, &QCheckBox::checkStateChanged, this, &VideoSingleTab::saveSettings);
+    connect(promptInput, &QTextEdit::textChanged, this, &VideoSingleTab::queueSaveSettings);
+    connect(modelCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &VideoSingleTab::queueSaveSettings);
+    connect(modelVariantCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &VideoSingleTab::queueSaveSettings);
+    connect(apiKeyCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &VideoSingleTab::queueSaveSettings);
+    connect(serverCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &VideoSingleTab::queueSaveSettings);
+    connect(resolutionCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &VideoSingleTab::queueSaveSettings);
+    connect(watermarkCheckBox, &QCheckBox::checkStateChanged, this, &VideoSingleTab::queueSaveSettings);
+    connect(durationCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &VideoSingleTab::queueSaveSettings);
+    connect(enhancePromptCheckBox, &QCheckBox::checkStateChanged, this, &VideoSingleTab::queueSaveSettings);
+    connect(enableUpsampleCheckBox, &QCheckBox::checkStateChanged, this, &VideoSingleTab::queueSaveSettings);
 
     // 单向同步：生成页当前 key 值 -> 历史页查询 key
     connect(apiKeyCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int) {
@@ -1276,6 +1277,19 @@ void VideoSingleTab::onApiError(const QString &error)
     QMessageBox::critical(this, "错误", QString("API 调用失败:\n%1").arg(error));
 
     previewLabel->setText("💡 生成结果将在【生成历史记录】");
+}
+
+void VideoSingleTab::queueSaveSettings()
+{
+    if (pendingSaveSettings) {
+        return;
+    }
+
+    pendingSaveSettings = true;
+    QTimer::singleShot(0, this, [this]() {
+        pendingSaveSettings = false;
+        saveSettings();
+    });
 }
 
 void VideoSingleTab::saveSettings()
