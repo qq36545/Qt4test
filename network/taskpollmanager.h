@@ -37,6 +37,11 @@ public:
     // 程序重启恢复
     void recoverPendingTasks();
 
+    // 手动触发下载（视频已生成但未下载时使用）
+    void triggerDownload(const QString& taskId, const QString& videoUrl,
+                        const QString& apiKey, const QString& baseUrl,
+                        const QString& taskType);
+
 signals:
     void taskCompleted(const QString& taskId, const QString& videoUrl);
     void taskFailed(const QString& taskId, const QString& error);
@@ -58,6 +63,7 @@ private:
                       const QString& apiKey, const QString& baseUrl);
     void generateThumbnail(const QString& videoPath, const QString& thumbnailPath);
     bool isTaskTimeout(const QDateTime& startTime);
+    QString getSavedVideoPath(const QString& taskId) const;
 
     static TaskPollManager* m_instance;
     QTimer* pollTimer;

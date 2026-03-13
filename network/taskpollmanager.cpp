@@ -115,13 +115,21 @@ void TaskPollManager::onQueryFinished()
     replyTaskMap.remove(reply);
 
     if (reply->error() != QNetworkReply::NoError) {
-        qWarning() << "Query failed for task" << taskId << ":" << reply->errorString();
+        int httpCode = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        QByteArray errBody = reply->readAll();
+        qWarning() << "[POLL] Query failed for task" << taskId
+                   << "httpCode:" << httpCode
+                   << "error:" << reply->errorString()
+                   << "body:" << errBody.left(500);
         reply->deleteLater();
         return;
     }
 
     QByteArray data = reply->readAll();
     reply->deleteLater();
+
+    // [DIAG] 打印原始响应，确认字段层级
+    qDebug() << "[POLL] Raw response for task" << taskId << ":" << data.left(1000);
 
     QJsonDocument doc = QJsonDocument::fromJson(data);
     QJsonObject obj = doc.object();
@@ -133,7 +141,12 @@ void TaskPollManager::onQueryFinished()
     QString errorMessage = obj["message"].toString();
     if (errorMessage.isEmpty()) errorMessage = obj["error"].toString();
 
-    qDebug() << "Task" << taskId << "status:" << status << "progress:" << progress;
+    qDebug() << "[POLL] Task" << taskId
+             << "status:" << status
+             << "progress:" << progress
+             << "video_url:" << (videoUrl.isEmpty() ? "(empty)" : videoUrl)
+             << "message:" << (errorMessage.isEmpty() ? "(empty)" : errorMessage)
+             << "progress_type_ok:" << !obj["progress"].isUndefined();
 
     // 更新数据库
     DBManager::instance()->updateTaskStatus(taskId, status, progress, videoUrl);
@@ -242,16 +255,8 @@ void TaskPollManager::onDownloadFinished()
         return;
     }
 
-    // 获取视频路径（从数据库查询）
-    QList<VideoTask> tasks = DBManager::instance()->getTasksByType("video_single", 0, 1000);
-    QString videoPath;
-
-    for (const VideoTask& task : tasks) {
-        if (task.taskId == taskId) {
-            videoPath = task.videoPath;
-            break;
-        }
-    }
+    // 获取视频路径（按 taskId 直查）
+    QString videoPath = getSavedVideoPath(taskId);
 
     if (videoPath.isEmpty()) {
         qWarning() << "Video path not found for task" << taskId;
@@ -291,11 +296,42 @@ void TaskPollManager::generateThumbnail(const QString& videoPath, const QString&
     qDebug() << "TODO: Generate thumbnail for" << videoPath;
 }
 
+QString TaskPollManager::getSavedVideoPath(const QString& taskId) const
+{
+    VideoTask task = DBManager::instance()->getTaskById(taskId);
+    return task.videoPath;
+}
+
 bool TaskPollManager::isTaskTimeout(const QDateTime& startTime)
 {
     QDateTime now = QDateTime::currentDateTime();
     qint64 elapsedSeconds = startTime.secsTo(now);
     return elapsedSeconds > (20 * 60);  // 20 分钟
+}
+
+void TaskPollManager::triggerDownload(const QString& taskId, const QString& videoUrl,
+                                      const QString& apiKey, const QString& baseUrl,
+                                      const QString& taskType)
+{
+    // 如果已在下载中，忽略
+    if (activeTasks.contains(taskId)) {
+        qDebug() << "Task" << taskId << "already in active tasks, skipping triggerDownload";
+        return;
+    }
+
+    // 添加到活动任务（仅用于下载重试跟踪）
+    TaskInfo info;
+    info.taskId = taskId;
+    info.taskType = taskType;
+    info.apiKey = apiKey;
+    info.baseUrl = baseUrl;
+    info.startTime = QDateTime::currentDateTime();
+    info.retryCount = 0;
+    info.downloadRetryCount = 0;
+    info.videoUrl = videoUrl;
+    activeTasks[taskId] = info;
+
+    downloadVideo(taskId, videoUrl, apiKey, baseUrl);
 }
 
 void TaskPollManager::recoverPendingTasks()
