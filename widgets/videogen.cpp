@@ -687,11 +687,13 @@ void VideoSingleTab::onModelChanged(int index)
     // 根据模型类型切换UI
     if (modelName.contains("Grok", Qt::CaseInsensitive)) {
         // Grok模型：切换到Grok参数
-        // 1. 更新模型变体下拉列表
+        // 1. 更新模型变体下拉列表（block信号避免触发onModelVariantChanged时data为空）
+        modelVariantCombo->blockSignals(true);
         modelVariantCombo->clear();
         modelVariantCombo->addItem("grok-video-3-15s（15秒）", "grok-video-3-15s");
         modelVariantCombo->addItem("grok-video-3-10s（10秒）", "grok-video-3-10s");
         modelVariantCombo->addItem("grok-video-3（6秒）", "grok-video-3");
+        modelVariantCombo->blockSignals(false);
 
         // 2. 隐藏VEO3专用参数
         durationCombo->setVisible(false);
@@ -729,11 +731,13 @@ void VideoSingleTab::onModelChanged(int index)
 
     } else {
         // 其他模型（sora/wan）：恢复VEO3默认参数
+        modelVariantCombo->blockSignals(true);
         modelVariantCombo->clear();
         modelVariantCombo->addItem("veo_3_1-fast", "veo_3_1-fast");
         modelVariantCombo->addItem("veo_3_1", "veo_3_1");
         modelVariantCombo->addItem("veo_3_1-fast-4K", "veo_3_1-fast-4K");
         modelVariantCombo->addItem("veo_3_1-fast-components-4K", "veo_3_1-fast-components-4K");
+        modelVariantCombo->blockSignals(false);
 
         durationCombo->setVisible(true);
         durationLabel->setVisible(true);
