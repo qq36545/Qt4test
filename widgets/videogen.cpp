@@ -1177,6 +1177,11 @@ void VideoSingleTab::generateVideo()
         QString aspectRatio = resolution; // Grok使用resolution字段存储aspectRatio
         QString size = sizeCombo->currentData().toString();
 
+        // 从variant名提取duration：grok-video-3-15s→15, grok-video-3-10s→10, grok-video-3→6
+        int grokDuration = 6;
+        if (modelVariant.contains("15s")) grokDuration = 15;
+        else if (modelVariant.contains("10s")) grokDuration = 10;
+
         veo3API->createVideo(
             apiKeyData.apiKey,
             server,
@@ -1185,7 +1190,7 @@ void VideoSingleTab::generateVideo()
             prompt,
             uploadedImagePaths,
             size,
-            "",  // seconds (Grok不需要)
+            QString::number(grokDuration),  // seconds → duration
             false,  // watermark (Grok不需要)
             aspectRatio,  // aspectRatio
             activeImgbbKey.apiKey  // imgbbApiKey

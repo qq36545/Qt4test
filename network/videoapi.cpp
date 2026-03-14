@@ -53,12 +53,13 @@ void VideoAPI::createVideo(const QString &apiKey,
         currentRequest.enhancePrompt = enhancePrompt;
         currentRequest.enableUpsample = enableUpsample;
         currentRequest.targetMethod = "grok";
+        currentRequest.duration = seconds.toInt();
 
-        // 开始上传第一张图片到 imgbb
+        // 开始上传第一张图片到 imgbb；无图片则直接文生视频
         if (!imagePaths.isEmpty()) {
             imageUploader->uploadToImgbb(imagePaths.first(), imgbbApiKey);
         } else {
-            emit errorOccurred("Grok模型需要至少一张图片");
+            createGrokVideo(apiKey, baseUrl, model, prompt, {}, aspectRatio, size, seconds.toInt());
         }
     } else if (model.startsWith("veo_")) {
         // VEO3 OpenAI格式：直接上传文件
@@ -217,7 +218,8 @@ void VideoAPI::createGrokVideo(const QString &apiKey,
                                 const QString &prompt,
                                 const QStringList &imagePaths,
                                 const QString &aspectRatio,
-                                const QString &size)
+                                const QString &size,
+                                int duration)
 {
     QUrl url(baseUrl + "/v1/video/create");
     QNetworkRequest request(url);
@@ -233,6 +235,9 @@ void VideoAPI::createGrokVideo(const QString &apiKey,
     jsonObj["prompt"] = prompt;
     jsonObj["aspect_ratio"] = aspectRatio;
     jsonObj["size"] = size;
+    if (duration > 0) {
+        jsonObj["duration"] = duration;
+    }
 
     QJsonArray imagesArray;
     for (const QString &imageUrl : imagePaths) {
@@ -250,6 +255,7 @@ void VideoAPI::createGrokVideo(const QString &apiKey,
     qDebug() << "  Prompt:" << prompt;
     qDebug() << "  Aspect Ratio:" << aspectRatio;
     qDebug() << "  Size:" << size;
+    qDebug() << "  Duration:" << duration;
     qDebug() << "  Image count:" << imagePaths.size();
     qDebug() << "  JSON Body size:" << jsonData.size();
 
@@ -322,7 +328,8 @@ void VideoAPI::onImageUploadSuccess(const QString &url)
                             currentRequest.prompt,
                             currentRequest.uploadedUrls,
                             currentRequest.aspectRatio,
-                            currentRequest.size);
+                            currentRequest.size,
+                            currentRequest.duration);
         } else {
             // veo3_unified
             createVeo3UnifiedVideo(currentRequest.apiKey,

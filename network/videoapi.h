@@ -85,7 +85,8 @@ private:
                          const QString &prompt,
                          const QStringList &imagePaths,
                          const QString &aspectRatio,
-                         const QString &size);
+                         const QString &size,
+                         int duration);
 
     QNetworkAccessManager *networkManager;
     QMap<QNetworkReply*, QString> replyMap;
@@ -106,6 +107,7 @@ private:
         bool enhancePrompt;
         bool enableUpsample;
         QString targetMethod;  // "grok" | "veo3_unified"
+        int duration;          // Grok: 6/10/15
     };
     UnifiedFormatRequest currentRequest;
 };
