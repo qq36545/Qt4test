@@ -2905,7 +2905,6 @@ void VideoSingleHistoryTab::switchView()
 
 void VideoSingleHistoryTab::refreshHistory()
 {
-    applySyncedQueryApiKeyFromSettings();
     loadHistory(0, isListView ? 50 : 20);
 }
 
@@ -3000,8 +2999,6 @@ void VideoSingleHistoryTab::onRetryDownload(const QString& taskId)
 
 void VideoSingleHistoryTab::onRetryQuery(const QString& taskId)
 {
-    applySyncedQueryApiKeyFromSettings();
-
     // 获取当前选择的密钥
     if (!apiKeyCombo || apiKeyCombo->currentIndex() < 0) {
         QMessageBox::warning(this, "错误", "请先选择一个API密钥");
