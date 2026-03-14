@@ -394,7 +394,17 @@ void VideoSingleTab::setupUI()
     // 图片上传区域（首帧）
     imageLabel = new QLabel("首帧图片:");
     imageLabel->setStyleSheet("font-size: 14px;");
-    contentLayout->addWidget(imageLabel);
+    imageUploadHintLabel = new QLabel("💡提示：垫图后，视频尺寸跟垫图的图片尺寸保持一致，下面\"宽高比\"参数会自动忽略处理");
+    imageUploadHintLabel->setStyleSheet("font-size: 12px; color: #888888;");
+    imageUploadHintLabel->setWordWrap(false);
+    imageUploadHintLabel->setVisible(false);
+    QHBoxLayout *imageLabelLayout = new QHBoxLayout();
+    imageLabelLayout->setContentsMargins(0, 0, 0, 0);
+    imageLabelLayout->setSpacing(8);
+    imageLabelLayout->addWidget(imageLabel);
+    imageLabelLayout->addWidget(imageUploadHintLabel);
+    imageLabelLayout->addStretch();
+    contentLayout->addLayout(imageLabelLayout);
 
     QHBoxLayout *imageLayout = new QHBoxLayout();
     imagePreviewLabel = new QLabel("未选择图片\n点击此处上传");
@@ -501,12 +511,6 @@ void VideoSingleTab::setupUI()
     sizeRowLayout->setSpacing(8);
     sizeRowLayout->addWidget(sizeCombo);
 
-    // Grok 垫图尺寸提示标签（与分辨率规格同一行）
-    imageUploadHintLabel = new QLabel("注意：垫图后视频尺寸跟着图片尺寸一样");
-    imageUploadHintLabel->setStyleSheet("font-size: 12px; color: #888888;");
-    imageUploadHintLabel->setWordWrap(false);
-    imageUploadHintLabel->setVisible(false);  // 默认隐藏
-    sizeRowLayout->addWidget(imageUploadHintLabel);
     sizeRowLayout->addStretch();
 
     sizeLayout->addLayout(sizeRowLayout);
@@ -710,7 +714,6 @@ void VideoSingleTab::onModelChanged(int index)
         // 4. 显示Grok专用的size参数
         sizeCombo->setVisible(true);
         sizeLabel->setVisible(true);
-        imageUploadHintLabel->setVisible(true);  // 显示垫图提示
 
     } else if (modelName.contains("VEO3", Qt::CaseInsensitive)) {
         // VEO3模型：显示单选按钮，默认 Variant 1
@@ -720,7 +723,6 @@ void VideoSingleTab::onModelChanged(int index)
         // 隐藏Grok专用参数
         sizeCombo->setVisible(false);
         sizeLabel->setVisible(false);
-        imageUploadHintLabel->setVisible(false);
 
         // 触发 onVariantTypeChanged 更新变体列表和控件
         onVariantTypeChanged();
@@ -750,7 +752,6 @@ void VideoSingleTab::onModelChanged(int index)
 
         sizeCombo->setVisible(false);
         sizeLabel->setVisible(false);
-        imageUploadHintLabel->setVisible(false);
     }
 
     // 模型切换时重新加载对应的密钥
@@ -869,18 +870,13 @@ void VideoSingleTab::uploadImage()
     bool isComponents = modelName.contains("components");
     bool isFrames = modelName.contains("frames");
 
-    // 非 components 模式（单张），已有图片时确认替换后清空，fall-through 到公共代码
-    if (!isComponents && !uploadedImagePaths.isEmpty()) {
+    // 已有图片时确认替换后清空
+    if (!uploadedImagePaths.isEmpty()) {
         int ret = QMessageBox::question(this, "重新选择图片",
             isFrames ? "当前已有首帧图片，是否重新选择？" : "当前已有图片，是否重新选择？",
             QMessageBox::Yes | QMessageBox::No);
         if (ret != QMessageBox::Yes) return;
         uploadedImagePaths.clear();
-    }
-
-    if (isComponents && uploadedImagePaths.size() >= 3) {
-        QMessageBox::warning(this, "提示", "components 模型最多支持 3 张图片");
-        return;
     }
 
     // 公共代码：打开对话框、验证、append、保存
@@ -890,7 +886,7 @@ void VideoSingleTab::uploadImage()
         lastDir = QStandardPaths::writableLocation(QStandardPaths::PicturesLocation);
     }
 
-    QString fileName = QFileDialog::getOpenFileName(this, "选择首帧图片", lastDir,
+    QString fileName = QFileDialog::getOpenFileName(this, "选择图片1", lastDir,
         "图片文件 (*.png *.jpg *.jpeg *.bmp *.gif)");
 
     if (fileName.isEmpty()) {
@@ -1012,27 +1008,43 @@ void VideoSingleTab::updateImageUploadUI(const QString &modelName)
 {
     bool isComponents = modelName.contains("components");
     bool isFrames = modelName.contains("frames");
+    bool isGrok = modelName.contains("grok", Qt::CaseInsensitive);
 
-    if (isComponents) {
-        // 支持1-3张图片（图片1/图片2/图片3）
-        imageLabel->setText("图片1（首帧，1-3张）:");
+    if (isGrok) {
+        // Grok模型：只显示一个上传组件，支持文生视频
+        imageLabel->setText("图片1（可选）:");
+        uploadImageButton->setText("📁 选择图片1");
+        endFrameWidget->setVisible(false);
+        middleFrameWidget->setVisible(false);
+        imageUploadHintLabel->setVisible(true);
+    } else if (isComponents) {
+        // components 变体：3 个独立上传控件，各传 1 张
+        // 布局物理顺序：imageLabel → endFrame → middleFrame
+        imageLabel->setText("图片1（可选）:");
         uploadImageButton->setText("📁 选择图片1");
         endFrameWidget->setVisible(true);
-        endFrameLabel->setText("图片3（尾帧，可选）:");
+        endFrameLabel->setText("图片2（可选）:");
+        uploadEndFrameButton->setText("📁 选择图片2");
         middleFrameWidget->setVisible(true);
+        middleFrameLabel->setText("图片3（可选）:");
+        uploadMiddleFrameButton->setText("📁 选择图片3");
+        imageUploadHintLabel->setVisible(false);
     } else if (isFrames) {
         // 仅支持单张首帧
         imageLabel->setText("首帧图片（单张）:");
         uploadImageButton->setText("📁 选择首帧图片");
         endFrameWidget->setVisible(false);
         middleFrameWidget->setVisible(false);
+        imageUploadHintLabel->setVisible(false);
     } else {
         // 支持首尾帧
         imageLabel->setText("首帧图片:");
         uploadImageButton->setText("📁 选择首帧图片");
         endFrameWidget->setVisible(true);
         endFrameLabel->setText("尾帧图片（可选）:");
+        uploadEndFrameButton->setText("📁 选择尾帧图片");
         middleFrameWidget->setVisible(false);
+        imageUploadHintLabel->setVisible(false);
     }
 }
 
@@ -1068,9 +1080,14 @@ void VideoSingleTab::generateVideo()
         return;
     }
 
-    if (uploadedImagePaths.isEmpty()) {
-        QMessageBox::warning(this, "提示", "请上传首帧图片");
-        return;
+    if (uploadedImagePaths.isEmpty() && uploadedMiddleFrameImagePath.isEmpty() && uploadedEndFrameImagePath.isEmpty()) {
+        QString model = modelCombo->currentText();
+        if (model.contains("Grok", Qt::CaseInsensitive)) {
+            int ret = QMessageBox::question(this, "提示",
+                "未选择图片，将为你进行文生视频",
+                QMessageBox::Yes | QMessageBox::No);
+            if (ret != QMessageBox::Yes) return;
+        }
     }
 
     if (apiKeyCombo->count() == 0 || !apiKeyCombo->isEnabled()) {
@@ -1209,8 +1226,11 @@ void VideoSingleTab::generateVideo()
             enableUpsample
         );
     } else {
-        // VEO3 Variant 1 OpenAI格式：合并首帧+尾帧图片路径
+        // VEO3 Variant 1 OpenAI格式：合并所有图片路径
         QStringList allImagePaths = uploadedImagePaths;
+        if (!uploadedMiddleFrameImagePath.isEmpty()) {
+            allImagePaths.append(uploadedMiddleFrameImagePath);
+        }
         if (!uploadedEndFrameImagePath.isEmpty()) {
             allImagePaths.append(uploadedEndFrameImagePath);
         }
