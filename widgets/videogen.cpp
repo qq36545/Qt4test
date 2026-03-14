@@ -317,8 +317,8 @@ void VideoSingleTab::setupUI()
     QLabel *modelLabel = new QLabel("视频模型:");
     modelLabel->setStyleSheet("font-size: 14px;");
     modelCombo = new QComboBox();
-    modelCombo->addItems({"sora2视频", "VEO3视频", "Grok3视频", "wan视频"});
-    modelCombo->setCurrentIndex(1); // 默认选择 VEO3
+    modelCombo->addItems({"VEO3视频", "Grok3视频", "wan视频"});
+    modelCombo->setCurrentIndex(0); // 默认选择 VEO3
     connect(modelCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &VideoSingleTab::onModelChanged);
     modelLayout->addWidget(modelLabel);
     modelLayout->addWidget(modelCombo, 1);
@@ -1921,8 +1921,8 @@ void VideoBatchTab::setupUI()
     QLabel *modelLabel = new QLabel("视频模型:");
     modelLabel->setStyleSheet("font-size: 14px;");
     modelCombo = new QComboBox();
-    modelCombo->addItems({"sora2视频", "VEO3视频", "Grok3视频", "wan视频"});
-    modelCombo->setCurrentIndex(1); // 默认选择 VEO3
+    modelCombo->addItems({"VEO3视频", "Grok3视频", "wan视频"});
+    modelCombo->setCurrentIndex(0); // 默认选择 VEO3
     connect(modelCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &VideoBatchTab::onModelChanged);
     modelLayout->addWidget(modelLabel);
     modelLayout->addWidget(modelCombo, 1);
