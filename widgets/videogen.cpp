@@ -999,9 +999,12 @@ void VideoSingleTab::onModelVariantChanged(int index)
 {
     QString modelName = modelVariantCombo->currentData().toString();
     updateImageUploadUI(modelName);
-    bool is4K = modelName.contains("4K") || modelName.contains("4k");
-    bool isVariant2 = variantType2Radio && variantType2Radio->isChecked();
-    updateResolutionOptions(is4K, isVariant2);
+    bool isGrok = modelName.contains("grok", Qt::CaseInsensitive);
+    if (!isGrok) {
+        bool is4K = modelName.contains("4K") || modelName.contains("4k");
+        bool isVariant2 = variantType2Radio && variantType2Radio->isChecked();
+        updateResolutionOptions(is4K, isVariant2);
+    }
 }
 
 void VideoSingleTab::updateImageUploadUI(const QString &modelName)
