@@ -1,0 +1,117 @@
+name: Build macOS App
+
+on:
+  push:
+    branches: [ main, master ]
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build-macos-arm:
+    runs-on: macos-14  # Apple Silicon runner
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install Qt
+      uses: jurplel/install-qt-action@v4
+      with:
+        version: '6.10.2'
+        host: 'mac'
+        target: 'desktop'
+        arch: 'clang_64'
+        modules: 'qtmultimedia'
+        cache: true
+
+    - name: Configure CMake
+      run: |
+        mkdir build
+        cd build
+        cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES=arm64
+
+    - name: Build
+      run: |
+        cd build
+        make -j$(sysctl -n hw.ncpu)
+
+    - name: Deploy Qt dependencies
+      run: |
+        cd build
+        macdeployqt ChickenAI.app -dmg
+
+    - name: Rename DMG
+      run: |
+        cd build
+        mv ChickenAI.dmg ChickenAI-1.0.1-macos-arm64.dmg
+
+    - name: Upload DMG
+      uses: actions/upload-artifact@v4
+      with:
+        name: ChickenAI-macOS-ARM64
+        path: build/ChickenAI-1.0.1-macos-arm64.dmg
+        retention-days: 30
+
+    - name: Create Release (on tag)
+      if: startsWith(github.ref, 'refs/tags/')
+      uses: softprops/action-gh-release@v1
+      with:
+        files: build/ChickenAI-1.0.1-macos-arm64.dmg
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-macos-intel:
+    runs-on: macos-13  # Intel runner
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install Qt
+      uses: jurplel/install-qt-action@v4
+      with:
+        version: '6.10.2'
+        host: 'mac'
+        target: 'desktop'
+        arch: 'clang_64'
+        modules: 'qtmultimedia'
+        cache: true
+
+    - name: Configure CMake
+      run: |
+        mkdir build
+        cd build
+        cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES=x86_64
+
+    - name: Build
+      run: |
+        cd build
+        make -j$(sysctl -n hw.ncpu)
+
+    - name: Deploy Qt dependencies
+      run: |
+        cd build
+        macdeployqt ChickenAI.app -dmg
+
+    - name: Rename DMG
+      run: |
+        cd build
+        mv ChickenAI.dmg ChickenAI-1.0.1-macos-x86_64.dmg
+
+    - name: Upload DMG
+      uses: actions/upload-artifact@v4
+      with:
+        name: ChickenAI-macOS-Intel
+        path: build/ChickenAI-1.0.1-macos-x86_64.dmg
+        retention-days: 30
+
+    - name: Create Release (on tag)
+      if: startsWith(github.ref, 'refs/tags/')
+      uses: softprops/action-gh-release@v1
+      with:
+        files: build/ChickenAI-1.0.1-macos-x86_64.dmg
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
