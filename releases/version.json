@@ -1,0 +1,36 @@
+{
+  "version": "1.0.2",
+  "versionCode": 102,
+  "updateType": "optional",
+  "forceReason": "",
+  "releaseDate": "2026-03-16",
+  "releaseNotes": "1. 首版发布自动升级元数据\n2. 统一版本来源为 version.txt",
+  "minSupportedVersion": "1.0.0",
+  "downloadUrls": {
+    "macos_arm64": {
+      "github": "",
+      "gitee": "",
+      "cloudflare": ""
+    },
+    "macos_intel": {
+      "github": "",
+      "gitee": "",
+      "cloudflare": ""
+    },
+    "windows_x64": {
+      "github": "",
+      "gitee": "",
+      "cloudflare": ""
+    }
+  },
+  "fileSize": {
+    "macos_arm64": 0,
+    "macos_intel": 0,
+    "windows_x64": 0
+  },
+  "sha256": {
+    "macos_arm64": "",
+    "macos_intel": "",
+    "windows_x64": ""
+  }
+}

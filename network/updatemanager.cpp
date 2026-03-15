@@ -38,10 +38,8 @@ UpdateManager::UpdateManager(QObject *parent)
 
     m_channelOrder << "github" << "gitee" << "cloudflare";
 
-    // 默认占位 URL，后续可由外部覆盖
-    m_versionInfoUrls << "https://raw.githubusercontent.com/your-org/your-repo/main/releases/version.json"
-                      << "https://gitee.com/your-org/your-repo/raw/main/releases/version.json"
-                      << "https://pub-your-bucket.r2.dev/releases/version.json";
+    // 默认版本信息地址（可由外部 setVersionInfoUrls 覆盖）
+    m_versionInfoUrls << "https://raw.githubusercontent.com/qq36545/Qt4test/master/releases/version.json";
 }
 
 UpdateManager::~UpdateManager()
