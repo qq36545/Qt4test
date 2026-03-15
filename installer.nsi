@@ -8,7 +8,9 @@
 ;--------------------------------
 ; 基本信息
 !define APP_NAME "ChickenAI"
-!define APP_VERSION "1.0.1"
+!ifndef APP_VERSION
+!define APP_VERSION "0.0.0"
+!endif
 !define APP_PUBLISHER "ChickenAI Team"
 !define APP_DESCRIPTION "AI 视频/图片生成应用"
 !define APP_EXE "ChickenAI.exe"

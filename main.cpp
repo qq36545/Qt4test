@@ -20,7 +20,7 @@ int main(int argc, char *argv[])
 
     // 设置应用信息
     app.setApplicationName("Qt4test");
-    app.setApplicationVersion("1.0.1");
+    app.setApplicationVersion(APP_VERSION_STR);
     app.setOrganizationName("Qt4test");
 #ifndef NDEBUG
     qDebug() << "App version:" << QApplication::applicationVersion();

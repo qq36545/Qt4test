@@ -17,6 +17,9 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
+    - name: Read version
+      run: echo "APP_VERSION=$(cat version.txt)" >> $GITHUB_ENV
+
     - name: Install Qt
       uses: jurplel/install-qt-action@v4
       with:
@@ -46,20 +49,20 @@ jobs:
     - name: Rename DMG
       run: |
         cd build
-        mv ChickenAI.dmg ChickenAI-1.0.1-macos-arm64.dmg
+        mv ChickenAI.dmg ChickenAI-${APP_VERSION}-macos-arm64.dmg
 
     - name: Upload DMG
       uses: actions/upload-artifact@v4
       with:
         name: ChickenAI-macOS-ARM64
-        path: build/ChickenAI-1.0.1-macos-arm64.dmg
+        path: build/ChickenAI-${{ env.APP_VERSION }}-macos-arm64.dmg
         retention-days: 30
 
     - name: Create Release (on tag)
       if: startsWith(github.ref, 'refs/tags/')
       uses: softprops/action-gh-release@v1
       with:
-        files: build/ChickenAI-1.0.1-macos-arm64.dmg
+        files: build/ChickenAI-${{ env.APP_VERSION }}-macos-arm64.dmg
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -69,6 +72,9 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
+
+    - name: Read version
+      run: echo "APP_VERSION=$(cat version.txt)" >> $GITHUB_ENV
 
     - name: Install Qt
       uses: jurplel/install-qt-action@v4
@@ -99,19 +105,19 @@ jobs:
     - name: Rename DMG
       run: |
         cd build
-        mv ChickenAI.dmg ChickenAI-1.0.1-macos-x86_64.dmg
+        mv ChickenAI.dmg ChickenAI-${APP_VERSION}-macos-x86_64.dmg
 
     - name: Upload DMG
       uses: actions/upload-artifact@v4
       with:
         name: ChickenAI-macOS-Intel
-        path: build/ChickenAI-1.0.1-macos-x86_64.dmg
+        path: build/ChickenAI-${{ env.APP_VERSION }}-macos-x86_64.dmg
         retention-days: 30
 
     - name: Create Release (on tag)
       if: startsWith(github.ref, 'refs/tags/')
       uses: softprops/action-gh-release@v1
       with:
-        files: build/ChickenAI-1.0.1-macos-x86_64.dmg
+        files: build/ChickenAI-${{ env.APP_VERSION }}-macos-x86_64.dmg
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

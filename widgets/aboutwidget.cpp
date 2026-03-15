@@ -1,4 +1,5 @@
 #include "aboutwidget.h"
+#include <QApplication>
 #include <QMessageBox>
 #include <QPixmap>
 
@@ -34,7 +35,7 @@ void AboutWidget::setupUI()
     mainLayout->addWidget(nameLabel);
 
     // 版本号
-    versionLabel = new QLabel("版本: v1.0.1");
+    versionLabel = new QLabel(QString("版本: v%1").arg(QApplication::applicationVersion()));
     versionLabel->setStyleSheet("font-size: 18px; color: #94A3B8;");
     versionLabel->setAlignment(Qt::AlignCenter);
     mainLayout->addWidget(versionLabel);
@@ -61,5 +62,5 @@ void AboutWidget::setupUI()
 void AboutWidget::checkVersion()
 {
     QMessageBox::information(this, "版本检测",
-        "当前版本: v1.0.1\n\n正在检测新版本...\n\n(功能待完善)");
+        QString("当前版本: v%1\n\n正在检测新版本...\n\n(功能待完善)").arg(QApplication::applicationVersion()));
 }

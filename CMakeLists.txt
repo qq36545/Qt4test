@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.16)
 
-project(ChickenAI VERSION 1.0.1 LANGUAGES CXX)
+file(READ "${CMAKE_SOURCE_DIR}/version.txt" APP_VERSION_RAW)
+string(STRIP "${APP_VERSION_RAW}" APP_VERSION)
+project(ChickenAI VERSION ${APP_VERSION} LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -52,6 +54,8 @@ add_executable(${PROJECT_NAME}
     ${HEADERS}
     ${RESOURCES}
 )
+
+target_compile_definitions(${PROJECT_NAME} PRIVATE APP_VERSION_STR="${PROJECT_VERSION}")
 
 target_link_libraries(${PROJECT_NAME}
     Qt6::Core
