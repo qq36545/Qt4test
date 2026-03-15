@@ -1,4 +1,4 @@
-; Qt4test NSIS 安装脚本
+; ChickenAI NSIS 安装脚本
 ; 用于创建 Windows 安装包
 
 ;--------------------------------
@@ -7,14 +7,14 @@
 
 ;--------------------------------
 ; 基本信息
-!define APP_NAME "Qt4test"
-!define APP_VERSION "1.0.0"
-!define APP_PUBLISHER "Qt4test Team"
-!define APP_DESCRIPTION "AI 视频/图片生成演示应用"
-!define APP_EXE "Qt4test.exe"
+!define APP_NAME "ChickenAI"
+!define APP_VERSION "1.0.1"
+!define APP_PUBLISHER "ChickenAI Team"
+!define APP_DESCRIPTION "AI 视频/图片生成应用"
+!define APP_EXE "ChickenAI.exe"
 
 ; 安装包输出名称
-OutFile "Qt4test-${APP_VERSION}-win64-setup.exe"
+OutFile "ChickenAI-${APP_VERSION}-win64-setup.exe"
 
 ; 默认安装目录
 InstallDir "$PROGRAMFILES64\${APP_NAME}"

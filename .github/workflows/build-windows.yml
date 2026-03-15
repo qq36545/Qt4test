@@ -45,12 +45,12 @@ jobs:
     - name: Prepare deployment directory
       run: |
         mkdir deploy
-        copy build\Qt4test.exe deploy\
+        copy build\ChickenAI.exe deploy\
         copy LICENSE.txt deploy\
 
     - name: Run windeployqt
       run: |
-        windeployqt --release --no-translations deploy\Qt4test.exe
+        windeployqt --release --no-translations deploy\ChickenAI.exe
 
     - name: Install NSIS and build installer
       run: |
@@ -60,15 +60,15 @@ jobs:
     - name: Upload installer
       uses: actions/upload-artifact@v4
       with:
-        name: Qt4test-Windows-Installer
-        path: Qt4test-*.exe
+        name: ChickenAI-Windows-Installer
+        path: ChickenAI-*.exe
         retention-days: 30
 
     - name: Create Release (on tag)
       if: startsWith(github.ref, 'refs/tags/')
       uses: softprops/action-gh-release@v1
       with:
-        files: Qt4test-*.exe
+        files: ChickenAI-*.exe
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
