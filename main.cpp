@@ -3,6 +3,7 @@
 #include <QLibraryInfo>
 #include <QLocale>
 #include <QTranslator>
+#include <QDebug>
 
 int main(int argc, char *argv[])
 {
@@ -19,8 +20,11 @@ int main(int argc, char *argv[])
 
     // 设置应用信息
     app.setApplicationName("Qt4test");
-    app.setApplicationVersion("1.0.0");
+    app.setApplicationVersion("1.0.1");
     app.setOrganizationName("Qt4test");
+#ifndef NDEBUG
+    qDebug() << "App version:" << QApplication::applicationVersion();
+#endif
 
     // 创建并显示主窗口
     MainWindow window;

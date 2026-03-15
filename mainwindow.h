@@ -39,6 +39,8 @@ private:
     double calculateScaleFactor();
     void loadTheme();
     void saveTheme();
+    void setupStartupUpdateCheck();
+    void ensureFirstRunVersionRecorded();
 
     // 主题相关
     enum Theme { Dark, Light };
@@ -63,6 +65,8 @@ private:
     ConfigWidget *configWidget;
     AboutWidget *aboutWidget;
     VideoSingleHistoryTab *historyWidget;
+
+    bool startupUpdatePrompted = false;
 };
 
 #endif // MAINWINDOW_H

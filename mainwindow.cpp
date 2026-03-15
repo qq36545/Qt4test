@@ -4,6 +4,7 @@
 #include "widgets/configwidget.h"
 #include "widgets/aboutwidget.h"
 #include "network/taskpollmanager.h"
+#include "network/updatemanager.h"
 #include <QFile>
 #include <QGraphicsBlurEffect>
 #include <QGraphicsDropShadowEffect>
@@ -11,6 +12,9 @@
 #include <QApplication>
 #include <QScreen>
 #include <QSettings>
+#include <QTimer>
+#include <QMessageBox>
+#include <QDebug>
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent), currentTheme(Dark)
@@ -25,6 +29,9 @@ MainWindow::MainWindow(QWidget *parent)
 
     // 恢复待轮询任务
     TaskPollManager::getInstance()->recoverPendingTasks();
+
+    ensureFirstRunVersionRecorded();
+    setupStartupUpdateCheck();
 }
 
 MainWindow::~MainWindow()
@@ -277,4 +284,56 @@ void MainWindow::setupFonts()
     baseFont.setPointSize(baseFontSize);
 
     QApplication::setFont(baseFont);
+}
+
+void MainWindow::ensureFirstRunVersionRecorded()
+{
+    QSettings settings("ChickenAI", "Update");
+    const QString currentVersion = QApplication::applicationVersion();
+    const QString lastVersion = settings.value("lastVersion").toString();
+    if (lastVersion != currentVersion) {
+        settings.setValue("lastVersion", currentVersion);
+    }
+}
+
+void MainWindow::setupStartupUpdateCheck()
+{
+    UpdateManager *updateManager = UpdateManager::getInstance();
+    QSettings settings("ChickenAI", "Update");
+    const bool mandatoryHardBlockEnabled = settings.value("mandatoryHardBlockEnabled", false).toBool();
+    updateManager->setMandatoryHardBlockEnabled(mandatoryHardBlockEnabled);
+
+    connect(updateManager, &UpdateManager::updateAvailable, this,
+            [this](const UpdateManager::ReleaseInfo& info, bool isManual, bool mandatoryEffective) {
+                Q_UNUSED(isManual);
+                Q_UNUSED(mandatoryEffective);
+
+                if (startupUpdatePrompted) {
+                    return;
+                }
+                startupUpdatePrompted = true;
+
+                const QString text = QStringLiteral("发现新版本 %1，是否立即下载？").arg(info.version);
+                QMessageBox msgBox(this);
+                msgBox.setWindowTitle(QStringLiteral("发现新版本"));
+                msgBox.setText(text);
+                msgBox.setIcon(QMessageBox::Information);
+                QPushButton *downloadButton = msgBox.addButton(QStringLiteral("立即下载"), QMessageBox::AcceptRole);
+                msgBox.addButton(QStringLiteral("稍后"), QMessageBox::RejectRole);
+                msgBox.exec();
+
+                if (msgBox.clickedButton() == downloadButton) {
+                    UpdateManager::getInstance()->startDownloadAndInstall();
+                }
+            });
+    connect(updateManager, &UpdateManager::checkFailed, this,
+            [](bool isManual, const QString& reason) {
+                if (!isManual) {
+                    qDebug() << "Startup update check failed:" << reason;
+                }
+            });
+
+    QTimer::singleShot(500, this, [updateManager]() {
+        updateManager->checkForUpdates(false);
+    });
 }
