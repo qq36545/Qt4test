@@ -115,6 +115,7 @@ void MainWindow::setupSidebar()
     sidebarLayout->addWidget(configButton);
     sidebarLayout->addWidget(aboutButton);
     sidebarLayout->addWidget(historyButton);
+    historyButton->hide();  // 隐藏历史记录按钮
     sidebarLayout->addStretch();
     sidebarLayout->addWidget(themeButton);
 }
