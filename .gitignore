@@ -47,13 +47,14 @@ CLAUDE.md
 todo.md
 cc.sh
 
-# Large files (models, etc.)
-*.bin
-*.onnx
-*.pt
-*.pth
-*.safetensors
-*.ckpt
-*.h5
-*.pb
+# Local temp/build artifacts
+.qt/
+build-macos-intel-local/
+*.bak
 
+# Local release assets
+inputs/
+
+# Local signing helper artifacts
+scripts/entitlements.plist
+scripts/sign-and-notarize.sh
