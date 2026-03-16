@@ -8,29 +8,29 @@
   "minSupportedVersion": "1.0.0",
   "downloadUrls": {
     "macos_arm64": {
-      "github": "",
+      "github": "https://github.com/qq36545/Qt4test/releases/download/v1.0.2.1/ChickenAI-1.0.2.1-macos-arm64.dmg",
       "gitee": "",
       "cloudflare": ""
     },
     "macos_intel": {
-      "github": "",
+      "github": "https://github.com/qq36545/Qt4test/releases/download/v1.0.2.1/ChickenAI-1.0.2.1-macos-x86_64.dmg",
       "gitee": "",
       "cloudflare": ""
     },
     "windows_x64": {
-      "github": "",
+      "github": "https://github.com/qq36545/Qt4test/releases/download/v1.0.2.1/ChickenAI-1.0.2.1-win64-setup.exe",
       "gitee": "",
       "cloudflare": ""
     }
   },
   "fileSize": {
-    "macos_arm64": 0,
-    "macos_intel": 0,
-    "windows_x64": 0
+    "macos_arm64": 48469452,
+    "macos_intel": 46905300,
+    "windows_x64": 47216026
   },
   "sha256": {
-    "macos_arm64": "",
-    "macos_intel": "",
-    "windows_x64": ""
+    "macos_arm64": "f010c4115531c0dc51ed21e10eaf77f4613eaab1848624de35c74118223ac6a5",
+    "macos_intel": "d8994d38ebde8c03bfd9111977a828f4a395886c18f989ce91f1202892e92f08",
+    "windows_x64": "c4a123dc3225486dd81d49023013010c2de5034757dd1e5a9622462731de57d0"
   }
 }
