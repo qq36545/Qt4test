@@ -18,7 +18,10 @@ jobs:
       uses: actions/checkout@v4
 
     - name: Read version
-      run: echo "APP_VERSION=$(cat version.txt)" >> $GITHUB_ENV
+      shell: pwsh
+      run: |
+        $v = (Get-Content version.txt -Raw).Trim()
+        Add-Content -Path $env:GITHUB_ENV -Value "APP_VERSION=$v"
 
     - name: Install Qt
       uses: jurplel/install-qt-action@v4
