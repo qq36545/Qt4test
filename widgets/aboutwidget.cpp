@@ -7,6 +7,17 @@ AboutWidget::AboutWidget(QWidget *parent)
     : QWidget(parent)
 {
     setupUI();
+
+    // 连接 UpdateManager 信号
+    UpdateManager *updateManager = UpdateManager::getInstance();
+    connect(updateManager, &UpdateManager::checkStarted,
+            this, &AboutWidget::onUpdateCheckStarted);
+    connect(updateManager, &UpdateManager::updateAvailable,
+            this, &AboutWidget::onUpdateAvailable);
+    connect(updateManager, &UpdateManager::noUpdateFound,
+            this, &AboutWidget::onNoUpdateFound);
+    connect(updateManager, &UpdateManager::checkFailed,
+            this, &AboutWidget::onCheckFailed);
 }
 
 void AboutWidget::setupUI()
@@ -61,6 +72,79 @@ void AboutWidget::setupUI()
 
 void AboutWidget::checkVersion()
 {
-    QMessageBox::information(this, "版本检测",
-        QString("当前版本: v%1\n\n正在检测新版本...\n\n(功能待完善)").arg(QApplication::applicationVersion()));
+    if (m_checkingUpdate) {
+        return;  // 防止重复点击
+    }
+
+    UpdateManager::getInstance()->checkForUpdates(true);
+}
+
+void AboutWidget::onUpdateCheckStarted(bool isManual)
+{
+    if (!isManual) return;  // 只处理手动检查
+
+    m_checkingUpdate = true;
+    checkVersionButton->setEnabled(false);
+    checkVersionButton->setText("🔄 检查中...");
+}
+
+void AboutWidget::onUpdateAvailable(
+    const UpdateManager::ReleaseInfo& info,
+    bool isManual, bool mandatoryEffective)
+{
+    if (!isManual) return;
+
+    m_checkingUpdate = false;
+    checkVersionButton->setEnabled(true);
+    checkVersionButton->setText("🔍 检测新版本");
+
+    QString text = QString("发现新版本 %1\n\n"
+                          "当前版本: v%2\n"
+                          "最新版本: %3\n"
+                          "发布日期: %4\n\n"
+                          "更新说明:\n%5\n\n"
+                          "是否立即下载？")
+                      .arg(info.version)
+                      .arg(QApplication::applicationVersion())
+                      .arg(info.version)
+                      .arg(info.releaseDate)
+                      .arg(info.releaseNotes);
+
+    QMessageBox msgBox(this);
+    msgBox.setWindowTitle("发现新版本");
+    msgBox.setText(text);
+    msgBox.setIcon(QMessageBox::Information);
+    QPushButton *downloadBtn = msgBox.addButton("立即下载",
+                                                QMessageBox::AcceptRole);
+    msgBox.addButton("稍后", QMessageBox::RejectRole);
+    msgBox.exec();
+
+    if (msgBox.clickedButton() == downloadBtn) {
+        UpdateManager::getInstance()->startDownloadAndInstall();
+    }
+}
+
+void AboutWidget::onNoUpdateFound(bool isManual, const QString& currentVersion)
+{
+    if (!isManual) return;
+
+    m_checkingUpdate = false;
+    checkVersionButton->setEnabled(true);
+    checkVersionButton->setText("🔍 检测新版本");
+
+    QMessageBox::information(this, "检查更新",
+        QString("当前已是最新版本\n\n版本: v%1").arg(currentVersion));
+}
+
+void AboutWidget::onCheckFailed(bool isManual, const QString& reason)
+{
+    if (!isManual) return;
+
+    m_checkingUpdate = false;
+    checkVersionButton->setEnabled(true);
+    checkVersionButton->setText("🔍 检测新版本");
+
+    QMessageBox::warning(this, "检查更新失败",
+        QString("无法检查更新\n\n原因: %1\n\n"
+               "请检查网络连接后重试").arg(reason));
 }
