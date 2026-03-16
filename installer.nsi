@@ -53,7 +53,7 @@ SetCompressor /SOLID lzma
 
 ;--------------------------------
 ; 版本信息
-VIProductVersion "${APP_VERSION}.0"
+VIProductVersion "${APP_VERSION}"
 VIAddVersionKey /LANG=${LANG_SIMPCHINESE} "ProductName" "${APP_NAME}"
 VIAddVersionKey /LANG=${LANG_SIMPCHINESE} "CompanyName" "${APP_PUBLISHER}"
 VIAddVersionKey /LANG=${LANG_SIMPCHINESE} "FileDescription" "${APP_DESCRIPTION}"

@@ -467,19 +467,24 @@ int UpdateManager::versionStringToCode(const QString& version) const
     }
 
     const QStringList parts = norm.split('.');
-    if (parts.size() < 3) {
+    if (parts.size() < 3 || parts.size() > 4) {
         return 0;
     }
 
-    bool ok1 = false, ok2 = false, ok3 = false;
+    bool ok1 = false, ok2 = false, ok3 = false, ok4 = true;
     const int major = parts[0].toInt(&ok1);
     const int minor = parts[1].toInt(&ok2);
     const int patch = parts[2].toInt(&ok3);
-    if (!ok1 || !ok2 || !ok3) {
+    int build = 0;
+    if (parts.size() == 4) {
+        build = parts[3].toInt(&ok4);
+    }
+
+    if (!ok1 || !ok2 || !ok3 || !ok4) {
         return 0;
     }
 
-    return major * 100 + minor * 10 + patch;
+    return major * 1000 + minor * 100 + patch * 10 + build;
 }
 
 int UpdateManager::currentVersionCode() const
