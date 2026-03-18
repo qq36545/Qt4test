@@ -23,6 +23,7 @@ signals:
 
 protected:
     void resizeEvent(QResizeEvent *event) override;
+    void changeEvent(QEvent *event) override;
 
 private slots:
     void addApiKey();
@@ -46,6 +47,7 @@ private:
     void loadImgbbKeys();
     void updateColumnWidths();
     void updateRowHeight();
+    void updateThemeStyles();
     double calculateScaleFactor();
     QString maskApiKey(const QString& apiKey);
 
@@ -54,6 +56,9 @@ private:
     QTableWidget *imgbbKeyTable;
     QPushButton *addButton;
     QPushButton *addImgbbButton;
+    QLabel *hint1Label;
+    QLabel *hint2Label;
+    QLabel *hint3Label;
     double scaleFactor;
 };
 

@@ -9,6 +9,9 @@
 #include <QResizeEvent>
 #include <QScreen>
 #include <QRadioButton>
+#include <QEvent>
+#include <QPalette>
+#include <QTimer>
 
 namespace {
 QVBoxLayout* createCenteredContentLayout(QWidget *parent, QVBoxLayout *parentLayout, int spacing)
@@ -27,6 +30,35 @@ QVBoxLayout* createCenteredContentLayout(QWidget *parent, QVBoxLayout *parentLay
 
     parentLayout->addLayout(containerLayout);
     return contentLayout;
+}
+
+bool isDarkThemeWidget(const QWidget *widget)
+{
+    const QWidget *host = widget && widget->window() ? widget->window() : widget;
+    if (!host) return false;
+    const QColor bgColor = host->palette().color(QPalette::Window);
+    return bgColor.lightness() < 128;
+}
+
+void applyKeyDialogTheme(QDialog *dialog, bool isDarkTheme)
+{
+    if (isDarkTheme) {
+        dialog->setStyleSheet(
+            "QDialog { background: #111827; color: #F9FAFB; }"
+            "QLabel { color: #F9FAFB; font-size: 14px; }"
+            "QLineEdit { background: #1F2937; color: #F9FAFB; border: 1px solid #374151; border-radius: 8px; padding: 10px; font-size: 14px; }"
+            "QLineEdit:focus { border: 1px solid #60A5FA; }"
+            "QPushButton { background: #374151; color: #F9FAFB; border: 1px solid #4B5563; border-radius: 8px; padding: 8px 16px; min-height: 40px; }"
+            "QPushButton:hover { background: #4B5563; }"
+            "QPushButton:pressed { background: #1F2937; }");
+    } else {
+        dialog->setStyleSheet(
+            "QDialog { background: #FFFFFF; color: #111111; }"
+            "QLabel { color: #111111; font-size: 14px; }"
+            "QLineEdit { background: #FFFFFF; color: #111111; border: 1px solid #D1D5DB; border-radius: 8px; padding: 10px; font-size: 14px; }"
+            "QLineEdit:focus { border: 1px solid #2563EB; }"
+            "QPushButton { min-height: 40px; }");
+    }
 }
 }
 
@@ -77,7 +109,16 @@ void ConfigWidget::setupApiKeyTab(QWidget *tab)
     addButton->setFixedHeight(40);
     addButton->setMinimumWidth(120);
     connect(addButton, &QPushButton::clicked, this, &ConfigWidget::addApiKey);
+
+    QLabel *registerLabel = new QLabel(
+        "<span style='font-size:13px;'>没有密钥？点击"
+        "<a href=\"https://ai.kegeai.top/register?aff=78Gs\" style='color:#F97316; font-weight:700; font-size:15px; text-decoration:none;'>这里</a>"
+        "注册👉</span>");
+    registerLabel->setOpenExternalLinks(true);
+    registerLabel->setTextFormat(Qt::RichText);
+
     buttonLayout->addWidget(addButton);
+    buttonLayout->addWidget(registerLabel);
     buttonLayout->addStretch();
     contentLayout->addWidget(buttonRow);
 
@@ -124,21 +165,23 @@ void ConfigWidget::setupImgbbTab(QWidget *tab)
     contentLayout->addWidget(imgbbKeyTable);
 
     // 引导区
-    QLabel *hint1 = new QLabel("1. 获取上传临时图床密钥注册地址，<a href=\"https://imgbb.com/signup\">注册</a>");
-    hint1->setOpenExternalLinks(true);
-    hint1->setStyleSheet("color: #94A3B8; font-size: 13px;");
+    hint1Label = new QLabel("1. 获取上传临时图床密钥注册地址，<a href=\"https://imgbb.com/signup\">注册</a>");
+    hint1Label->setOpenExternalLinks(true);
+    hint1Label->setAlignment(Qt::AlignLeft);
 
-    QLabel *hint2 = new QLabel("2. 注册之后登录账号，前往<a href=\"https://api.imgbb.com/\">这里</a>创建API密钥");
-    hint2->setOpenExternalLinks(true);
-    hint2->setStyleSheet("color: #94A3B8; font-size: 13px;");
+    hint2Label = new QLabel("2.注册之后登录账号，前往<a href=\"https://api.imgbb.com/\">这里</a>创建临时图床API密钥 注意⚠️：这个是图床密钥跟充值那边的API密钥无关！");
+    hint2Label->setOpenExternalLinks(true);
+    hint2Label->setAlignment(Qt::AlignLeft);
 
-    QLabel *hint3 = new QLabel("3. 临时图床为免费注册和使用，不需要充值，但是有用量的限制，一般个人用户够用，不够用可以创建多个即可解决问题。");
-    hint3->setWordWrap(true);
-    hint3->setStyleSheet("color: #94A3B8; font-size: 13px;");
+    hint3Label = new QLabel("3. 临时图床为免费注册和使用，不需要充值，但是有用量的限制，一般个人用户够用，不够用可以创建多个即可解决问题。");
+    hint3Label->setWordWrap(true);
+    hint3Label->setAlignment(Qt::AlignLeft);
 
-    layout->addWidget(hint1);
-    layout->addWidget(hint2);
-    layout->addWidget(hint3);
+    contentLayout->addWidget(hint1Label);
+    contentLayout->addWidget(hint2Label);
+    contentLayout->addWidget(hint3Label);
+    updateThemeStyles();
+    QTimer::singleShot(0, this, [this]() { updateThemeStyles(); });
 }
 
 double ConfigWidget::calculateScaleFactor()
@@ -170,6 +213,27 @@ void ConfigWidget::resizeEvent(QResizeEvent *event)
     updateRowHeight();
 }
 
+void ConfigWidget::changeEvent(QEvent *event)
+{
+    QWidget::changeEvent(event);
+    if (event->type() == QEvent::PaletteChange || event->type() == QEvent::StyleChange) {
+        updateThemeStyles();
+    }
+}
+
+void ConfigWidget::updateThemeStyles()
+{
+    const QWidget *host = window() ? window() : this;
+    const QColor bgColor = host->palette().color(QPalette::Window);
+    const bool isDarkTheme = bgColor.lightness() < 128;
+
+    const QString hintColor = isDarkTheme ? "#ffffff" : "#111111";
+    const QString hintStyle = QString("color: %1; font-size: 13px;").arg(hintColor);
+
+    if (hint1Label) hint1Label->setStyleSheet(hintStyle);
+    if (hint2Label) hint2Label->setStyleSheet(hintStyle);
+    if (hint3Label) hint3Label->setStyleSheet(hintStyle);
+}
 void ConfigWidget::updateColumnWidths()
 {
     // 序号/名称：内容自适应；密钥：拉伸填满；操作/最后列：固定（约为内容宽度的2倍）
@@ -521,14 +585,15 @@ void ApiKeyDialog::setupUI()
     setMinimumWidth(500);
     QVBoxLayout *mainLayout = new QVBoxLayout(this);
     QFormLayout *formLayout = new QFormLayout();
+    formLayout->setLabelAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+    formLayout->setFormAlignment(Qt::AlignLeft | Qt::AlignTop);
+    formLayout->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
 
     nameEdit = new QLineEdit();
     nameEdit->setPlaceholderText("例如: sora2密钥");
-    nameEdit->setStyleSheet("padding: 10px; font-size: 14px;");
 
     apiKeyEdit = new QLineEdit();
     apiKeyEdit->setPlaceholderText("例如: sk-***********jshfg");
-    apiKeyEdit->setStyleSheet("padding: 10px; font-size: 14px;");
 
     formLayout->addRow("名称:", nameEdit);
     formLayout->addRow("密钥:", apiKeyEdit);
@@ -545,10 +610,12 @@ void ApiKeyDialog::setupUI()
     cancelButton->setMinimumWidth(100);
     connect(cancelButton, &QPushButton::clicked, this, &QDialog::reject);
 
-    buttonLayout->addStretch();
+    buttonLayout->setAlignment(Qt::AlignCenter);
     buttonLayout->addWidget(saveButton);
     buttonLayout->addWidget(cancelButton);
     mainLayout->addLayout(buttonLayout);
+
+    applyKeyDialogTheme(this, isDarkThemeWidget(this));
 }
 
 void ApiKeyDialog::loadApiKey(int id)
@@ -572,14 +639,15 @@ void ImgbbKeyDialog::setupUI()
     setMinimumWidth(500);
     QVBoxLayout *mainLayout = new QVBoxLayout(this);
     QFormLayout *formLayout = new QFormLayout();
+    formLayout->setLabelAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+    formLayout->setFormAlignment(Qt::AlignLeft | Qt::AlignTop);
+    formLayout->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
 
     nameEdit = new QLineEdit();
     nameEdit->setPlaceholderText("例如: 我的imgbb密钥");
-    nameEdit->setStyleSheet("padding: 10px; font-size: 14px;");
 
     apiKeyEdit = new QLineEdit();
     apiKeyEdit->setPlaceholderText("imgbb API Key");
-    apiKeyEdit->setStyleSheet("padding: 10px; font-size: 14px;");
 
     formLayout->addRow("名称:", nameEdit);
     formLayout->addRow("密钥:", apiKeyEdit);
@@ -596,10 +664,12 @@ void ImgbbKeyDialog::setupUI()
     cancelBtn->setMinimumWidth(100);
     connect(cancelBtn, &QPushButton::clicked, this, &QDialog::reject);
 
-    buttonLayout->addStretch();
+    buttonLayout->setAlignment(Qt::AlignCenter);
     buttonLayout->addWidget(saveBtn);
     buttonLayout->addWidget(cancelBtn);
     mainLayout->addLayout(buttonLayout);
+
+    applyKeyDialogTheme(this, isDarkThemeWidget(this));
 }
 
 void ImgbbKeyDialog::loadKey(int id)
