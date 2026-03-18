@@ -41,6 +41,7 @@
 #include <QApplication>
 #include <QToolTip>
 #include <QInputDialog>
+#include <QImageReader>
 
 namespace {
 
@@ -1644,6 +1645,32 @@ QString VideoSingleTab::normalizeImageReferences(const QString &prompt) const
     }
 
     return result;
+}
+
+bool VideoSingleTab::validateImageFile(const QString &filePath, QString &errorMsg) const
+{
+    QFileInfo fileInfo(filePath);
+
+    if (!fileInfo.exists()) {
+        errorMsg = "文件不存在";
+        return false;
+    }
+
+    qint64 fileSize = fileInfo.size();
+    if (fileSize > 10 * 1024 * 1024) {
+        errorMsg = QString("文件过大（%1 MB），请选择小于 10MB 的图片")
+                   .arg(fileSize / 1024.0 / 1024.0, 0, 'f', 2);
+        return false;
+    }
+
+    QImageReader reader(filePath);
+    QString format = reader.format().toLower();
+    if (format != "jpg" && format != "jpeg" && format != "png" && format != "webp") {
+        errorMsg = QString("不支持的格式（%1），仅支持 JPG/PNG/WEBP").arg(format);
+        return false;
+    }
+
+    return true;
 }
 
 void VideoSingleTab::onTaskStatusUpdated(const QString &taskId, const QString &status, const QString &videoUrl, int progress)
