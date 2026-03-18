@@ -13,6 +13,7 @@ class ImageGenWidget;
 class ConfigWidget;
 class AboutWidget;
 class VideoSingleHistoryTab;
+class HelpWidget;
 
 class MainWindow : public QMainWindow
 {
@@ -28,6 +29,7 @@ private slots:
     void showConfig();
     void showAbout();
     void showHistory();
+    void showHelp();
     void toggleTheme();
 
 private:
@@ -57,6 +59,7 @@ private:
     QPushButton *configButton;
     QPushButton *aboutButton;
     QPushButton *historyButton;
+    QPushButton *helpButton;
     QPushButton *themeButton;
 
     // 内容页面
@@ -65,6 +68,7 @@ private:
     ConfigWidget *configWidget;
     AboutWidget *aboutWidget;
     VideoSingleHistoryTab *historyWidget;
+    HelpWidget *helpWidget;
 
     bool startupUpdatePrompted = false;
 };

@@ -3,6 +3,7 @@
 #include "widgets/imagegen.h"
 #include "widgets/configwidget.h"
 #include "widgets/aboutwidget.h"
+#include "widgets/helpwidget.h"
 #include "network/taskpollmanager.h"
 #include "network/updatemanager.h"
 #include <QFile>
@@ -24,8 +25,31 @@ MainWindow::MainWindow(QWidget *parent)
     setupUI();
     applyStyles();
 
-    // 默认显示视频生成页面
-    showVideoGen();
+    // 检查是否首次启动
+    QSettings settings("ChickenAI", "App");
+    bool isFirstRun = settings.value("isFirstRun", true).toBool();
+
+    if (isFirstRun) {
+        // 首次启动，显示使用帮助页面
+        showHelp();
+        settings.setValue("isFirstRun", false);
+    } else {
+        // 非首次启动，恢复上次的页面
+        QString lastPage = settings.value("lastPage", "video").toString();
+        if (lastPage == "video") {
+            showVideoGen();
+        } else if (lastPage == "image") {
+            showImageGen();
+        } else if (lastPage == "config") {
+            showConfig();
+        } else if (lastPage == "about") {
+            showAbout();
+        } else if (lastPage == "help") {
+            showHelp();
+        } else {
+            showVideoGen();  // 默认显示视频生成页面
+        }
+    }
 
     // 恢复待轮询任务
     TaskPollManager::getInstance()->recoverPendingTasks();
@@ -103,6 +127,12 @@ void MainWindow::setupSidebar()
     historyButton->setFixedSize(60, 60);
     historyButton->setToolTip("历史记录");
 
+    helpButton = new QPushButton("❓");
+    helpButton->setObjectName("sidebarButton");
+    helpButton->setCheckable(true);
+    helpButton->setFixedSize(60, 60);
+    helpButton->setToolTip("使用帮助");
+
     themeButton = new QPushButton(currentTheme == Dark ? "🌙" : "☀️");
     themeButton->setObjectName("sidebarButton");
     themeButton->setFixedSize(60, 60);
@@ -114,6 +144,7 @@ void MainWindow::setupSidebar()
     connect(configButton, &QPushButton::clicked, this, &MainWindow::showConfig);
     connect(aboutButton, &QPushButton::clicked, this, &MainWindow::showAbout);
     connect(historyButton, &QPushButton::clicked, this, &MainWindow::showHistory);
+    connect(helpButton, &QPushButton::clicked, this, &MainWindow::showHelp);
     connect(themeButton, &QPushButton::clicked, this, &MainWindow::toggleTheme);
 
     // 添加到布局
@@ -124,6 +155,7 @@ void MainWindow::setupSidebar()
     sidebarLayout->addWidget(historyButton);
     historyButton->hide();  // 隐藏历史记录按钮
     sidebarLayout->addStretch();
+    sidebarLayout->addWidget(helpButton);
     sidebarLayout->addWidget(themeButton);
 }
 
@@ -138,6 +170,7 @@ void MainWindow::setupContentArea()
     configWidget = new ConfigWidget();
     aboutWidget = new AboutWidget();
     historyWidget = new VideoSingleHistoryTab();
+    helpWidget = new HelpWidget();
 
     // 添加到堆栈
     contentArea->addWidget(videoGenWidget);
@@ -145,6 +178,7 @@ void MainWindow::setupContentArea()
     contentArea->addWidget(configWidget);
     contentArea->addWidget(aboutWidget);
     contentArea->addWidget(historyWidget);
+    contentArea->addWidget(helpWidget);
 
     // 连接配置页面的密钥变化信号到视频生成页面
     connect(configWidget, &ConfigWidget::apiKeysChanged,
@@ -167,6 +201,10 @@ void MainWindow::showVideoGen()
     configButton->setChecked(false);
     aboutButton->setChecked(false);
     historyButton->setChecked(false);
+    helpButton->setChecked(false);
+
+    QSettings settings("ChickenAI", "App");
+    settings.setValue("lastPage", "video");
 }
 
 void MainWindow::showImageGen()
@@ -177,6 +215,10 @@ void MainWindow::showImageGen()
     configButton->setChecked(false);
     aboutButton->setChecked(false);
     historyButton->setChecked(false);
+    helpButton->setChecked(false);
+
+    QSettings settings("ChickenAI", "App");
+    settings.setValue("lastPage", "image");
 }
 
 void MainWindow::showConfig()
@@ -187,6 +229,10 @@ void MainWindow::showConfig()
     configButton->setChecked(true);
     aboutButton->setChecked(false);
     historyButton->setChecked(false);
+    helpButton->setChecked(false);
+
+    QSettings settings("ChickenAI", "App");
+    settings.setValue("lastPage", "config");
 }
 
 void MainWindow::showAbout()
@@ -197,6 +243,10 @@ void MainWindow::showAbout()
     configButton->setChecked(false);
     aboutButton->setChecked(true);
     historyButton->setChecked(false);
+    helpButton->setChecked(false);
+
+    QSettings settings("ChickenAI", "App");
+    settings.setValue("lastPage", "about");
 }
 
 void MainWindow::showHistory()
@@ -207,6 +257,24 @@ void MainWindow::showHistory()
     configButton->setChecked(false);
     aboutButton->setChecked(false);
     historyButton->setChecked(true);
+    helpButton->setChecked(false);
+
+    QSettings settings("ChickenAI", "App");
+    settings.setValue("lastPage", "history");
+}
+
+void MainWindow::showHelp()
+{
+    contentArea->setCurrentWidget(helpWidget);
+    videoButton->setChecked(false);
+    imageButton->setChecked(false);
+    configButton->setChecked(false);
+    aboutButton->setChecked(false);
+    historyButton->setChecked(false);
+    helpButton->setChecked(true);
+
+    QSettings settings("ChickenAI", "App");
+    settings.setValue("lastPage", "help");
 }
 
 void MainWindow::applyStyles()

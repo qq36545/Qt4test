@@ -24,6 +24,7 @@ set(SOURCES
     widgets/imagegen.cpp
     widgets/configwidget.cpp
     widgets/aboutwidget.cpp
+    widgets/helpwidget.cpp
     database/dbmanager.cpp
     network/videoapi.cpp
     network/imageuploader.cpp
@@ -38,6 +39,7 @@ set(HEADERS
     widgets/imagegen.h
     widgets/configwidget.h
     widgets/aboutwidget.h
+    widgets/helpwidget.h
     database/dbmanager.h
     network/videoapi.h
     network/imageuploader.h

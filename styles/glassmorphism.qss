@@ -103,7 +103,7 @@ QTextEdit {
     color: #F8FAFC;
     font-size: 13pt;
     padding: 12px;
-    selection-background-color: rgba(225, 29, 72, 0.3);
+    selection-background-color: #FFFF00;
 }
 
 QTextEdit:focus {
