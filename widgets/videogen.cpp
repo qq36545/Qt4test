@@ -1373,6 +1373,9 @@ void VideoSingleTab::generateVideo()
         return;
     }
 
+    // 规范化图片引用：@图1 → @图0, @图片2 → @图片1
+    prompt = normalizeImageReferences(prompt);
+
     // 检查是否有有效图片（过滤空字符串）
     bool hasValidImage = false;
     for (const QString& path : uploadedImagePaths) {
@@ -1613,6 +1616,34 @@ void VideoSingleTab::onVideoCreated(const QString &taskId, const QString &status
 
     // 不清空输入，保留参数供用户继续使用
     // 参数已通过 saveSettings() 自动保存
+}
+
+QString VideoSingleTab::normalizeImageReferences(const QString &prompt) const
+{
+    QString result = prompt;
+    QRegularExpression re(R"(@(图片?)(\d+))");
+    QRegularExpressionMatchIterator it = re.globalMatch(result);
+
+    QList<QPair<int, int>> replacements;
+    QStringList newTexts;
+
+    while (it.hasNext()) {
+        QRegularExpressionMatch match = it.next();
+        int num = match.captured(2).toInt();
+        if (num >= 1 && num <= 3) {
+            int newNum = num - 1;
+            QString prefix = match.captured(1);
+            QString newText = QString("@%1%2").arg(prefix).arg(newNum);
+            replacements.prepend(qMakePair(match.capturedStart(), match.capturedLength()));
+            newTexts.prepend(newText);
+        }
+    }
+
+    for (int i = 0; i < replacements.size(); ++i) {
+        result.replace(replacements[i].first, replacements[i].second, newTexts[i]);
+    }
+
+    return result;
 }
 
 void VideoSingleTab::onTaskStatusUpdated(const QString &taskId, const QString &status, const QString &videoUrl, int progress)

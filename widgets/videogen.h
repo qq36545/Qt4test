@@ -73,6 +73,7 @@ private:
     bool checkDuplicateSubmission();
     void onAnyParameterChanged();
     QString copyImagesToPersistentStorage(const QString &taskId);
+    QString normalizeImageReferences(const QString &prompt) const;
 
     QTextEdit *promptInput;
     QComboBox *modelCombo;
