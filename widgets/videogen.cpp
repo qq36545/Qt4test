@@ -12,6 +12,8 @@
 #include <QHeaderView>
 #include <QDialog>
 #include <QFormLayout>
+#include <QLineEdit>
+#include <QLabel>
 #include <QResizeEvent>
 #include <QTabBar>
 #include <QPixmap>
@@ -38,6 +40,7 @@
 #include <QClipboard>
 #include <QApplication>
 #include <QToolTip>
+#include <QInputDialog>
 
 namespace {
 
@@ -288,6 +291,12 @@ bool VideoSingleTab::eventFilter(QObject *obj, QEvent *event)
         } else if (obj == middleFramePreviewLabel) {
             uploadMiddleFrameImage();
             return true;
+        } else if (obj == grokImage2PreviewLabel) {
+            uploadGrokImage2();
+            return true;
+        } else if (obj == grokImage3PreviewLabel) {
+            uploadGrokImage3();
+            return true;
         }
     }
     return QWidget::eventFilter(obj, event);
@@ -387,7 +396,8 @@ void VideoSingleTab::setupUI()
     promptLabel->setStyleSheet("font-size: 14px;");
     promptInput = new QTextEdit();
     promptInput->setPlaceholderText("输入视频生成提示词...\n例如：一只可爱的猫咪在花园里玩耍，阳光明媚，电影级画质");
-    promptInput->setMinimumHeight(120);  // 支持多行输入和滚动
+    promptInput->setMinimumHeight(240);  // 支持多行输入和滚动
+    promptInput->setStyleSheet("font-size: 15px;");
     contentLayout->addWidget(promptLabel);
     contentLayout->addWidget(promptInput);
 
@@ -417,8 +427,14 @@ void VideoSingleTab::setupUI()
     uploadImageButton = new QPushButton("📁 选择首帧图片");
     uploadImageButton->setFixedWidth(150);
     connect(uploadImageButton, &QPushButton::clicked, this, &VideoSingleTab::uploadImage);
+
+    clearImageButton = new QPushButton("🗑️ 清空");
+    clearImageButton->setFixedWidth(80);
+    connect(clearImageButton, &QPushButton::clicked, [this]() { clearGrokImage(0); });
+
     imageLayout->addWidget(imagePreviewLabel, 1);
     imageLayout->addWidget(uploadImageButton);
+    imageLayout->addWidget(clearImageButton);
     contentLayout->addLayout(imageLayout);
 
     // 尾帧图片上传区域（默认隐藏，根据模型动态显示）
@@ -474,6 +490,74 @@ void VideoSingleTab::setupUI()
 
     contentLayout->addWidget(middleFrameWidget);
     middleFrameWidget->setVisible(false);
+
+    // Grok 图片2 上传区域（默认隐藏）
+    grokImage2Widget = new QWidget();
+    QVBoxLayout *grokImage2Layout = new QVBoxLayout(grokImage2Widget);
+    grokImage2Layout->setContentsMargins(0, 0, 0, 0);
+    grokImage2Layout->setSpacing(10);
+
+    QLabel *grokImage2Label = new QLabel("图片2（可选）:");
+    grokImage2Label->setStyleSheet("font-size: 14px;");
+    grokImage2Layout->addWidget(grokImage2Label);
+
+    QHBoxLayout *grokImage2ImageLayout = new QHBoxLayout();
+    grokImage2PreviewLabel = new QLabel("未选择图片\n点击此处上传");
+    grokImage2PreviewLabel->setObjectName("imagePreviewLabel");
+    grokImage2PreviewLabel->setAlignment(Qt::AlignCenter);
+    grokImage2PreviewLabel->setCursor(Qt::PointingHandCursor);
+    grokImage2PreviewLabel->setScaledContents(false);
+    grokImage2PreviewLabel->installEventFilter(this);
+
+    uploadGrokImage2Button = new QPushButton("📁 选择图片2");
+    uploadGrokImage2Button->setFixedWidth(150);
+    connect(uploadGrokImage2Button, &QPushButton::clicked, this, &VideoSingleTab::uploadGrokImage2);
+
+    clearGrokImage2Button = new QPushButton("🗑️ 清空");
+    clearGrokImage2Button->setFixedWidth(80);
+    connect(clearGrokImage2Button, &QPushButton::clicked, [this]() { clearGrokImage(1); });
+
+    grokImage2ImageLayout->addWidget(grokImage2PreviewLabel, 1);
+    grokImage2ImageLayout->addWidget(uploadGrokImage2Button);
+    grokImage2ImageLayout->addWidget(clearGrokImage2Button);
+    grokImage2Layout->addLayout(grokImage2ImageLayout);
+
+    contentLayout->addWidget(grokImage2Widget);
+    grokImage2Widget->setVisible(false);
+
+    // Grok 图片3 上传区域（默认隐藏）
+    grokImage3Widget = new QWidget();
+    QVBoxLayout *grokImage3Layout = new QVBoxLayout(grokImage3Widget);
+    grokImage3Layout->setContentsMargins(0, 0, 0, 0);
+    grokImage3Layout->setSpacing(10);
+
+    QLabel *grokImage3Label = new QLabel("图片3（可选）:");
+    grokImage3Label->setStyleSheet("font-size: 14px;");
+    grokImage3Layout->addWidget(grokImage3Label);
+
+    QHBoxLayout *grokImage3ImageLayout = new QHBoxLayout();
+    grokImage3PreviewLabel = new QLabel("未选择图片\n点击此处上传");
+    grokImage3PreviewLabel->setObjectName("imagePreviewLabel");
+    grokImage3PreviewLabel->setAlignment(Qt::AlignCenter);
+    grokImage3PreviewLabel->setCursor(Qt::PointingHandCursor);
+    grokImage3PreviewLabel->setScaledContents(false);
+    grokImage3PreviewLabel->installEventFilter(this);
+
+    uploadGrokImage3Button = new QPushButton("📁 选择图片3");
+    uploadGrokImage3Button->setFixedWidth(150);
+    connect(uploadGrokImage3Button, &QPushButton::clicked, this, &VideoSingleTab::uploadGrokImage3);
+
+    clearGrokImage3Button = new QPushButton("🗑️ 清空");
+    clearGrokImage3Button->setFixedWidth(80);
+    connect(clearGrokImage3Button, &QPushButton::clicked, [this]() { clearGrokImage(2); });
+
+    grokImage3ImageLayout->addWidget(grokImage3PreviewLabel, 1);
+    grokImage3ImageLayout->addWidget(uploadGrokImage3Button);
+    grokImage3ImageLayout->addWidget(clearGrokImage3Button);
+    grokImage3Layout->addLayout(grokImage3ImageLayout);
+
+    contentLayout->addWidget(grokImage3Widget);
+    grokImage3Widget->setVisible(false);
 
     // 参数设置
     QHBoxLayout *paramsLayout = new QHBoxLayout();
@@ -761,6 +845,10 @@ void VideoSingleTab::onModelChanged(int index)
     // 模型切换时重新加载对应的密钥
     loadApiKeys();
 
+    // 更新图片上传UI
+    QString currentVariant = modelVariantCombo->currentData().toString();
+    updateImageUploadUI(currentVariant);
+
     suppressAutoSave = false;
     if (!modelCombo->signalsBlocked()) {
         queueSaveSettings();
@@ -873,7 +961,47 @@ void VideoSingleTab::uploadImage()
     QString modelName = modelVariantCombo->currentData().toString();
     bool isComponents = modelName.contains("components");
     bool isFrames = modelName.contains("frames");
+    bool isGrok = modelName.contains("grok", Qt::CaseInsensitive);
 
+    // Grok模型：直接替换图片1
+    if (isGrok) {
+        QSettings settings("ChickenAI", "VideoGen");
+        QString lastDir = settings.value("lastImageUploadDir", QStandardPaths::writableLocation(QStandardPaths::PicturesLocation)).toString();
+        if (!QDir(lastDir).exists()) {
+            lastDir = QStandardPaths::writableLocation(QStandardPaths::PicturesLocation);
+        }
+
+        QString fileName = QFileDialog::getOpenFileName(this, "选择图片1", lastDir,
+            "图片文件 (*.png *.jpg *.jpeg *.bmp *.gif)");
+
+        if (fileName.isEmpty()) return;
+
+        QPixmap pixmap(fileName);
+        if (pixmap.isNull()) {
+            QMessageBox::warning(this, "提示", "选择的文件不是图片格式");
+            return;
+        }
+
+        // 确保 uploadedImagePaths 有足够空间
+        while (uploadedImagePaths.size() < 3) {
+            uploadedImagePaths.append(QString());
+        }
+        uploadedImagePaths[0] = fileName;
+
+        QPixmap scaledPixmap = pixmap.scaled(200, 120, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+        imagePreviewLabel->setPixmap(scaledPixmap);
+        imagePreviewLabel->setText("");
+        imagePreviewLabel->setProperty("hasImage", true);
+        imagePreviewLabel->style()->unpolish(imagePreviewLabel);
+        imagePreviewLabel->style()->polish(imagePreviewLabel);
+
+        QFileInfo fileInfo(fileName);
+        settings.setValue("lastImageUploadDir", fileInfo.absolutePath());
+        queueSaveSettings();
+        return;
+    }
+
+    // 其他模型：原有逻辑
     // 已有图片时确认替换后清空
     if (!uploadedImagePaths.isEmpty()) {
         int ret = QMessageBox::question(this, "重新选择图片",
@@ -922,6 +1050,106 @@ void VideoSingleTab::removeImage(int index)
     }
 }
 
+void VideoSingleTab::uploadGrokImage2()
+{
+    QSettings settings("ChickenAI", "VideoGen");
+    QString lastDir = settings.value("lastImageUploadDir", QStandardPaths::writableLocation(QStandardPaths::PicturesLocation)).toString();
+    if (!QDir(lastDir).exists()) {
+        lastDir = QStandardPaths::writableLocation(QStandardPaths::PicturesLocation);
+    }
+
+    QString fileName = QFileDialog::getOpenFileName(this, "选择图片2", lastDir,
+        "图片文件 (*.png *.jpg *.jpeg *.bmp *.gif)");
+
+    if (fileName.isEmpty()) return;
+
+    QPixmap pixmap(fileName);
+    if (pixmap.isNull()) {
+        QMessageBox::warning(this, "提示", "选择的文件不是图片格式");
+        return;
+    }
+
+    // 确保 uploadedImagePaths 有足够空间
+    while (uploadedImagePaths.size() < 3) {
+        uploadedImagePaths.append(QString());
+    }
+    uploadedImagePaths[1] = fileName;
+
+    QPixmap scaledPixmap = pixmap.scaled(200, 120, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+    grokImage2PreviewLabel->setPixmap(scaledPixmap);
+    grokImage2PreviewLabel->setText("");
+    grokImage2PreviewLabel->setProperty("hasImage", true);
+    grokImage2PreviewLabel->style()->unpolish(grokImage2PreviewLabel);
+    grokImage2PreviewLabel->style()->polish(grokImage2PreviewLabel);
+
+    QFileInfo fileInfo(fileName);
+    settings.setValue("lastImageUploadDir", fileInfo.absolutePath());
+    queueSaveSettings();
+}
+
+void VideoSingleTab::uploadGrokImage3()
+{
+    QSettings settings("ChickenAI", "VideoGen");
+    QString lastDir = settings.value("lastImageUploadDir", QStandardPaths::writableLocation(QStandardPaths::PicturesLocation)).toString();
+    if (!QDir(lastDir).exists()) {
+        lastDir = QStandardPaths::writableLocation(QStandardPaths::PicturesLocation);
+    }
+
+    QString fileName = QFileDialog::getOpenFileName(this, "选择图片3", lastDir,
+        "图片文件 (*.png *.jpg *.jpeg *.bmp *.gif)");
+
+    if (fileName.isEmpty()) return;
+
+    QPixmap pixmap(fileName);
+    if (pixmap.isNull()) {
+        QMessageBox::warning(this, "提示", "选择的文件不是图片格式");
+        return;
+    }
+
+    // 确保 uploadedImagePaths 有足够空间
+    while (uploadedImagePaths.size() < 3) {
+        uploadedImagePaths.append(QString());
+    }
+    uploadedImagePaths[2] = fileName;
+
+    QPixmap scaledPixmap = pixmap.scaled(200, 120, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+    grokImage3PreviewLabel->setPixmap(scaledPixmap);
+    grokImage3PreviewLabel->setText("");
+    grokImage3PreviewLabel->setProperty("hasImage", true);
+    grokImage3PreviewLabel->style()->unpolish(grokImage3PreviewLabel);
+    grokImage3PreviewLabel->style()->polish(grokImage3PreviewLabel);
+
+    QFileInfo fileInfo(fileName);
+    settings.setValue("lastImageUploadDir", fileInfo.absolutePath());
+    queueSaveSettings();
+}
+
+void VideoSingleTab::clearGrokImage(int index)
+{
+    if (index < 0 || index >= uploadedImagePaths.size()) return;
+
+    uploadedImagePaths[index] = QString();
+
+    QLabel *previewLabel = nullptr;
+    if (index == 0) {
+        previewLabel = imagePreviewLabel;
+    } else if (index == 1) {
+        previewLabel = grokImage2PreviewLabel;
+    } else if (index == 2) {
+        previewLabel = grokImage3PreviewLabel;
+    }
+
+    if (previewLabel) {
+        previewLabel->setText("未选择图片\n点击此处上传");
+        previewLabel->setPixmap(QPixmap());
+        previewLabel->setProperty("hasImage", false);
+        previewLabel->style()->unpolish(previewLabel);
+        previewLabel->style()->polish(previewLabel);
+    }
+
+    queueSaveSettings();
+}
+
 void VideoSingleTab::updateImagePreview()
 {
     if (uploadedImagePaths.isEmpty()) {
@@ -949,6 +1177,52 @@ void VideoSingleTab::updateImagePreview()
     // 强制刷新样式
     imagePreviewLabel->style()->unpolish(imagePreviewLabel);
     imagePreviewLabel->style()->polish(imagePreviewLabel);
+
+    // 更新图2预览
+    if (uploadedImagePaths.size() >= 2 && !uploadedImagePaths[1].isEmpty()) {
+        QPixmap pixmap2(uploadedImagePaths[1]);
+        if (!pixmap2.isNull()) {
+            QPixmap scaledPixmap = pixmap2.scaled(200, 120, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+            grokImage2PreviewLabel->setPixmap(scaledPixmap);
+            grokImage2PreviewLabel->setText("");
+        } else {
+            grokImage2PreviewLabel->setPixmap(QPixmap());
+            QFileInfo fileInfo(uploadedImagePaths[1]);
+            grokImage2PreviewLabel->setText("✓ " + fileInfo.fileName());
+        }
+        grokImage2PreviewLabel->setProperty("hasImage", true);
+        grokImage2PreviewLabel->style()->unpolish(grokImage2PreviewLabel);
+        grokImage2PreviewLabel->style()->polish(grokImage2PreviewLabel);
+    } else {
+        grokImage2PreviewLabel->setText("未选择图片\n点击此处上传");
+        grokImage2PreviewLabel->setPixmap(QPixmap());
+        grokImage2PreviewLabel->setProperty("hasImage", false);
+        grokImage2PreviewLabel->style()->unpolish(grokImage2PreviewLabel);
+        grokImage2PreviewLabel->style()->polish(grokImage2PreviewLabel);
+    }
+
+    // 更新图3预览
+    if (uploadedImagePaths.size() >= 3 && !uploadedImagePaths[2].isEmpty()) {
+        QPixmap pixmap3(uploadedImagePaths[2]);
+        if (!pixmap3.isNull()) {
+            QPixmap scaledPixmap = pixmap3.scaled(200, 120, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+            grokImage3PreviewLabel->setPixmap(scaledPixmap);
+            grokImage3PreviewLabel->setText("");
+        } else {
+            grokImage3PreviewLabel->setPixmap(QPixmap());
+            QFileInfo fileInfo(uploadedImagePaths[2]);
+            grokImage3PreviewLabel->setText("✓ " + fileInfo.fileName());
+        }
+        grokImage3PreviewLabel->setProperty("hasImage", true);
+        grokImage3PreviewLabel->style()->unpolish(grokImage3PreviewLabel);
+        grokImage3PreviewLabel->style()->polish(grokImage3PreviewLabel);
+    } else {
+        grokImage3PreviewLabel->setText("未选择图片\n点击此处上传");
+        grokImage3PreviewLabel->setPixmap(QPixmap());
+        grokImage3PreviewLabel->setProperty("hasImage", false);
+        grokImage3PreviewLabel->style()->unpolish(grokImage3PreviewLabel);
+        grokImage3PreviewLabel->style()->polish(grokImage3PreviewLabel);
+    }
 }
 
 void VideoSingleTab::uploadEndFrameImage()
@@ -1018,39 +1292,51 @@ void VideoSingleTab::updateImageUploadUI(const QString &modelName)
     bool isGrok = modelName.contains("grok", Qt::CaseInsensitive);
 
     if (isGrok) {
-        // Grok模型：只显示一个上传组件，支持文生视频
+        // Grok模型：显示3个独立上传组件
         imageLabel->setText("图片1（可选）:");
         uploadImageButton->setText("📁 选择图片1");
+        clearImageButton->setVisible(true);
         endFrameWidget->setVisible(false);
         middleFrameWidget->setVisible(false);
+        grokImage2Widget->setVisible(true);
+        grokImage3Widget->setVisible(true);
         imageUploadHintLabel->setVisible(true);
     } else if (isComponents) {
         // components 变体：3 个独立上传控件，各传 1 张
         // 布局物理顺序：imageLabel → endFrame → middleFrame
         imageLabel->setText("图片1（可选）:");
         uploadImageButton->setText("📁 选择图片1");
+        clearImageButton->setVisible(false);
         endFrameWidget->setVisible(true);
         endFrameLabel->setText("图片2（可选）:");
         uploadEndFrameButton->setText("📁 选择图片2");
         middleFrameWidget->setVisible(true);
         middleFrameLabel->setText("图片3（可选）:");
         uploadMiddleFrameButton->setText("📁 选择图片3");
+        grokImage2Widget->setVisible(false);
+        grokImage3Widget->setVisible(false);
         imageUploadHintLabel->setVisible(false);
     } else if (isFrames) {
         // 仅支持单张首帧
         imageLabel->setText("首帧图片（单张）:");
         uploadImageButton->setText("📁 选择首帧图片");
+        clearImageButton->setVisible(false);
         endFrameWidget->setVisible(false);
         middleFrameWidget->setVisible(false);
+        grokImage2Widget->setVisible(false);
+        grokImage3Widget->setVisible(false);
         imageUploadHintLabel->setVisible(false);
     } else {
         // 支持首尾帧
         imageLabel->setText("首帧图片:");
         uploadImageButton->setText("📁 选择首帧图片");
+        clearImageButton->setVisible(false);
         endFrameWidget->setVisible(true);
         endFrameLabel->setText("尾帧图片（可选）:");
         uploadEndFrameButton->setText("📁 选择尾帧图片");
         middleFrameWidget->setVisible(false);
+        grokImage2Widget->setVisible(false);
+        grokImage3Widget->setVisible(false);
         imageUploadHintLabel->setVisible(false);
     }
 }
@@ -1087,7 +1373,15 @@ void VideoSingleTab::generateVideo()
         return;
     }
 
-    if (uploadedImagePaths.isEmpty() && uploadedMiddleFrameImagePath.isEmpty() && uploadedEndFrameImagePath.isEmpty()) {
+    // 检查是否有有效图片（过滤空字符串）
+    bool hasValidImage = false;
+    for (const QString& path : uploadedImagePaths) {
+        if (!path.isEmpty()) {
+            hasValidImage = true;
+            break;
+        }
+    }
+    if (!hasValidImage && uploadedMiddleFrameImagePath.isEmpty() && uploadedEndFrameImagePath.isEmpty()) {
         QString model = modelCombo->currentText();
         if (model.contains("Grok", Qt::CaseInsensitive)) {
             int ret = QMessageBox::question(this, "提示",
@@ -1151,10 +1445,12 @@ void VideoSingleTab::generateVideo()
         task.size = sizeCombo->currentData().toString();
     }
 
-    // 序列化图片路径
+    // 序列化图片路径（过滤空字符串）
     QJsonArray imageArray;
     for (const QString& path : uploadedImagePaths) {
-        imageArray.append(path);
+        if (!path.isEmpty()) {
+            imageArray.append(path);
+        }
     }
     task.imagePaths = QString::fromUtf8(QJsonDocument(imageArray).toJson(QJsonDocument::Compact));
     task.endFrameImagePath = uploadedEndFrameImagePath;
@@ -1189,13 +1485,21 @@ void VideoSingleTab::generateVideo()
         if (modelVariant.contains("15s")) grokDuration = 15;
         else if (modelVariant.contains("10s")) grokDuration = 10;
 
+        // 过滤空字符串
+        QStringList validImagePaths;
+        for (const QString& path : uploadedImagePaths) {
+            if (!path.isEmpty()) {
+                validImagePaths.append(path);
+            }
+        }
+
         veo3API->createVideo(
             apiKeyData.apiKey,
             server,
             model,  // modelName
             modelVariant,
             prompt,
-            uploadedImagePaths,
+            validImagePaths,
             size,
             QString::number(grokDuration),  // seconds → duration
             false,  // watermark (Grok不需要)
@@ -1210,8 +1514,13 @@ void VideoSingleTab::generateVideo()
             return;
         }
 
-        // 合并所有图片路径：首帧 + 中间帧 + 尾帧
-        QStringList allImagePaths = uploadedImagePaths;
+        // 合并所有图片路径：首帧 + 中间帧 + 尾帧（过滤空字符串）
+        QStringList allImagePaths;
+        for (const QString& path : uploadedImagePaths) {
+            if (!path.isEmpty()) {
+                allImagePaths.append(path);
+            }
+        }
         if (!uploadedMiddleFrameImagePath.isEmpty()) {
             allImagePaths.append(uploadedMiddleFrameImagePath);
         }
@@ -1238,8 +1547,13 @@ void VideoSingleTab::generateVideo()
             enableUpsample
         );
     } else {
-        // VEO3 Variant 1 OpenAI格式：合并所有图片路径
-        QStringList allImagePaths = uploadedImagePaths;
+        // VEO3 Variant 1 OpenAI格式：合并所有图片路径（过滤空字符串）
+        QStringList allImagePaths;
+        for (const QString& path : uploadedImagePaths) {
+            if (!path.isEmpty()) {
+                allImagePaths.append(path);
+            }
+        }
         if (!uploadedMiddleFrameImagePath.isEmpty()) {
             allImagePaths.append(uploadedMiddleFrameImagePath);
         }
@@ -2394,7 +2708,7 @@ void VideoHistoryWidget::setupUI()
 
 // VideoSingleHistoryTab 实现
 VideoSingleHistoryTab::VideoSingleHistoryTab(QWidget *parent)
-    : QWidget(parent), isListView(true), currentOffset(0)
+    : QWidget(parent), isListView(true), currentOffset(0), hasShownRecoveryPrompt(false)
 {
     setupUI();
     loadHistory();
@@ -2484,6 +2798,40 @@ void VideoSingleHistoryTab::showEvent(QShowEvent *event)
     QWidget::showEvent(event);
     // tab显示时自动刷新历史记录
     refreshHistory();
+
+    // 检查是否有创建时间<5分钟的temp-ID任务
+    if (!hasShownRecoveryPrompt) {
+        QList<VideoTask> allTasks = DBManager::instance()->getTasksByType("video_single", 0, 100);
+        QStringList recentTempIds;
+        QDateTime now = QDateTime::currentDateTime();
+
+        for (const VideoTask& task : allTasks) {
+            if (task.taskId.startsWith("temp-")) {
+                qint64 secondsElapsed = task.createdAt.secsTo(now);
+                if (secondsElapsed < 300) {  // 5分钟 = 300秒
+                    recentTempIds.append(task.taskId);
+                }
+            }
+        }
+
+        if (!recentTempIds.isEmpty()) {
+            hasShownRecoveryPrompt = true;
+
+            QMessageBox msgBox(this);
+            msgBox.setWindowTitle("检测到未完成的任务恢复");
+            msgBox.setText(QString("发现 %1 个最近创建的任务因超时未获取到任务ID，是否立即修复？").arg(recentTempIds.size()));
+            msgBox.setIcon(QMessageBox::Question);
+            QPushButton* fixNowBtn = msgBox.addButton("立即修复", QMessageBox::AcceptRole);
+            QPushButton* laterBtn = msgBox.addButton("稍后处理", QMessageBox::RejectRole);
+
+            msgBox.exec();
+
+            if (msgBox.clickedButton() == fixNowBtn) {
+                // 自动选中第一个temp-ID任务并打开修复对话框
+                onFixTaskId(recentTempIds.first());
+            }
+        }
+    }
 }
 
 bool VideoSingleHistoryTab::eventFilter(QObject *obj, QEvent *event)
@@ -2691,11 +3039,37 @@ void VideoSingleHistoryTab::loadHistory(int offset, int limit)
             historyTable->setItem(row, 3, promptItem);
 
             // 状态
-            QTableWidgetItem *statusItem = new QTableWidgetItem(displayState.statusText);
+            QString statusText = displayState.statusText;
+            // 检测temp-ID任务
+            if (task.taskId.startsWith("temp-")) {
+                statusText = "⚠️ 待恢复";
+            }
+            QTableWidgetItem *statusItem = new QTableWidgetItem(statusText);
             if (!task.errorMessage.isEmpty()) {
                 statusItem->setToolTip(task.errorMessage);
             }
             historyTable->setItem(row, 4, statusItem);
+
+            // 如果是temp-ID任务，设置行背景色高亮
+            if (task.taskId.startsWith("temp-")) {
+                QColor highlightColor = QColor(255, 250, 205);  // 浅黄色
+                // 检查是否为深色主题
+                QWidget* topWidget = window();
+                if (topWidget) {
+                    QPalette pal = topWidget->palette();
+                    QColor bgColor = pal.color(QPalette::Window);
+                    if (bgColor.lightness() < 128) {
+                        // 深色主题，使用暖色调
+                        highlightColor = QColor(80, 60, 40);
+                    }
+                }
+                for (int col = 0; col < historyTable->columnCount(); ++col) {
+                    QTableWidgetItem* item = historyTable->item(row, col);
+                    if (item) {
+                        item->setBackground(highlightColor);
+                    }
+                }
+            }
 
             // 进度
             historyTable->setItem(row, 5, new QTableWidgetItem(QString::number(task.progress) + "%"));
@@ -3091,10 +3465,24 @@ void VideoSingleHistoryTab::showContextMenu(const QPoint &pos)
         return;
     }
 
+    int row = item->row();
+    // 任务ID在第2列
+    QTableWidgetItem *taskIdItem = historyTable->item(row, 2);
+    if (!taskIdItem) {
+        return;
+    }
+    QString taskId = taskIdItem->text();
+
     // 创建右键菜单
     QMenu contextMenu(this);
     contextMenu.setStyleSheet("QMenu { font-size: 14px; } QMenu::item { padding: 5px 20px; }");
     QAction *copyAction = contextMenu.addAction("📋 复制");
+
+    // 如果是 temp-ID，添加修复选项
+    QAction *fixAction = nullptr;
+    if (taskId.startsWith("temp_")) {
+        fixAction = contextMenu.addAction("🔧 修复任务ID");
+    }
 
     // 显示菜单并获取用户选择
     QAction *selectedAction = contextMenu.exec(historyTable->viewport()->mapToGlobal(pos));
@@ -3116,6 +3504,8 @@ void VideoSingleHistoryTab::showContextMenu(const QPoint &pos)
             // 可选：显示提示
             // QMessageBox::information(this, "提示", "已复制到剪贴板");
         }
+    } else if (fixAction && selectedAction == fixAction) {
+        onFixTaskId(taskId);
     }
 }
 
@@ -3147,6 +3537,131 @@ void VideoSingleHistoryTab::onDeleteSelected()
     } else {
         QMessageBox::warning(this, "删除失败", "删除记录失败，请查看日志");
     }
+}
+
+void VideoSingleHistoryTab::onFixTaskId(const QString& tempTaskId)
+{
+    // 创建自定义对话框以支持主题适配
+    QDialog dialog(this);
+    dialog.setWindowTitle("修复任务ID");
+    dialog.setMinimumWidth(400);
+
+    // 继承父窗口的样式表
+    QWidget *topLevelWidget = window();
+    if (topLevelWidget) {
+        dialog.setStyleSheet(topLevelWidget->styleSheet());
+    }
+
+    // 为对话框显式设置深色主题样式
+    QString dialogStyle = R"(
+        QDialog {
+            background: rgba(30, 27, 75, 0.95);
+            color: #F8FAFC;
+        }
+        QLabel {
+            color: #F8FAFC;
+            font-size: 14px;
+        }
+        QLineEdit {
+            background: rgba(248, 250, 252, 0.05);
+            border: 1px solid rgba(248, 250, 252, 0.1);
+            border-radius: 8px;
+            color: #F8FAFC;
+            padding: 8px 12px;
+            font-size: 14px;
+        }
+        QLineEdit:focus {
+            border: 1px solid rgba(225, 29, 72, 0.5);
+            background: rgba(248, 250, 252, 0.08);
+        }
+        QPushButton {
+            background: rgba(225, 29, 72, 0.2);
+            border: 1px solid rgba(225, 29, 72, 0.5);
+            border-radius: 8px;
+            color: #F8FAFC;
+            padding: 8px 16px;
+            font-size: 14px;
+            font-weight: 500;
+        }
+        QPushButton:hover {
+            background: rgba(225, 29, 72, 0.3);
+            border: 1px solid rgba(225, 29, 72, 0.7);
+        }
+        QPushButton:pressed {
+            background: rgba(225, 29, 72, 0.4);
+        }
+    )";
+    dialog.setStyleSheet(dialogStyle);
+
+    QVBoxLayout *layout = new QVBoxLayout(&dialog);
+    layout->setSpacing(15);
+    layout->setContentsMargins(20, 20, 20, 20);
+
+    // 提示标签
+    QLabel *hintLabel = new QLabel(QString("临时任务ID: %1\n\n请输入真实的任务ID:").arg(tempTaskId));
+    hintLabel->setWordWrap(true);
+    layout->addWidget(hintLabel);
+
+    // 输入框
+    QLineEdit *lineEdit = new QLineEdit();
+    layout->addWidget(lineEdit);
+
+    // 按钮
+    QHBoxLayout *buttonLayout = new QHBoxLayout();
+    QPushButton *okButton = new QPushButton("确定");
+    QPushButton *cancelButton = new QPushButton("取消");
+    buttonLayout->addStretch();
+    buttonLayout->addWidget(okButton);
+    buttonLayout->addWidget(cancelButton);
+    layout->addLayout(buttonLayout);
+
+    // 连接信号
+    connect(okButton, &QPushButton::clicked, &dialog, &QDialog::accept);
+    connect(cancelButton, &QPushButton::clicked, &dialog, &QDialog::reject);
+    connect(lineEdit, &QLineEdit::returnPressed, &dialog, &QDialog::accept);
+
+    // 显示对话框
+    if (dialog.exec() != QDialog::Accepted) {
+        return;
+    }
+
+    QString realTaskId = lineEdit->text().trimmed();
+    if (realTaskId.isEmpty()) {
+        return;
+    }
+
+    // 验证真实任务ID格式（不能是temp-开头）
+    if (realTaskId.startsWith("temp_")) {
+        QMessageBox::warning(this, "错误", "真实任务ID不能以 temp_ 开头");
+        return;
+    }
+
+    // 更新数据库
+    if (!DBManager::instance()->updateTaskId(tempTaskId, realTaskId)) {
+        QMessageBox::warning(this, "错误", "更新任务ID失败");
+        return;
+    }
+
+    // 更新任务状态为 pending
+    DBManager::instance()->updateTaskStatus(realTaskId, "pending", 0, "");
+
+    // 启动轮询
+    if (apiKeyCombo->count() > 0) {
+        int keyId = apiKeyCombo->currentData().toInt();
+        ApiKey apiKeyData = DBManager::instance()->getApiKey(keyId);
+        QString server = serverCombo->currentData().toString();
+
+        if (!apiKeyData.apiKey.isEmpty() && !server.isEmpty()) {
+            TaskPollManager::getInstance()->startPolling(realTaskId, "video_single",
+                apiKeyData.apiKey, server, "");
+        }
+    }
+
+    QMessageBox::information(this, "成功",
+        QString("任务ID已更新:\n%1\n→\n%2\n\n已启动轮询查询任务状态").arg(tempTaskId, realTaskId));
+
+    // 刷新历史记录
+    refreshHistory();
 }
 
 void VideoSingleHistoryTab::onSelectAllChanged(int state)

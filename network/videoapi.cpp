@@ -102,6 +102,7 @@ void VideoAPI::createVeo3Video(const QString &apiKey,
     QUrl url(baseUrl + "/v1/videos");
     QNetworkRequest request(url);
     request.setRawHeader("Authorization", QString("Bearer %1").arg(apiKey).toUtf8());
+    request.setTransferTimeout(60000);  // 60秒超时
 
     QHttpMultiPart *multiPart = new QHttpMultiPart(QHttpMultiPart::FormDataType);
 
@@ -180,6 +181,7 @@ void VideoAPI::createVeo3UnifiedVideo(const QString &apiKey,
     request.setRawHeader("Authorization", QString("Bearer %1").arg(apiKey).toUtf8());
     request.setRawHeader("Content-Type", "application/json");
     request.setRawHeader("Accept", "application/json");
+    request.setTransferTimeout(60000);  // 60秒超时
 
     QJsonObject jsonObj;
     jsonObj["model"] = model;
@@ -226,6 +228,7 @@ void VideoAPI::createGrokVideo(const QString &apiKey,
     request.setRawHeader("Authorization", QString("Bearer %1").arg(apiKey).toUtf8());
     request.setRawHeader("Content-Type", "application/json");
     request.setRawHeader("Accept", "application/json");
+    request.setTransferTimeout(60000);  // 60秒超时
     // 阿里云 oss:// 临时URL必须加此请求头，否则服务端无法解析
     request.setRawHeader("X-DashScope-OssResourceResolve", "enable");
 
@@ -365,11 +368,16 @@ void VideoAPI::onCreateVideoFinished()
 
         emit videoCreated(taskId, status);
     } else {
-        int statusCode = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
-        qDebug() << "[VideoAPI] create video failed:" << statusCode << responseData;
-        emit errorOccurred(QString("创建视频失败(HTTP %1): %2")
-                           .arg(statusCode)
-                           .arg(responseData.isEmpty() ? reply->errorString() : QString::fromUtf8(responseData)));
+        // 检查是否是超时错误
+        if (reply->error() == QNetworkReply::TimeoutError) {
+            emit errorOccurred("任务提交超时，但任务可能已创建。请稍后在历史记录中右键选择'修复任务ID'来恢复。");
+        } else {
+            int statusCode = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+            qDebug() << "[VideoAPI] create video failed:" << statusCode << responseData;
+            emit errorOccurred(QString("创建视频失败(HTTP %1): %2")
+                               .arg(statusCode)
+                               .arg(responseData.isEmpty() ? reply->errorString() : QString::fromUtf8(responseData)));
+        }
     }
 
     replyMap.remove(reply);

@@ -50,6 +50,9 @@ private slots:
     void uploadImage();
     void uploadEndFrameImage();
     void uploadMiddleFrameImage();
+    void uploadGrokImage2();
+    void uploadGrokImage3();
+    void clearGrokImage(int index);
     void removeImage(int index);
 
 private:
@@ -88,6 +91,7 @@ private:
     QLabel *imageLabel;
     QLabel *imagePreviewLabel;
     QPushButton *uploadImageButton;
+    QPushButton *clearImageButton;
     QStringList uploadedImagePaths;  // 改为支持多图
     QWidget *endFrameWidget;
     QLabel *endFrameLabel;
@@ -101,6 +105,17 @@ private:
     QLabel *middleFramePreviewLabel;
     QPushButton *uploadMiddleFrameButton;
     QString uploadedMiddleFrameImagePath;
+
+    // Grok 图片2/3 上传
+    QWidget *grokImage2Widget;
+    QLabel *grokImage2PreviewLabel;
+    QPushButton *uploadGrokImage2Button;
+    QPushButton *clearGrokImage2Button;
+
+    QWidget *grokImage3Widget;
+    QLabel *grokImage3PreviewLabel;
+    QPushButton *uploadGrokImage3Button;
+    QPushButton *clearGrokImage3Button;
 
     // 变体类型单选按钮
     QWidget *variantTypeWidget;
@@ -196,6 +211,7 @@ private slots:
     void onRetryQuery(const QString& taskId);
     void onRegenerate(const QString& taskId);
     void showContextMenu(const QPoint &pos);  // 显示右键菜单
+    void onFixTaskId(const QString& taskId);  // 修复任务ID
     void onDeleteSelected();  // 删除选中的记录
     void onSelectAllChanged(int state);  // 全选/取消全选
     void onCheckBoxStateChanged();  // 单个勾选框状态变化
@@ -231,6 +247,7 @@ private:
     class VideoAPI* veo3API;  // API实例，用于重新查询任务状态
     QString currentRefreshingTaskId;  // 当前正在刷新的任务ID
     QTimer* tooltipHideTimer;  // 状态tooltip 3秒自动消失计时器
+    bool hasShownRecoveryPrompt;  // 是否已显示过恢复提示
 };
 
 // 历史记录容器 Widget (4 tab)
