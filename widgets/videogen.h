@@ -75,6 +75,7 @@ private:
     QString copyImagesToPersistentStorage(const QString &taskId);
     QString normalizeImageReferences(const QString &prompt) const;
     bool validateImageFile(const QString &filePath, QString &errorMsg) const;
+    QString selectAndValidateImageFile(const QString &dialogTitle, bool warnIfEmpty);
 
     QTextEdit *promptInput;
     QComboBox *modelCombo;

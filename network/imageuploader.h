@@ -5,6 +5,7 @@
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QJsonObject>
+#include <QProgressDialog>
 
 class ImageUploader : public QObject
 {
@@ -27,20 +28,33 @@ public:
 signals:
     void uploadSuccess(const QString &ossUrl);
     void uploadError(const QString &error);
+    void retryAttempt(int retryCount, int maxRetries);
 
 private slots:
     void onGetPolicyFinished();
     void onUploadToOssFinished();
     void onImgbbUploadFinished();
+    void retryUpload();
+    void cancelUpload();
 
 private:
     void uploadToOss(const QJsonObject &policyData, const QString &filePath);
+    void startImgbbUploadRequest();
 
     QNetworkAccessManager *networkManager;
     QNetworkReply *currentReply;
 
     // 保存当前上传任务的状态
     QString pendingFilePath;
+
+    // imgbb 上传重试状态
+    int maxRetries = 3;
+    int currentRetry = 0;
+    QList<int> retryDelays {2000, 5000, 10000};
+    QString currentFilePath;
+    QString currentImgbbApiKey;
+    bool retryCanceled = false;
+    QProgressDialog *progressDialog = nullptr;
 };
 
 #endif // IMAGEUPLOADER_H

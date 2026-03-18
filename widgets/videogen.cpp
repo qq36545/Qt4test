@@ -918,31 +918,12 @@ void VideoSingleTab::uploadMiddleFrameImage()
         if (ret != QMessageBox::Yes) return;
     }
 
-    QSettings settings("ChickenAI", "VideoGen");
-    QString lastDir = settings.value("lastImageUploadDir",
-        QStandardPaths::writableLocation(QStandardPaths::PicturesLocation)).toString();
-    if (!QDir(lastDir).exists()) {
-        lastDir = QStandardPaths::writableLocation(QStandardPaths::PicturesLocation);
-    }
-
-    QString fileName = QFileDialog::getOpenFileName(
-        this, "选择图片2（中间帧）", lastDir,
-        "图片文件 (*.png *.jpg *.jpeg *.bmp *.gif)"
-    );
-
+    QString fileName = selectAndValidateImageFile("选择图片2（中间帧）", uploadedMiddleFrameImagePath.isEmpty());
     if (fileName.isEmpty()) {
-        if (uploadedMiddleFrameImagePath.isEmpty()) {
-            QMessageBox::warning(this, "提示", "没有选择图片");
-        }
         return;
     }
 
     QPixmap pixmap(fileName);
-    if (pixmap.isNull()) {
-        QMessageBox::warning(this, "提示", "选择的文件不是图片格式");
-        return;
-    }
-
     uploadedMiddleFrameImagePath = fileName;
     QPixmap scaledPixmap = pixmap.scaled(200, 120, Qt::KeepAspectRatio, Qt::SmoothTransformation);
     middleFramePreviewLabel->setPixmap(scaledPixmap);
@@ -951,8 +932,6 @@ void VideoSingleTab::uploadMiddleFrameImage()
     middleFramePreviewLabel->style()->unpolish(middleFramePreviewLabel);
     middleFramePreviewLabel->style()->polish(middleFramePreviewLabel);
 
-    QFileInfo fileInfo(fileName);
-    settings.setValue("lastImageUploadDir", fileInfo.absolutePath());
     queueSaveSettings();
 }
 
@@ -966,22 +945,10 @@ void VideoSingleTab::uploadImage()
 
     // Grok模型：直接替换图片1
     if (isGrok) {
-        QSettings settings("ChickenAI", "VideoGen");
-        QString lastDir = settings.value("lastImageUploadDir", QStandardPaths::writableLocation(QStandardPaths::PicturesLocation)).toString();
-        if (!QDir(lastDir).exists()) {
-            lastDir = QStandardPaths::writableLocation(QStandardPaths::PicturesLocation);
-        }
-
-        QString fileName = QFileDialog::getOpenFileName(this, "选择图片1", lastDir,
-            "图片文件 (*.png *.jpg *.jpeg *.bmp *.gif)");
-
+        QString fileName = selectAndValidateImageFile("选择图片1", false);
         if (fileName.isEmpty()) return;
 
         QPixmap pixmap(fileName);
-        if (pixmap.isNull()) {
-            QMessageBox::warning(this, "提示", "选择的文件不是图片格式");
-            return;
-        }
 
         // 确保 uploadedImagePaths 有足够空间
         while (uploadedImagePaths.size() < 3) {
@@ -996,8 +963,6 @@ void VideoSingleTab::uploadImage()
         imagePreviewLabel->style()->unpolish(imagePreviewLabel);
         imagePreviewLabel->style()->polish(imagePreviewLabel);
 
-        QFileInfo fileInfo(fileName);
-        settings.setValue("lastImageUploadDir", fileInfo.absolutePath());
         queueSaveSettings();
         return;
     }
@@ -1012,33 +977,13 @@ void VideoSingleTab::uploadImage()
         uploadedImagePaths.clear();
     }
 
-    // 公共代码：打开对话框、验证、append、保存
-    QSettings settings("ChickenAI", "VideoGen");
-    QString lastDir = settings.value("lastImageUploadDir", QStandardPaths::writableLocation(QStandardPaths::PicturesLocation)).toString();
-    if (!QDir(lastDir).exists()) {
-        lastDir = QStandardPaths::writableLocation(QStandardPaths::PicturesLocation);
-    }
-
-    QString fileName = QFileDialog::getOpenFileName(this, "选择图片1", lastDir,
-        "图片文件 (*.png *.jpg *.jpeg *.bmp *.gif)");
-
+    QString fileName = selectAndValidateImageFile("选择图片1", uploadedImagePaths.isEmpty());
     if (fileName.isEmpty()) {
-        if (uploadedImagePaths.isEmpty()) {
-            QMessageBox::warning(this, "提示", "没有选择图片");
-        }
-        return;
-    }
-
-    QPixmap pixmap(fileName);
-    if (pixmap.isNull()) {
-        QMessageBox::warning(this, "提示", "选择的文件不是图片格式");
         return;
     }
 
     uploadedImagePaths.append(fileName);
     updateImagePreview();
-    QFileInfo fileInfo(fileName);
-    settings.setValue("lastImageUploadDir", fileInfo.absolutePath());
     queueSaveSettings();
 }
 
@@ -1053,22 +998,10 @@ void VideoSingleTab::removeImage(int index)
 
 void VideoSingleTab::uploadGrokImage2()
 {
-    QSettings settings("ChickenAI", "VideoGen");
-    QString lastDir = settings.value("lastImageUploadDir", QStandardPaths::writableLocation(QStandardPaths::PicturesLocation)).toString();
-    if (!QDir(lastDir).exists()) {
-        lastDir = QStandardPaths::writableLocation(QStandardPaths::PicturesLocation);
-    }
-
-    QString fileName = QFileDialog::getOpenFileName(this, "选择图片2", lastDir,
-        "图片文件 (*.png *.jpg *.jpeg *.bmp *.gif)");
-
+    QString fileName = selectAndValidateImageFile("选择图片2", false);
     if (fileName.isEmpty()) return;
 
     QPixmap pixmap(fileName);
-    if (pixmap.isNull()) {
-        QMessageBox::warning(this, "提示", "选择的文件不是图片格式");
-        return;
-    }
 
     // 确保 uploadedImagePaths 有足够空间
     while (uploadedImagePaths.size() < 3) {
@@ -1083,29 +1016,15 @@ void VideoSingleTab::uploadGrokImage2()
     grokImage2PreviewLabel->style()->unpolish(grokImage2PreviewLabel);
     grokImage2PreviewLabel->style()->polish(grokImage2PreviewLabel);
 
-    QFileInfo fileInfo(fileName);
-    settings.setValue("lastImageUploadDir", fileInfo.absolutePath());
     queueSaveSettings();
 }
 
 void VideoSingleTab::uploadGrokImage3()
 {
-    QSettings settings("ChickenAI", "VideoGen");
-    QString lastDir = settings.value("lastImageUploadDir", QStandardPaths::writableLocation(QStandardPaths::PicturesLocation)).toString();
-    if (!QDir(lastDir).exists()) {
-        lastDir = QStandardPaths::writableLocation(QStandardPaths::PicturesLocation);
-    }
-
-    QString fileName = QFileDialog::getOpenFileName(this, "选择图片3", lastDir,
-        "图片文件 (*.png *.jpg *.jpeg *.bmp *.gif)");
-
+    QString fileName = selectAndValidateImageFile("选择图片3", false);
     if (fileName.isEmpty()) return;
 
     QPixmap pixmap(fileName);
-    if (pixmap.isNull()) {
-        QMessageBox::warning(this, "提示", "选择的文件不是图片格式");
-        return;
-    }
 
     // 确保 uploadedImagePaths 有足够空间
     while (uploadedImagePaths.size() < 3) {
@@ -1120,8 +1039,6 @@ void VideoSingleTab::uploadGrokImage3()
     grokImage3PreviewLabel->style()->unpolish(grokImage3PreviewLabel);
     grokImage3PreviewLabel->style()->polish(grokImage3PreviewLabel);
 
-    QFileInfo fileInfo(fileName);
-    settings.setValue("lastImageUploadDir", fileInfo.absolutePath());
     queueSaveSettings();
 }
 
@@ -1236,31 +1153,12 @@ void VideoSingleTab::uploadEndFrameImage()
         if (ret != QMessageBox::Yes) return;
     }
 
-    // 读取上次图片上传路径（与首帧共享）
-    QSettings settings("ChickenAI", "VideoGen");
-    QString lastDir = settings.value("lastImageUploadDir", QStandardPaths::writableLocation(QStandardPaths::PicturesLocation)).toString();
-    if (!QDir(lastDir).exists()) {
-        lastDir = QStandardPaths::writableLocation(QStandardPaths::PicturesLocation);
-    }
-
-    QString fileName = QFileDialog::getOpenFileName(
-        this, "选择尾帧图片", lastDir,
-        "图片文件 (*.png *.jpg *.jpeg *.bmp *.gif)"
-    );
-
+    QString fileName = selectAndValidateImageFile("选择尾帧图片", uploadedEndFrameImagePath.isEmpty());
     if (fileName.isEmpty()) {
-        if (uploadedEndFrameImagePath.isEmpty()) {
-            QMessageBox::warning(this, "提示", "没有选择图片");
-        }
         return;
     }
 
     QPixmap pixmap(fileName);
-    if (pixmap.isNull()) {
-        QMessageBox::warning(this, "提示", "选择的文件不是图片格式");
-        return;
-    }
-
     uploadedEndFrameImagePath = fileName;
     QPixmap scaledPixmap = pixmap.scaled(200, 120, Qt::KeepAspectRatio, Qt::SmoothTransformation);
     endFramePreviewLabel->setPixmap(scaledPixmap);
@@ -1269,8 +1167,6 @@ void VideoSingleTab::uploadEndFrameImage()
     endFramePreviewLabel->style()->unpolish(endFramePreviewLabel);
     endFramePreviewLabel->style()->polish(endFramePreviewLabel);
 
-    QFileInfo fileInfo(fileName);
-    settings.setValue("lastImageUploadDir", fileInfo.absolutePath());
     queueSaveSettings();
 }
 
@@ -1665,12 +1561,50 @@ bool VideoSingleTab::validateImageFile(const QString &filePath, QString &errorMs
 
     QImageReader reader(filePath);
     QString format = reader.format().toLower();
-    if (format != "jpg" && format != "jpeg" && format != "png" && format != "webp") {
-        errorMsg = QString("不支持的格式（%1），仅支持 JPG/PNG/WEBP").arg(format);
+    if (format != "jpg" && format != "jpeg" && format != "png" && format != "gif" && format != "webp") {
+        errorMsg = QString("不支持的格式（%1），仅支持 JPG/PNG/GIF/WEBP").arg(format);
         return false;
     }
 
     return true;
+}
+
+QString VideoSingleTab::selectAndValidateImageFile(const QString &dialogTitle, bool warnIfEmpty)
+{
+    QSettings settings("ChickenAI", "VideoGen");
+    QString lastDir = settings.value("lastImageUploadDir",
+        QStandardPaths::writableLocation(QStandardPaths::PicturesLocation)).toString();
+    if (!QDir(lastDir).exists()) {
+        lastDir = QStandardPaths::writableLocation(QStandardPaths::PicturesLocation);
+    }
+
+    QString fileName = QFileDialog::getOpenFileName(
+        this, dialogTitle, lastDir,
+        "图片文件 (*.png *.jpg *.jpeg *.gif *.webp)"
+    );
+
+    if (fileName.isEmpty()) {
+        if (warnIfEmpty) {
+            QMessageBox::warning(this, "提示", "没有选择图片");
+        }
+        return QString();
+    }
+
+    QString errorMsg;
+    if (!validateImageFile(fileName, errorMsg)) {
+        QMessageBox::warning(this, "图片校验失败", errorMsg);
+        return QString();
+    }
+
+    QPixmap pixmap(fileName);
+    if (pixmap.isNull()) {
+        QMessageBox::warning(this, "提示", "选择的文件不是图片格式");
+        return QString();
+    }
+
+    QFileInfo fileInfo(fileName);
+    settings.setValue("lastImageUploadDir", fileInfo.absolutePath());
+    return fileName;
 }
 
 void VideoSingleTab::onTaskStatusUpdated(const QString &taskId, const QString &status, const QString &videoUrl, int progress)

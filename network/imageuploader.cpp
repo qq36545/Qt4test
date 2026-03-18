@@ -7,6 +7,7 @@
 #include <QUrlQuery>
 #include <QNetworkRequest>
 #include <QDebug>
+#include <QTimer>
 #include <cstdint>
 
 // XOR 混淆存储，防止明文出现在二进制中
@@ -38,6 +39,11 @@ ImageUploader::~ImageUploader()
     if (currentReply) {
         currentReply->abort();
         currentReply->deleteLater();
+    }
+    if (progressDialog) {
+        progressDialog->hide();
+        progressDialog->deleteLater();
+        progressDialog = nullptr;
     }
 }
 
@@ -193,17 +199,42 @@ void ImageUploader::uploadToImgbb(const QString &localPath, const QString &imgbb
         return;
     }
 
-    QFile file(localPath);
+    currentFilePath = localPath;
+    currentImgbbApiKey = imgbbApiKey;
+    currentRetry = 0;
+    retryCanceled = false;
+
+    if (!progressDialog) {
+        progressDialog = new QProgressDialog(QString(), "取消重试", 0, 0);
+        progressDialog->setAutoClose(false);
+        progressDialog->setAutoReset(false);
+        progressDialog->setMinimumDuration(0);
+        progressDialog->setWindowModality(Qt::ApplicationModal);
+        connect(progressDialog, &QProgressDialog::canceled, this, &ImageUploader::cancelUpload);
+    }
+
+    progressDialog->setLabelText("正在上传图片...");
+    progressDialog->show();
+
+    startImgbbUploadRequest();
+}
+
+void ImageUploader::startImgbbUploadRequest()
+{
+    QFile file(currentFilePath);
     if (!file.open(QIODevice::ReadOnly)) {
-        emit uploadError("无法打开文件: " + localPath);
+        if (progressDialog) progressDialog->hide();
+        emit uploadError("无法打开文件: " + currentFilePath);
         return;
     }
+
     QByteArray base64Data = file.readAll().toBase64();
     file.close();
 
-    QUrl url(QString("https://api.imgbb.com/1/upload?key=%1").arg(imgbbApiKey));
+    QUrl url(QString("https://api.imgbb.com/1/upload?key=%1").arg(currentImgbbApiKey));
     QNetworkRequest request(url);
     request.setHeader(QNetworkRequest::ContentTypeHeader, "application/x-www-form-urlencoded");
+    request.setTransferTimeout(120000);
 
     QByteArray body = "image=" + QUrl::toPercentEncoding(QString::fromLatin1(base64Data));
 
@@ -217,11 +248,27 @@ void ImageUploader::onImgbbUploadFinished()
 
     QByteArray response = currentReply->readAll();
     int statusCode = currentReply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+    QNetworkReply::NetworkError networkError = currentReply->error();
+    QString errorString = currentReply->errorString();
     currentReply->deleteLater();
     currentReply = nullptr;
 
-    if (statusCode != 200) {
-        emit uploadError(QString("imgbb上传失败(HTTP %1): %2").arg(statusCode).arg(QString(response)));
+    if (retryCanceled) {
+        if (progressDialog) progressDialog->hide();
+        return;
+    }
+
+    const bool success = (networkError == QNetworkReply::NoError && statusCode == 200);
+    if (!success) {
+        if (currentRetry < maxRetries) {
+            retryUpload();
+            return;
+        }
+
+        if (progressDialog) progressDialog->hide();
+        emit uploadError(QString("imgbb上传失败(HTTP %1): %2")
+                         .arg(statusCode)
+                         .arg(response.isEmpty() ? errorString : QString::fromUtf8(response)));
         return;
     }
 
@@ -229,10 +276,58 @@ void ImageUploader::onImgbbUploadFinished()
     QJsonObject root = doc.object();
     QString imageUrl = root["data"].toObject()["url"].toString();
     if (imageUrl.isEmpty()) {
+        if (currentRetry < maxRetries) {
+            retryUpload();
+            return;
+        }
+
+        if (progressDialog) progressDialog->hide();
         emit uploadError("imgbb响应缺少url字段: " + QString(response));
         return;
     }
 
+    if (progressDialog) progressDialog->hide();
     qDebug() << "[ImageUploader] imgbb upload success:" << imageUrl;
     emit uploadSuccess(imageUrl);
+}
+
+void ImageUploader::retryUpload()
+{
+    if (retryCanceled) return;
+
+    currentRetry++;
+    emit retryAttempt(currentRetry, maxRetries);
+
+    if (progressDialog) {
+        progressDialog->setLabelText(QString("API Error，正在重试第 %1/%2 次...")
+                                     .arg(currentRetry)
+                                     .arg(maxRetries));
+        progressDialog->show();
+    }
+
+    int delayMs = retryDelays.value(currentRetry - 1, 10000);
+    QTimer::singleShot(delayMs, this, [this]() {
+        if (retryCanceled) {
+            if (progressDialog) progressDialog->hide();
+            return;
+        }
+        startImgbbUploadRequest();
+    });
+}
+
+void ImageUploader::cancelUpload()
+{
+    retryCanceled = true;
+
+    if (currentReply) {
+        currentReply->abort();
+        currentReply->deleteLater();
+        currentReply = nullptr;
+    }
+
+    if (progressDialog) {
+        progressDialog->hide();
+    }
+
+    emit uploadError("用户取消重试");
 }
