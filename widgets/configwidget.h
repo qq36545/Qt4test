@@ -10,6 +10,7 @@
 #include <QLabel>
 #include <QDialog>
 #include <QLineEdit>
+#include <QButtonGroup>
 
 class ConfigWidget : public QWidget
 {
@@ -59,6 +60,7 @@ private:
     QLabel *hint1Label;
     QLabel *hint2Label;
     QLabel *hint3Label;
+    QButtonGroup *imgbbKeyGroup;
     double scaleFactor;
 };
 

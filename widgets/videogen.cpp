@@ -393,13 +393,23 @@ void VideoSingleTab::setupUI()
     contentLayout->addLayout(serverLayout);
 
     // 提示词输入
+    QHBoxLayout *promptHeaderLayout = new QHBoxLayout();
     QLabel *promptLabel = new QLabel("提示词:");
     promptLabel->setStyleSheet("font-size: 14px;");
+    QPushButton *clearPromptButton = new QPushButton("🧹 清空文本");
+    clearPromptButton->setCursor(Qt::PointingHandCursor);
+    connect(clearPromptButton, &QPushButton::clicked, this, [this]() {
+        promptInput->clear();
+    });
+    promptHeaderLayout->addWidget(promptLabel);
+    promptHeaderLayout->addStretch();
+    promptHeaderLayout->addWidget(clearPromptButton);
+
     promptInput = new QTextEdit();
     promptInput->setPlaceholderText("输入视频生成提示词...\n例如：一只可爱的猫咪在花园里玩耍，阳光明媚，电影级画质");
     promptInput->setMinimumHeight(240);  // 支持多行输入和滚动
     promptInput->setStyleSheet("font-size: 15px;");
-    contentLayout->addWidget(promptLabel);
+    contentLayout->addLayout(promptHeaderLayout);
     contentLayout->addWidget(promptInput);
 
     // 图片上传区域（首帧）
@@ -660,7 +670,7 @@ void VideoSingleTab::setupUI()
     connect(generateButton, &QPushButton::clicked, this, &VideoSingleTab::generateVideo);
     buttonLayout->addWidget(generateButton);
 
-    resetButton = new QPushButton("🔄 重置");
+    resetButton = new QPushButton("🔄 一键重置");
     resetButton->setCursor(Qt::PointingHandCursor);
     connect(resetButton, &QPushButton::clicked, this, &VideoSingleTab::resetForm);
     buttonLayout->addWidget(resetButton);
@@ -2289,12 +2299,22 @@ void VideoBatchTab::setupUI()
     contentLayout->addLayout(serverLayout);
 
     // 提示词输入（多行）
+    QHBoxLayout *promptHeaderLayout = new QHBoxLayout();
     QLabel *promptLabel = new QLabel("批量提示词（每行一个）:");
     promptLabel->setStyleSheet("font-size: 14px;");
+    QPushButton *clearPromptButton = new QPushButton("🧹 清空文本");
+    clearPromptButton->setCursor(Qt::PointingHandCursor);
+    connect(clearPromptButton, &QPushButton::clicked, this, [this]() {
+        promptInput->clear();
+    });
+    promptHeaderLayout->addWidget(promptLabel);
+    promptHeaderLayout->addStretch();
+    promptHeaderLayout->addWidget(clearPromptButton);
+
     promptInput = new QTextEdit();
     promptInput->setPlaceholderText("输入多个提示词，每行一个...\n例如：\n一只猫在花园玩耍\n日落时的海滩\n城市夜景");
     promptInput->setMinimumHeight(120);  // 支持多行输入和滚动
-    contentLayout->addWidget(promptLabel);
+    contentLayout->addLayout(promptHeaderLayout);
     contentLayout->addWidget(promptInput);
 
     // 图片拖放区域

@@ -63,8 +63,9 @@ void applyKeyDialogTheme(QDialog *dialog, bool isDarkTheme)
 }
 
 ConfigWidget::ConfigWidget(QWidget *parent)
-    : QWidget(parent), scaleFactor(1.0)
+    : QWidget(parent), imgbbKeyGroup(new QButtonGroup(this)), scaleFactor(1.0)
 {
+    imgbbKeyGroup->setExclusive(true);
     scaleFactor = calculateScaleFactor();
     setupUI();
     loadApiKeys();
@@ -329,6 +330,10 @@ void ConfigWidget::loadImgbbKeys()
     imgbbKeyTable->setRowCount(0);
     QList<ImgbbKey> keys = DBManager::instance()->getAllImgbbKeys();
 
+    for (QAbstractButton *button : imgbbKeyGroup->buttons()) {
+        imgbbKeyGroup->removeButton(button);
+    }
+
     QFont buttonFont;
     buttonFont.setPointSize(12);
     int buttonHeight = static_cast<int>(36 * scaleFactor);
@@ -373,6 +378,7 @@ void ConfigWidget::loadImgbbKeys()
         QRadioButton *radio = new QRadioButton();
         radio->setChecked(key.isActive);
         radio->setProperty("keyId", key.id);
+        imgbbKeyGroup->addButton(radio, key.id);
         radioLayout->addWidget(radio);
         imgbbKeyTable->setCellWidget(i, 4, radioWidget);
     }
@@ -499,6 +505,10 @@ void ConfigWidget::addImgbbKey()
             return;
         }
         if (DBManager::instance()->addImgbbKey(name, apiKey)) {
+            QList<ImgbbKey> keys = DBManager::instance()->getAllImgbbKeys();
+            if (keys.size() == 1) {
+                DBManager::instance()->setActiveImgbbKey(keys.first().id);
+            }
             QMessageBox::information(this, "成功", "密钥添加成功");
             loadImgbbKeys();
         } else {
@@ -547,23 +557,19 @@ void ConfigWidget::deleteImgbbKey()
 
 void ConfigWidget::applyImgbbKey()
 {
-    // 找到选中的 radio button
-    for (int i = 0; i < imgbbKeyTable->rowCount(); ++i) {
-        QWidget *w = imgbbKeyTable->cellWidget(i, 4);
-        if (!w) continue;
-        QRadioButton *radio = w->findChild<QRadioButton*>();
-        if (radio && radio->isChecked()) {
-            int keyId = radio->property("keyId").toInt();
-            if (DBManager::instance()->setActiveImgbbKey(keyId)) {
-                QMessageBox::information(this, "成功", "已应用该密钥");
-                loadImgbbKeys();
-            } else {
-                QMessageBox::critical(this, "错误", "应用失败");
-            }
-            return;
-        }
+    QAbstractButton *checkedButton = imgbbKeyGroup->checkedButton();
+    if (!checkedButton) {
+        QMessageBox::warning(this, "提示", "请先选择一个密钥");
+        return;
     }
-    QMessageBox::warning(this, "提示", "请先选择一个密钥");
+
+    int keyId = checkedButton->property("keyId").toInt();
+    if (DBManager::instance()->setActiveImgbbKey(keyId)) {
+        QMessageBox::information(this, "成功", "已应用该密钥");
+        loadImgbbKeys();
+    } else {
+        QMessageBox::critical(this, "错误", "应用失败");
+    }
 }
 
 void ConfigWidget::refreshImgbbTable()
