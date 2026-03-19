@@ -54,6 +54,8 @@ private slots:
     void uploadGrokImage3();
     void clearGrokImage(int index);
     void removeImage(int index);
+    void uploadWanAudio();           // 上传 WAN 音频
+    void clearWanAudio();            // 清空 WAN 音频
 
 private:
     void setupUI();
@@ -143,6 +145,23 @@ private:
     bool suppressAutoSave;            // 模型联动期间抑制自动保存
     QString lastSavedSettingsSnapshot; // 最近一次已落盘的配置快照
     QLabel *imageUploadHintLabel;     // 垫图尺寸提示
+
+    // WAN 视频参数控件
+    QWidget *wanParamsWidget;          // WAN 参数容器
+    QLabel *wanNegativePromptLabel;   // 反向提示词
+    QTextEdit *wanNegativePromptInput; // 反向提示词输入
+    QLabel *wanTemplateLabel;         // 特效模板
+    QComboBox *wanTemplateCombo;      // 特效模板下拉
+    QCheckBox *wanPromptExtendCheckBox; // Prompt智能改写
+    QLabel *wanSeedLabel;             // 随机数种子
+    QLineEdit *wanSeedInput;         // 随机数种子输入
+    QCheckBox *wanAudioCheckBox;      // 自动添加音频（仅 wan2.5）
+    QWidget *wanAudioUploadWidget;    // 音频上传区域
+    QPushButton *wanAudioUploadButton; // 音频上传按钮
+    QLabel *wanAudioFileLabel;       // 音频文件名显示
+    QPushButton *clearWanAudioButton; // 清空音频按钮
+    QString uploadedWanAudioPath;     // 已上传音频路径
+    QString uploadedWanAudioUrl;      // 已上传音频URL
 };
 
 // 批量视频生成 Tab

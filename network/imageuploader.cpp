@@ -331,3 +331,83 @@ void ImageUploader::cancelUpload()
 
     emit uploadError("用户取消重试");
 }
+
+void ImageUploader::uploadAudioToTmpfile(const QString &localPath)
+{
+    if (!QFile::exists(localPath)) {
+        emit uploadError("音频文件不存在: " + localPath);
+        return;
+    }
+
+    QFileInfo fi(localPath);
+    // 检查文件大小限制 (100MB)
+    if (fi.size() > 100 * 1024 * 1024) {
+        emit uploadError("音频文件超过100MB限制: " + localPath);
+        return;
+    }
+
+    QFile *file = new QFile(localPath);
+    if (!file->open(QIODevice::ReadOnly)) {
+        emit uploadError("无法打开音频文件: " + localPath);
+        delete file;
+        return;
+    }
+    file->close();
+
+    QHttpMultiPart *multiPart = new QHttpMultiPart(QHttpMultiPart::FormDataType);
+
+    QHttpPart filePart;
+    filePart.setHeader(QNetworkRequest::ContentTypeHeader, QVariant("audio/mpeg"));
+    filePart.setHeader(QNetworkRequest::ContentDispositionHeader,
+                      QVariant(QString("form-data; name=\"file\"; filename=\"%1\"").arg(fi.fileName())));
+    filePart.setBodyDevice(file);
+    file->setParent(multiPart);
+    multiPart->append(filePart);
+
+    QUrl url("https://tmpfile.link/api/upload");
+    QNetworkRequest request(url);
+    request.setTransferTimeout(120000);
+
+    currentReply = networkManager->post(request, multiPart);
+    multiPart->setParent(currentReply);
+
+    connect(currentReply, &QNetworkReply::finished, this, &ImageUploader::onTmpfileUploadFinished);
+}
+
+void ImageUploader::onTmpfileUploadFinished()
+{
+    if (!currentReply) return;
+
+    QByteArray response = currentReply->readAll();
+    int statusCode = currentReply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+    QNetworkReply::NetworkError networkError = currentReply->error();
+    currentReply->deleteLater();
+    currentReply = nullptr;
+
+    if (networkError != QNetworkReply::NoError || statusCode != 200) {
+        emit uploadError(QString("tmpfile上传失败(HTTP %1): %2")
+                        .arg(statusCode)
+                        .arg(QString::fromUtf8(response)));
+        return;
+    }
+
+    QJsonDocument doc = QJsonDocument::fromJson(response);
+    QJsonObject root = doc.object();
+
+    // tmpfile.link 返回格式: { success: true, data: { downloadLink: "..." } }
+    QString downloadLink;
+    if (root["success"].toBool()) {
+        downloadLink = root["data"].toObject()["downloadLink"].toString();
+    } else {
+        // 备用格式: { url: "..." }
+        downloadLink = root["url"].toString();
+    }
+
+    if (downloadLink.isEmpty()) {
+        emit uploadError("tmpfile响应缺少downloadLink字段: " + QString(response));
+        return;
+    }
+
+    qDebug() << "[ImageUploader] tmpfile upload success:" << downloadLink;
+    emit audioUploadSuccess(downloadLink);
+}

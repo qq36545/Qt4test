@@ -1,6 +1,7 @@
 #include "videogen.h"
 #include "../database/dbmanager.h"
 #include "../network/videoapi.h"
+#include "../network/imageuploader.h"
 #include "../network/taskpollmanager.h"
 #include <QMessageBox>
 #include <QFileDialog>
@@ -653,6 +654,111 @@ void VideoSingleTab::setupUI()
 
     contentLayout->addLayout(paramsLayout);
 
+    // WAN 参数容器（默认隐藏）
+    wanParamsWidget = new QWidget();
+    QVBoxLayout *wanParamsLayout = new QVBoxLayout(wanParamsWidget);
+    wanParamsLayout->setContentsMargins(0, 0, 0, 0);
+    wanParamsLayout->setSpacing(10);
+
+    // WAN 反向提示词
+    QHBoxLayout *wanNegPromptLayout = new QHBoxLayout();
+    wanNegativePromptLabel = new QLabel("反向提示词:");
+    wanNegativePromptLabel->setStyleSheet("font-size: 14px;");
+    wanNegativePromptInput = new QTextEdit();
+    wanNegativePromptInput->setPlaceholderText("输入不希望出现的元素...");
+    wanNegativePromptInput->setMaximumHeight(60);
+    wanNegativePromptInput->setStyleSheet("font-size: 13px;");
+    wanNegPromptLayout->addWidget(wanNegativePromptLabel);
+    wanNegPromptLayout->addWidget(wanNegativePromptInput, 1);
+    wanParamsLayout->addLayout(wanNegPromptLayout);
+
+    // WAN 特效模板
+    QHBoxLayout *wanTemplateLayout = new QHBoxLayout();
+    wanTemplateLabel = new QLabel("特效模板:");
+    wanTemplateLabel->setStyleSheet("font-size: 14px;");
+    wanTemplateCombo = new QComboBox();
+    wanTemplateCombo->addItem("无", "");
+    wanTemplateCombo->addItem("squish（解压捏捏）", "squish");
+    wanTemplateCombo->addItem("rotation（转圈圈）", "rotation");
+    wanTemplateCombo->addItem("poke（戳戳乐）", "poke");
+    wanTemplateCombo->addItem("inflate（气球膨胀）", "inflate");
+    wanTemplateCombo->addItem("dissolve（分子扩散）", "dissolve");
+    wanTemplateCombo->addItem("melt（热浪融化）", "melt");
+    wanTemplateCombo->addItem("icecream（冰淇淋星球）", "icecream");
+    wanTemplateCombo->addItem("carousel（时光木马）", "carousel");
+    wanTemplateCombo->addItem("singleheart（爱你哟）", "singleheart");
+    wanTemplateCombo->addItem("dance1（摇摆时刻）", "dance1");
+    wanTemplateCombo->addItem("dance2（头号甩舞）", "dance2");
+    wanTemplateCombo->addItem("dance3（星摇时刻）", "dance3");
+    wanTemplateCombo->addItem("dance4（指感节奏）", "dance4");
+    wanTemplateCombo->addItem("dance5（舞动开关）", "dance5");
+    wanTemplateCombo->addItem("mermaid（人鱼觉醒）", "mermaid");
+    wanTemplateCombo->addItem("graduation（学术加冕）", "graduation");
+    wanTemplateCombo->addItem("dragon（巨兽追袭）", "dragon");
+    wanTemplateCombo->addItem("money（财从天降）", "money");
+    wanTemplateCombo->addItem("jellyfish（水母之约）", "jellyfish");
+    wanTemplateCombo->addItem("pupil（瞳孔穿越）", "pupil");
+    wanTemplateCombo->addItem("flying（魔法悬浮）", "flying");
+    wanTemplateCombo->addItem("rose（赠人玫瑰）", "rose");
+    wanTemplateCombo->addItem("crystalrose（闪亮玫瑰）", "crystalrose");
+    wanTemplateCombo->addItem("hug（爱的抱抱）", "hug");
+    wanTemplateCombo->addItem("frenchkiss（唇齿相依）", "frenchkiss");
+    wanTemplateCombo->addItem("coupleheart（双倍心动）", "coupleheart");
+    wanTemplateCombo->addItem("hanfu-1（唐韵翩然）", "hanfu-1");
+    wanTemplateCombo->addItem("solaron（机甲变身）", "solaron");
+    wanTemplateCombo->addItem("magazine（闪耀封面）", "magazine");
+    wanTemplateCombo->addItem("mech1（机械觉醒）", "mech1");
+    wanTemplateCombo->addItem("mech2（赛博登场）", "mech2");
+    wanTemplateLayout->addWidget(wanTemplateLabel);
+    wanTemplateLayout->addWidget(wanTemplateCombo, 1);
+    wanParamsLayout->addLayout(wanTemplateLayout);
+
+    // WAN Prompt智能改写 + 随机种子
+    QHBoxLayout *wanOptionLayout = new QHBoxLayout();
+    wanPromptExtendCheckBox = new QCheckBox("Prompt智能改写");
+    wanPromptExtendCheckBox->setStyleSheet("color: white; font-size: 13px;");
+    wanPromptExtendCheckBox->setChecked(true);
+    wanSeedLabel = new QLabel("随机种子:");
+    wanSeedLabel->setStyleSheet("font-size: 14px;");
+    wanSeedInput = new QLineEdit();
+    wanSeedInput->setPlaceholderText("留空则随机");
+    wanSeedInput->setMaximumWidth(150);
+    wanSeedInput->setStyleSheet("font-size: 13px;");
+    wanOptionLayout->addWidget(wanPromptExtendCheckBox);
+    wanOptionLayout->addSpacing(20);
+    wanOptionLayout->addWidget(wanSeedLabel);
+    wanOptionLayout->addWidget(wanSeedInput);
+    wanOptionLayout->addStretch();
+    wanParamsLayout->addLayout(wanOptionLayout);
+
+    // WAN 音频上传（仅 wan2.5 支持）
+    wanAudioUploadWidget = new QWidget();
+    QHBoxLayout *wanAudioLayout = new QHBoxLayout(wanAudioUploadWidget);
+    wanAudioLayout->setContentsMargins(0, 0, 0, 0);
+    wanAudioLayout->setSpacing(10);
+    wanAudioCheckBox = new QCheckBox("自动添加音频（仅wan2.5）");
+    wanAudioCheckBox->setStyleSheet("color: white; font-size: 13px;");
+    wanAudioCheckBox->setChecked(false);
+    wanAudioUploadButton = new QPushButton("🎵 上传音频");
+    wanAudioUploadButton->setFixedWidth(120);
+    connect(wanAudioUploadButton, &QPushButton::clicked, this, &VideoSingleTab::uploadWanAudio);
+    wanAudioFileLabel = new QLabel("未选择音频文件");
+    wanAudioFileLabel->setStyleSheet("font-size: 12px; color: #888;");
+    wanAudioFileLabel->setWordWrap(true);
+    clearWanAudioButton = new QPushButton("🗑️ 清空");
+    clearWanAudioButton->setFixedWidth(80);
+    clearWanAudioButton->setVisible(false);
+    connect(clearWanAudioButton, &QPushButton::clicked, this, &VideoSingleTab::clearWanAudio);
+    wanAudioLayout->addWidget(wanAudioCheckBox);
+    wanAudioLayout->addWidget(wanAudioUploadButton);
+    wanAudioLayout->addWidget(wanAudioFileLabel, 1);
+    wanAudioLayout->addWidget(clearWanAudioButton);
+    wanParamsLayout->addWidget(wanAudioUploadWidget);
+    wanAudioUploadWidget->setVisible(false);
+
+    contentLayout->addWidget(wanParamsWidget);
+    wanParamsWidget->setVisible(false);
+
     // 预览区域
     previewLabel = new QLabel();
     previewLabel->setObjectName("videoPreviewLabel");
@@ -722,6 +828,13 @@ void VideoSingleTab::connectSignals()
 
     // 单选按钮切换
     connect(variantType1Radio, &QRadioButton::toggled, this, &VideoSingleTab::onVariantTypeChanged);
+
+    // WAN 参数信号连接
+    connect(wanNegativePromptInput, &QTextEdit::textChanged, this, &VideoSingleTab::queueSaveSettings);
+    connect(wanTemplateCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &VideoSingleTab::queueSaveSettings);
+    connect(wanPromptExtendCheckBox, &QCheckBox::checkStateChanged, this, &VideoSingleTab::queueSaveSettings);
+    connect(wanSeedInput, &QLineEdit::textChanged, this, &VideoSingleTab::queueSaveSettings);
+    connect(wanAudioCheckBox, &QCheckBox::checkStateChanged, this, &VideoSingleTab::queueSaveSettings);
 }
 
 void VideoSingleTab::loadApiKeys()
@@ -801,14 +914,17 @@ void VideoSingleTab::onModelChanged(int index)
         enableUpsampleCheckBox->setVisible(false);
         enableUpsampleLabel->setVisible(false);
 
-        // 3. 修改分辨率标签和选项为宽高比
+        // 3. 隐藏 WAN 参数
+        wanParamsWidget->setVisible(false);
+
+        // 4. 修改分辨率标签和选项为宽高比
         resolutionLabel->setText("宽高比");
         resolutionCombo->clear();
         resolutionCombo->addItem("2:3（竖屏）", "2:3");
         resolutionCombo->addItem("3:2（横屏）", "3:2");
         resolutionCombo->addItem("1:1（方形）", "1:1");
 
-        // 4. 显示Grok专用的size参数
+        // 5. 显示Grok专用的size参数
         sizeCombo->setVisible(true);
         sizeLabel->setVisible(true);
 
@@ -821,11 +937,54 @@ void VideoSingleTab::onModelChanged(int index)
         sizeCombo->setVisible(false);
         sizeLabel->setVisible(false);
 
+        // 隐藏 WAN 参数
+        wanParamsWidget->setVisible(false);
+
         // 触发 onVariantTypeChanged 更新变体列表和控件
         onVariantTypeChanged();
 
+    } else if (modelName.contains("wan", Qt::CaseInsensitive)) {
+        // WAN 模型：显示 WAN 参数
+        modelVariantCombo->blockSignals(true);
+        modelVariantCombo->clear();
+        modelVariantCombo->addItem("wan2.5-i2v-preview（预览版）", "wan2.5-i2v-preview");
+        modelVariantCombo->addItem("wan2.6-i2v-flash（快速版）", "wan2.6-i2v-flash");
+        modelVariantCombo->addItem("wan2.6-i2v（正式版）", "wan2.6-i2v");
+        modelVariantCombo->blockSignals(false);
+
+        // 显示 WAN 参数控件
+        wanParamsWidget->setVisible(true);
+
+        // 隐藏其他模型参数
+        durationCombo->setVisible(false);
+        durationLabel->setVisible(false);
+        watermarkCheckBox->setVisible(false);
+        watermarkLabel->setVisible(false);
+        variantTypeWidget->setVisible(false);
+        enhancePromptCheckBox->setVisible(false);
+        enhancePromptLabel->setVisible(false);
+        enableUpsampleCheckBox->setVisible(false);
+        enableUpsampleLabel->setVisible(false);
+        sizeCombo->setVisible(false);
+        sizeLabel->setVisible(false);
+
+        // 设置分辨率选项
+        resolutionLabel->setText("分辨率");
+        resolutionCombo->clear();
+        resolutionCombo->addItem("480P", "480P");
+        resolutionCombo->addItem("720P", "720P");
+        resolutionCombo->addItem("1080P", "1080P");
+
+        // 设置时长选项
+        durationCombo->clear();
+        durationCombo->addItem("5秒", "5");
+        durationCombo->addItem("10秒", "10");
+
+        // 根据变体更新音频控件可见性
+        onModelVariantChanged(0);
+
     } else {
-        // 其他模型（sora/wan）：恢复VEO3默认参数
+        // 其他模型：恢复VEO3默认参数
         modelVariantCombo->blockSignals(true);
         modelVariantCombo->clear();
         modelVariantCombo->addItem("veo_3_1-fast", "veo_3_1-fast");
@@ -843,6 +1002,9 @@ void VideoSingleTab::onModelChanged(int index)
         enhancePromptLabel->setVisible(false);
         enableUpsampleCheckBox->setVisible(false);
         enableUpsampleLabel->setVisible(false);
+
+        // 隐藏 WAN 参数
+        wanParamsWidget->setVisible(false);
 
         resolutionLabel->setText("分辨率");
         resolutionCombo->clear();
@@ -1075,6 +1237,49 @@ void VideoSingleTab::clearGrokImage(int index)
         previewLabel->style()->polish(previewLabel);
     }
 
+    queueSaveSettings();
+}
+
+void VideoSingleTab::uploadWanAudio()
+{
+    QString filePath = QFileDialog::getOpenFileName(this, "选择音频文件",
+        QString(), "音频文件 (*.mp3 *.wav *.m4a *.aac *.ogg);;所有文件 (*.*)");
+    if (filePath.isEmpty()) return;
+
+    QFileInfo fi(filePath);
+    if (fi.size() > 100 * 1024 * 1024) {
+        QMessageBox::warning(this, "提示", "音频文件不能超过100MB");
+        return;
+    }
+
+    uploadedWanAudioPath = filePath;
+    wanAudioFileLabel->setText("✓ " + fi.fileName());
+    wanAudioFileLabel->setStyleSheet("font-size: 12px; color: #4CAF50;");
+    clearWanAudioButton->setVisible(true);
+
+    // 上传到 tmpfile.link，使用 ImageUploader 的音频上传方法
+    ImageUploader *uploader = veo3API->imageUploader;
+    connect(uploader, &ImageUploader::audioUploadSuccess, this, [this, uploader](const QString &url) {
+        uploadedWanAudioUrl = url;
+        qDebug() << "[WAN] Audio uploaded:" << url;
+        disconnect(uploader, &ImageUploader::audioUploadSuccess, this, nullptr);
+    });
+    connect(uploader, &ImageUploader::uploadError, this, [this, uploader](const QString &error) {
+        QMessageBox::warning(this, "上传失败", error);
+        disconnect(uploader, &ImageUploader::uploadError, this, nullptr);
+    });
+    uploader->uploadAudioToTmpfile(filePath);
+
+    queueSaveSettings();
+}
+
+void VideoSingleTab::clearWanAudio()
+{
+    uploadedWanAudioPath.clear();
+    uploadedWanAudioUrl.clear();
+    wanAudioFileLabel->setText("未选择音频文件");
+    wanAudioFileLabel->setStyleSheet("font-size: 12px; color: #888;");
+    clearWanAudioButton->setVisible(false);
     queueSaveSettings();
 }
 
@@ -1416,6 +1621,49 @@ void VideoSingleTab::generateVideo()
             aspectRatio,  // aspectRatio
             activeImgbbKey.apiKey  // imgbbApiKey
         );
+    } else if (model.contains("wan", Qt::CaseInsensitive)) {
+        // WAN 模型：使用专用 API
+        ImgbbKey activeImgbbKey = DBManager::instance()->getActiveImgbbKey();
+        if (activeImgbbKey.apiKey.isEmpty()) {
+            QMessageBox::warning(this, "提示", "请先到设置页应用临时图床密钥");
+            return;
+        }
+
+        // WAN 必须有图片
+        bool hasValidImage = !uploadedImagePaths.isEmpty() && !uploadedImagePaths.first().isEmpty();
+        if (!hasValidImage) {
+            QMessageBox::warning(this, "提示", "WAN 模型需要上传图片");
+            return;
+        }
+
+        // 准备 WAN 参数
+        QString negativePrompt = wanNegativePromptInput->toPlainText().trimmed();
+        QString templateName = wanTemplateCombo->currentData().toString();
+        bool promptExtend = wanPromptExtendCheckBox->isChecked();
+        QString seed = wanSeedInput->text().trimmed();
+        int wanDuration = duration.toInt();
+
+        // 设置 currentRequest 以便图片上传后调用 createWanVideo
+        veo3API->currentRequest.apiKey = apiKeyData.apiKey;
+        veo3API->currentRequest.baseUrl = server;
+        veo3API->currentRequest.model = modelVariant;
+        veo3API->currentRequest.prompt = prompt;
+        veo3API->currentRequest.imgbbApiKey = activeImgbbKey.apiKey;
+        veo3API->currentRequest.localImagePaths = uploadedImagePaths;
+        veo3API->currentRequest.uploadedUrls.clear();
+        veo3API->currentRequest.uploadIndex = 0;
+        veo3API->currentRequest.targetMethod = "wan";
+        veo3API->currentRequest.negativePrompt = negativePrompt;
+        veo3API->currentRequest.audioUrl = uploadedWanAudioUrl;
+        veo3API->currentRequest.templateName = templateName;
+        veo3API->currentRequest.resolution = resolution;
+        veo3API->currentRequest.duration = wanDuration;
+        veo3API->currentRequest.promptExtend = promptExtend;
+        veo3API->currentRequest.watermark = true;
+        veo3API->currentRequest.seed = seed;
+
+        // 上传图片到 imgbb
+        veo3API->uploadImageToImgbb(uploadedImagePaths.first(), activeImgbbKey.apiKey);
     } else if (variantType2Radio && variantType2Radio->isChecked()) {
         // VEO3 Variant 2 统一格式：校验imgbb密钥，上传图片后 JSON POST
         ImgbbKey activeImgbbKey = DBManager::instance()->getActiveImgbbKey();
@@ -1718,6 +1966,9 @@ void VideoSingleTab::saveSettings()
     if (modelType.contains("Grok", Qt::CaseInsensitive)) {
         settings.setValue("grok_aspectRatio", resolutionCombo->currentData().toString());
         settings.setValue("grok_size", sizeCombo->currentData().toString());
+    } else if (modelType.contains("wan", Qt::CaseInsensitive)) {
+        settings.setValue("wan_resolution", resolutionCombo->currentData().toString());
+        settings.setValue("wan_duration", durationCombo->currentData().toString());
     } else {
         settings.setValue("veo_resolution", resolutionCombo->currentData().toString());
         settings.setValue("duration", durationCombo->currentData().toString());
@@ -1733,6 +1984,15 @@ void VideoSingleTab::saveSettings()
     settings.setValue("variantType", variantType1Radio->isChecked() ? 1 : 2);
     settings.setValue("enhancePrompt", enhancePromptCheckBox->isChecked());
     settings.setValue("enableUpsample", enableUpsampleCheckBox->isChecked());
+
+    // WAN 参数
+    settings.setValue("wan_negativePrompt", wanNegativePromptInput->toPlainText());
+    settings.setValue("wan_template", wanTemplateCombo->currentData().toString());
+    settings.setValue("wan_promptExtend", wanPromptExtendCheckBox->isChecked());
+    settings.setValue("wan_seed", wanSeedInput->text());
+    settings.setValue("wan_audioEnabled", wanAudioCheckBox->isChecked());
+    settings.setValue("wan_audioPath", uploadedWanAudioPath);
+    settings.setValue("wan_audioUrl", uploadedWanAudioUrl);
 
     settings.endGroup();
     settings.sync();  // 强制立即写入磁盘
@@ -1959,6 +2219,44 @@ void VideoSingleTab::loadSettings()
                 sizeCombo->setCurrentIndex(i);
                 break;
             }
+        }
+    } else if (savedModelType.contains("wan", Qt::CaseInsensitive)) {
+        // WAN 模型：恢复分辨率
+        QString wanResolution = settings.value("wan_resolution", "720P").toString();
+        for (int i = 0; i < resolutionCombo->count(); ++i) {
+            if (resolutionCombo->itemData(i).toString() == wanResolution) {
+                resolutionCombo->setCurrentIndex(i);
+                break;
+            }
+        }
+
+        QString wanDuration = settings.value("wan_duration", "5").toString();
+        for (int i = 0; i < durationCombo->count(); ++i) {
+            if (durationCombo->itemData(i).toString() == wanDuration) {
+                durationCombo->setCurrentIndex(i);
+                break;
+            }
+        }
+
+        // 恢复 WAN 参数
+        wanNegativePromptInput->setPlainText(settings.value("wan_negativePrompt", "").toString());
+        QString wanTemplate = settings.value("wan_template", "").toString();
+        for (int i = 0; i < wanTemplateCombo->count(); ++i) {
+            if (wanTemplateCombo->itemData(i).toString() == wanTemplate) {
+                wanTemplateCombo->setCurrentIndex(i);
+                break;
+            }
+        }
+        wanPromptExtendCheckBox->setChecked(settings.value("wan_promptExtend", true).toBool());
+        wanSeedInput->setText(settings.value("wan_seed", "").toString());
+        wanAudioCheckBox->setChecked(settings.value("wan_audioEnabled", false).toBool());
+        uploadedWanAudioPath = settings.value("wan_audioPath", "").toString();
+        uploadedWanAudioUrl = settings.value("wan_audioUrl", "").toString();
+        if (!uploadedWanAudioPath.isEmpty() && QFile::exists(uploadedWanAudioPath)) {
+            QFileInfo fi(uploadedWanAudioPath);
+            wanAudioFileLabel->setText("✓ " + fi.fileName());
+            wanAudioFileLabel->setStyleSheet("font-size: 12px; color: #4CAF50;");
+            clearWanAudioButton->setVisible(true);
         }
     } else {
         // VEO3 模型：恢复 resolution 和 duration

@@ -25,8 +25,12 @@ public:
     // 上传图片到 imgbb，返回 HTTP URL
     void uploadToImgbb(const QString &localPath, const QString &imgbbApiKey);
 
+    // 上传音频到 tmpfile.link，返回下载链接
+    void uploadAudioToTmpfile(const QString &localPath);
+
 signals:
     void uploadSuccess(const QString &ossUrl);
+    void audioUploadSuccess(const QString &downloadUrl);
     void uploadError(const QString &error);
     void retryAttempt(int retryCount, int maxRetries);
 
@@ -34,6 +38,7 @@ private slots:
     void onGetPolicyFinished();
     void onUploadToOssFinished();
     void onImgbbUploadFinished();
+    void onTmpfileUploadFinished();
     void retryUpload();
     void cancelUpload();
 

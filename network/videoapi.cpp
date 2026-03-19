@@ -64,6 +64,24 @@ void VideoAPI::createVideo(const QString &apiKey,
     } else if (model.startsWith("veo_")) {
         // VEO3 OpenAI格式：直接上传文件
         createVeo3Video(apiKey, baseUrl, model, prompt, imagePaths, size, seconds, watermark);
+    } else if (model.contains("wan", Qt::CaseInsensitive)) {
+        // WAN 视频：先上传图片到 imgbb
+        currentRequest.apiKey = apiKey;
+        currentRequest.baseUrl = baseUrl;
+        currentRequest.model = model;
+        currentRequest.prompt = prompt;
+        currentRequest.imgbbApiKey = imgbbApiKey;
+        currentRequest.localImagePaths = imagePaths;
+        currentRequest.uploadedUrls.clear();
+        currentRequest.uploadIndex = 0;
+        currentRequest.targetMethod = "wan";
+        // WAN 参数通过扩展参数传入，这里只处理图片上传
+        if (!imagePaths.isEmpty()) {
+            imageUploader->uploadToImgbb(imagePaths.first(), imgbbApiKey);
+        } else {
+            // 无图片直接调用（需要调用方传入完整参数）
+            emit errorOccurred("WAN 模型需要上传图片");
+        }
     } else {
         // VEO3 统一格式：需要先上传图片到 imgbb 获取 URL
         currentRequest.apiKey = apiKey;
@@ -280,6 +298,9 @@ void VideoAPI::queryTask(const QString &apiKey,
         QUrlQuery query;
         query.addQueryItem("id", taskId);
         url.setQuery(query);
+    } else if (modelName.contains("wan", Qt::CaseInsensitive)) {
+        // WAN 查询接口
+        url = QUrl(baseUrl + "/alibailian/api/v1/tasks/" + taskId);
     } else {
         // VEO3查询接口
         url = QUrl(baseUrl + "/v1/videos/" + taskId);
@@ -311,6 +332,79 @@ void VideoAPI::downloadVideo(const QString &apiKey,
     connect(reply, &QNetworkReply::finished, this, &VideoAPI::onDownloadFinished);
 }
 
+void VideoAPI::createWanVideo(const QString &apiKey,
+                              const QString &baseUrl,
+                              const QString &model,
+                              const QString &prompt,
+                              const QString &negativePrompt,
+                              const QString &imageUrl,
+                              const QString &audioUrl,
+                              const QString &templateName,
+                              const QString &resolution,
+                              int duration,
+                              bool promptExtend,
+                              bool watermark,
+                              const QString &seed)
+{
+    QUrl url(baseUrl + "/alibailian/api/v1/services/aigc/video-generation/video-synthesis");
+    QNetworkRequest request(url);
+    request.setRawHeader("Authorization", QString("Bearer %1").arg(apiKey).toUtf8());
+    request.setRawHeader("Content-Type", "application/json");
+    request.setRawHeader("Accept", "application/json");
+    request.setTransferTimeout(60000);
+
+    QJsonObject jsonObj;
+    jsonObj["model"] = model;
+
+    QJsonObject inputObj;
+    inputObj["prompt"] = prompt;
+    if (!negativePrompt.isEmpty()) {
+        inputObj["negative_prompt"] = negativePrompt;
+    }
+    if (!imageUrl.isEmpty()) {
+        inputObj["img_url"] = imageUrl;
+    }
+    if (!audioUrl.isEmpty()) {
+        inputObj["audio_url"] = audioUrl;
+    }
+    if (!templateName.isEmpty() && templateName != "无") {
+        inputObj["template"] = templateName;
+    }
+    jsonObj["input"] = inputObj;
+
+    QJsonObject parametersObj;
+    parametersObj["resolution"] = resolution;
+    parametersObj["duration"] = duration;
+    parametersObj["prompt_extend"] = promptExtend;
+    parametersObj["watermark"] = watermark;
+    if (!seed.isEmpty()) {
+        parametersObj["seed"] = seed.toLongLong();
+    }
+    // audio 字段：仅 wan2.5 支持
+    if (model.contains("wan2.5", Qt::CaseInsensitive) && !audioUrl.isEmpty()) {
+        parametersObj["audio"] = true;
+    }
+    jsonObj["parameters"] = parametersObj;
+
+    QJsonDocument jsonDoc(jsonObj);
+    QByteArray jsonData = jsonDoc.toJson();
+
+    qDebug() << "[VideoAPI] WAN API Request:";
+    qDebug() << "  URL:" << url.toString();
+    qDebug() << "  Model:" << model;
+    qDebug() << "  Resolution:" << resolution;
+    qDebug() << "  Duration:" << duration;
+    qDebug() << "  Template:" << templateName;
+    qDebug() << "  Prompt extend:" << promptExtend;
+    qDebug() << "  Image URL:" << imageUrl;
+    qDebug() << "  Audio URL:" << audioUrl;
+
+    QNetworkReply *reply = networkManager->post(request, jsonData);
+    replyMap[reply] = "create";
+
+    connect(reply, &QNetworkReply::finished, this, &VideoAPI::onCreateVideoFinished);
+}
+
 void VideoAPI::onImageUploadSuccess(const QString &url)
 {
     // 图片上传成功，添加到URL列表
@@ -333,6 +427,22 @@ void VideoAPI::onImageUploadSuccess(const QString &url)
                             currentRequest.aspectRatio,
                             currentRequest.size,
                             currentRequest.duration);
+        } else if (currentRequest.targetMethod == "wan") {
+            // WAN：调用 createWanVideo（参数通过扩展接口传入，这里用已上传的图片URL）
+            // 注意：WAN 参数需要在调用 createVideo 时通过额外机制传递
+            createWanVideo(currentRequest.apiKey,
+                           currentRequest.baseUrl,
+                           currentRequest.model,
+                           currentRequest.prompt,
+                           currentRequest.negativePrompt,
+                           currentRequest.uploadedUrls.isEmpty() ? QString() : currentRequest.uploadedUrls.first(),
+                           currentRequest.audioUrl,
+                           currentRequest.templateName,
+                           currentRequest.resolution,
+                           currentRequest.duration,
+                           currentRequest.promptExtend,
+                           currentRequest.watermark,
+                           currentRequest.seed);
         } else {
             // veo3_unified
             createVeo3UnifiedVideo(currentRequest.apiKey,
@@ -363,10 +473,20 @@ void VideoAPI::onCreateVideoFinished()
         QJsonDocument jsonDoc = QJsonDocument::fromJson(responseData);
         QJsonObject jsonObj = jsonDoc.object();
 
-        QString taskId = jsonObj["id"].toString();
-        QString status = jsonObj["status"].toString();
-
-        emit videoCreated(taskId, status);
+        // 检查是否是 WAN 返回格式 { request_id, output: { task_id, task_status } }
+        if (jsonObj.contains("request_id") && jsonObj.contains("output")) {
+            QString requestId = jsonObj["request_id"].toString();
+            QJsonObject output = jsonObj["output"].toObject();
+            QString taskId = output["task_id"].toString();
+            QString status = output["task_status"].toString();
+            qDebug() << "[VideoAPI] WAN video created:" << requestId << taskId << status;
+            emit videoCreated(taskId, status);
+        } else {
+            // VEO3/Grok 格式 { id, status }
+            QString taskId = jsonObj["id"].toString();
+            QString status = jsonObj["status"].toString();
+            emit videoCreated(taskId, status);
+        }
     } else {
         // 检查是否是超时错误
         if (reply->error() == QNetworkReply::TimeoutError) {
@@ -394,12 +514,24 @@ void VideoAPI::onQueryTaskFinished()
         QJsonDocument jsonDoc = QJsonDocument::fromJson(responseData);
         QJsonObject jsonObj = jsonDoc.object();
 
-        QString taskId = jsonObj["id"].toString();
-        QString status = jsonObj["status"].toString();
-        QString videoUrl = jsonObj["video_url"].toString();
-        int progress = jsonObj["progress"].toInt();
+        // 检查是否是 WAN 返回格式
+        if (jsonObj.contains("output")) {
+            QJsonObject output = jsonObj["output"].toObject();
+            QString taskId = jsonObj["request_id"].toString(); // WAN 用 request_id
+            QString status = output["task_status"].toString();
+            QString videoUrl = output["video_url"].toString();
+            int progress = output["progress"].toInt(0);
 
-        emit taskStatusUpdated(taskId, status, videoUrl, progress);
+            emit taskStatusUpdated(taskId, status, videoUrl, progress);
+        } else {
+            // VEO3/Grok 格式
+            QString taskId = jsonObj["id"].toString();
+            QString status = jsonObj["status"].toString();
+            QString videoUrl = jsonObj["video_url"].toString();
+            int progress = jsonObj["progress"].toInt();
+
+            emit taskStatusUpdated(taskId, status, videoUrl, progress);
+        }
     } else {
         emit errorOccurred(QString("查询任务失败: %1").arg(reply->errorString()));
     }

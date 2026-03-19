@@ -6,8 +6,10 @@
 #include <QNetworkReply>
 #include <QString>
 #include <QStringList>
+#include <QJsonDocument>
+#include <QJsonObject>
 
-class ImageUploader;
+#include "imageuploader.h"
 
 class VideoAPI : public QObject
 {
@@ -88,9 +90,31 @@ private:
                          const QString &size,
                          int duration);
 
+    // WAN 专用方法
+    void createWanVideo(const QString &apiKey,
+                        const QString &baseUrl,
+                        const QString &model,
+                        const QString &prompt,
+                        const QString &negativePrompt,
+                        const QString &imageUrl,
+                        const QString &audioUrl,
+                        const QString &templateName,
+                        const QString &resolution,
+                        int duration,
+                        bool promptExtend,
+                        bool watermark,
+                        const QString &seed);
+
     QNetworkAccessManager *networkManager;
     QMap<QNetworkReply*, QString> replyMap;
+public:
     ImageUploader *imageUploader;
+
+public:
+    // 公共方法：用于 WAN 等模型直接上传图片
+    void uploadImageToImgbb(const QString &localPath, const QString &imgbbApiKey) {
+        imageUploader->uploadToImgbb(localPath, imgbbApiKey);
+    }
 
     // 图片上传临时数据（Grok 和 VEO3统一格式共用）
     struct UnifiedFormatRequest {
@@ -106,8 +130,16 @@ private:
         int uploadIndex;
         bool enhancePrompt;
         bool enableUpsample;
-        QString targetMethod;  // "grok" | "veo3_unified"
+        QString targetMethod;  // "grok" | "veo3_unified" | "wan"
         int duration;          // Grok: 6/10/15
+        // WAN 专用字段
+        QString negativePrompt;
+        QString audioUrl;
+        QString templateName;
+        QString resolution;
+        bool promptExtend;
+        bool watermark;
+        QString seed;
     };
     UnifiedFormatRequest currentRequest;
 };
