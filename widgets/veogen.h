@@ -89,6 +89,8 @@ protected:
     QLabel *enhancePromptLabel;
     QCheckBox *enableUpsampleCheckBox;
     QLabel *enableUpsampleLabel;
+    QComboBox *aspectRatioCombo;
+    QLabel *aspectRatioLabel;
     QLabel *previewLabel;
     QPushButton *generateButton;
     QPushButton *resetButton;

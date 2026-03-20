@@ -87,6 +87,57 @@ void VeoGenPage::setupUI()
     variantLayout->addWidget(modelVariantCombo, 1);
     contentLayout->addLayout(variantLayout);
 
+    // ========== 分辨率、时长、水印、视频比例 ==========
+    QHBoxLayout *paramsAfterVariantLayout = new QHBoxLayout();
+
+    QVBoxLayout *resLayout = new QVBoxLayout();
+    resolutionLabel = new QLabel("分辨率");
+    resolutionLabel->setStyleSheet("font-size: 14px;");
+    resolutionCombo = new QComboBox();
+    resolutionCombo->addItem("横屏 16:9 (1280x720)", "1280x720");
+    resolutionCombo->addItem("竖屏 9:16 (720x1280)", "720x1280");
+    resLayout->addWidget(resolutionLabel);
+    resLayout->addWidget(resolutionCombo);
+
+    QVBoxLayout *durLayout = new QVBoxLayout();
+    durationLabel = new QLabel("时长（秒）");
+    durationLabel->setStyleSheet("font-size: 14px;");
+    durationCombo = new QComboBox();
+    durationCombo->addItem("8秒（固定）", "8");
+    durationCombo->setEnabled(false);
+    durLayout->addWidget(durationLabel);
+    durLayout->addWidget(durationCombo);
+
+    QVBoxLayout *watermarkLayout = new QVBoxLayout();
+    watermarkLabel = new QLabel("水印");
+    watermarkLabel->setStyleSheet("font-size: 14px;");
+    watermarkCheckBox = new QCheckBox("保留水印");
+    watermarkCheckBox->setStyleSheet("color: white; font-size: 12px;");
+    watermarkCheckBox->setChecked(false);
+    watermarkLayout->addWidget(watermarkLabel);
+    watermarkLayout->addWidget(watermarkCheckBox);
+
+    // 视频比例（统一格式专用）
+    QVBoxLayout *aspectRatioLayout = new QVBoxLayout();
+    aspectRatioLabel = new QLabel("视频比例");
+    aspectRatioLabel->setStyleSheet("font-size: 14px;");
+    aspectRatioCombo = new QComboBox();
+    aspectRatioCombo->addItem("9:16 (竖屏)", "9:16");
+    aspectRatioCombo->addItem("16:9 (横屏)", "16:9");
+    aspectRatioCombo->setCurrentIndex(1);
+    aspectRatioLayout->addWidget(aspectRatioLabel);
+    aspectRatioLayout->addWidget(aspectRatioCombo);
+    // 默认隐藏，切换到统一格式时显示
+    aspectRatioLabel->setVisible(false);
+    aspectRatioCombo->setVisible(false);
+
+    paramsAfterVariantLayout->addLayout(resLayout);
+    paramsAfterVariantLayout->addLayout(durLayout);
+    paramsAfterVariantLayout->addLayout(watermarkLayout);
+    paramsAfterVariantLayout->addLayout(aspectRatioLayout);
+    paramsAfterVariantLayout->addStretch();
+    contentLayout->addLayout(paramsAfterVariantLayout);
+
     // ========== API Key 选择 ==========
     QHBoxLayout *keyLayout = new QHBoxLayout();
     QLabel *keyLabel = new QLabel("API 密钥:");
@@ -218,44 +269,17 @@ void VeoGenPage::setupUI()
     contentLayout->addWidget(middleFrameWidget);
     middleFrameWidget->setVisible(false);
 
-    // ========== 参数设置 ==========
-    QHBoxLayout *paramsLayout = new QHBoxLayout();
+    // ========== 增强选项（超分辨率等）==========
+    QHBoxLayout *enhanceLayout = new QHBoxLayout();
 
-    QVBoxLayout *resLayout = new QVBoxLayout();
-    resolutionLabel = new QLabel("分辨率");
-    resolutionLabel->setStyleSheet("font-size: 14px;");
-    resolutionCombo = new QComboBox();
-    resolutionCombo->addItem("横屏 16:9 (1280x720)", "1280x720");
-    resolutionCombo->addItem("竖屏 9:16 (720x1280)", "720x1280");
-    resLayout->addWidget(resolutionLabel);
-    resLayout->addWidget(resolutionCombo);
-
-    QVBoxLayout *durLayout = new QVBoxLayout();
-    durationLabel = new QLabel("时长（秒）");
-    durationLabel->setStyleSheet("font-size: 14px;");
-    durationCombo = new QComboBox();
-    durationCombo->addItem("8秒（固定）", "8");
-    durationCombo->setEnabled(false);
-    durLayout->addWidget(durationLabel);
-    durLayout->addWidget(durationCombo);
-
-    QVBoxLayout *watermarkLayout = new QVBoxLayout();
-    watermarkLabel = new QLabel("水印");
-    watermarkLabel->setStyleSheet("font-size: 14px;");
-    watermarkCheckBox = new QCheckBox("保留水印");
-    watermarkCheckBox->setStyleSheet("color: white; font-size: 12px;");
-    watermarkCheckBox->setChecked(false);
-    watermarkLayout->addWidget(watermarkLabel);
-    watermarkLayout->addWidget(watermarkCheckBox);
-
-    QVBoxLayout *enhanceLayout = new QVBoxLayout();
+    QVBoxLayout *enhancePromptLayout = new QVBoxLayout();
     enhancePromptLabel = new QLabel("增强提示词");
     enhancePromptLabel->setStyleSheet("font-size: 14px;");
     enhancePromptCheckBox = new QCheckBox("enhance_prompt");
     enhancePromptCheckBox->setStyleSheet("color: white; font-size: 12px;");
     enhancePromptCheckBox->setChecked(true);
-    enhanceLayout->addWidget(enhancePromptLabel);
-    enhanceLayout->addWidget(enhancePromptCheckBox);
+    enhancePromptLayout->addWidget(enhancePromptLabel);
+    enhancePromptLayout->addWidget(enhancePromptCheckBox);
 
     QVBoxLayout *upsampleLayout = new QVBoxLayout();
     enableUpsampleLabel = new QLabel("超分辨率");
@@ -271,13 +295,10 @@ void VeoGenPage::setupUI()
     enableUpsampleLabel->setVisible(false);
     enableUpsampleCheckBox->setVisible(false);
 
-    paramsLayout->addLayout(resLayout);
-    paramsLayout->addLayout(durLayout);
-    paramsLayout->addLayout(watermarkLayout);
-    paramsLayout->addLayout(enhanceLayout);
-    paramsLayout->addLayout(upsampleLayout);
-    paramsLayout->addStretch();
-    contentLayout->addLayout(paramsLayout);
+    enhanceLayout->addLayout(enhancePromptLayout);
+    enhanceLayout->addLayout(upsampleLayout);
+    enhanceLayout->addStretch();
+    contentLayout->addLayout(enhanceLayout);
 
     // ========== 预览区域 ==========
     previewLabel = new QLabel();
@@ -314,6 +335,7 @@ void VeoGenPage::connectSignals()
     connect(resolutionCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &VeoGenPage::onAnyParameterChanged);
     connect(watermarkCheckBox, &QCheckBox::checkStateChanged, this, &VeoGenPage::onAnyParameterChanged);
     connect(durationCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &VeoGenPage::onAnyParameterChanged);
+    connect(aspectRatioCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &VeoGenPage::onAnyParameterChanged);
 
     connect(promptInput, &QTextEdit::textChanged, this, &VeoGenPage::queueSaveSettings);
     connect(modelVariantCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &VeoGenPage::queueSaveSettings);
@@ -324,6 +346,7 @@ void VeoGenPage::connectSignals()
     connect(durationCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &VeoGenPage::queueSaveSettings);
     connect(enhancePromptCheckBox, &QCheckBox::checkStateChanged, this, &VeoGenPage::queueSaveSettings);
     connect(enableUpsampleCheckBox, &QCheckBox::checkStateChanged, this, &VeoGenPage::queueSaveSettings);
+    connect(aspectRatioCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &VeoGenPage::queueSaveSettings);
 
     connect(apiKeyCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int) {
         QString selectedApiKeyValue;
@@ -395,6 +418,8 @@ void VeoGenPage::onVariantTypeChanged()
         modelVariantCombo->addItem("veo_3_1-fast-4K", "veo_3_1-fast-4K");
         modelVariantCombo->addItem("veo_3_1-fast-components-4K", "veo_3_1-fast-components-4K");
 
+        resolutionCombo->setVisible(true);
+        resolutionLabel->setVisible(true);
         durationCombo->setVisible(true);
         durationLabel->setVisible(true);
         watermarkCheckBox->setVisible(true);
@@ -403,6 +428,8 @@ void VeoGenPage::onVariantTypeChanged()
         enhancePromptLabel->setVisible(false);
         enableUpsampleCheckBox->setVisible(false);
         enableUpsampleLabel->setVisible(false);
+        aspectRatioCombo->setVisible(false);
+        aspectRatioLabel->setVisible(false);
         resolutionLabel->setText("分辨率");
     } else {
         modelVariantCombo->addItem("veo3.1-fast", "veo3.1-fast");
@@ -415,15 +442,19 @@ void VeoGenPage::onVariantTypeChanged()
         modelVariantCombo->addItem("veo3.1-pro", "veo3.1-pro");
         modelVariantCombo->addItem("veo3.1-pro-4k", "veo3.1-pro-4k");
 
+        // 统一格式：只显示视频比例，隐藏分辨率、时长、水印
         durationCombo->setVisible(false);
         durationLabel->setVisible(false);
         watermarkCheckBox->setVisible(false);
         watermarkLabel->setVisible(false);
-        enhancePromptCheckBox->setVisible(true);
-        enhancePromptLabel->setVisible(true);
-        enableUpsampleCheckBox->setVisible(true);
-        enableUpsampleLabel->setVisible(true);
-        resolutionLabel->setText("宽高比");
+        resolutionCombo->setVisible(false);
+        resolutionLabel->setVisible(false);
+        enhancePromptCheckBox->setVisible(false);
+        enhancePromptLabel->setVisible(false);
+        enableUpsampleCheckBox->setVisible(false);
+        enableUpsampleLabel->setVisible(false);
+        aspectRatioCombo->setVisible(true);
+        aspectRatioLabel->setVisible(true);
     }
 
     modelVariantCombo->blockSignals(false);
@@ -813,6 +844,7 @@ void VeoGenPage::generateVideo()
         }
         bool enhancePrompt = enhancePromptCheckBox->isChecked();
         bool enableUpsample = enableUpsampleCheckBox->isChecked();
+        QString aspectRatio = aspectRatioCombo->currentData().toString();
 
         api->createVideo(
             apiKeyData.apiKey,
@@ -824,7 +856,7 @@ void VeoGenPage::generateVideo()
             "",
             "",
             false,
-            resolution,
+            aspectRatio,
             activeImgbbKey.apiKey,
             enhancePrompt,
             enableUpsample
@@ -921,6 +953,7 @@ QString VeoGenPage::buildSettingsSnapshot() const
         QString::number(variantType1Radio->isChecked() ? 1 : 2),
         QString::number(enhancePromptCheckBox->isChecked()),
         QString::number(enableUpsampleCheckBox->isChecked()),
+        aspectRatioCombo->currentData().toString(),
         uploadedImagePaths.join("\n"),
         uploadedEndFrameImagePath,
         uploadedMiddleFrameImagePath
@@ -963,6 +996,7 @@ void VeoGenPage::saveSettings()
     settings.setValue("variantType", variantType1Radio->isChecked() ? 1 : 2);
     settings.setValue("enhancePrompt", enhancePromptCheckBox->isChecked());
     settings.setValue("enableUpsample", enableUpsampleCheckBox->isChecked());
+    settings.setValue("aspectRatio", aspectRatioCombo->currentData().toString());
 
     settings.endGroup();
     settings.sync();
@@ -985,6 +1019,7 @@ void VeoGenPage::loadSettings()
     variantType2Radio->blockSignals(true);
     enhancePromptCheckBox->blockSignals(true);
     enableUpsampleCheckBox->blockSignals(true);
+    aspectRatioCombo->blockSignals(true);
 
     promptInput->setPlainText(settings.value("prompt", "").toString());
 
@@ -1053,6 +1088,15 @@ void VeoGenPage::loadSettings()
 
     watermarkCheckBox->setChecked(settings.value("watermark", false).toBool());
 
+    // 恢复视频比例设置
+    QString savedAspectRatio = settings.value("aspectRatio", "16:9").toString();
+    for (int i = 0; i < aspectRatioCombo->count(); ++i) {
+        if (aspectRatioCombo->itemData(i).toString() == savedAspectRatio) {
+            aspectRatioCombo->setCurrentIndex(i);
+            break;
+        }
+    }
+
     QStringList imagePaths = settings.value("imagePaths").toStringList();
     uploadedImagePaths.clear();
     for (const QString &path : imagePaths) {
@@ -1104,6 +1148,7 @@ void VeoGenPage::loadSettings()
     variantType2Radio->blockSignals(false);
     enhancePromptCheckBox->blockSignals(false);
     enableUpsampleCheckBox->blockSignals(false);
+    aspectRatioCombo->blockSignals(false);
 
     parametersModified = false;
 }
