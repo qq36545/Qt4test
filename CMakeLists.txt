@@ -21,6 +21,9 @@ set(SOURCES
     main.cpp
     mainwindow.cpp
     widgets/videogen.cpp
+    widgets/veogen.cpp
+    widgets/grokgen.cpp
+    widgets/wangen.cpp
     widgets/imagegen.cpp
     widgets/configwidget.cpp
     widgets/aboutwidget.cpp
@@ -36,6 +39,9 @@ set(SOURCES
 set(HEADERS
     mainwindow.h
     widgets/videogen.h
+    widgets/veogen.h
+    widgets/grokgen.h
+    widgets/wangen.h
     widgets/imagegen.h
     widgets/configwidget.h
     widgets/aboutwidget.h
