@@ -3,34 +3,32 @@
 
 #include <QWidget>
 #include <QTabWidget>
-#include <QTextEdit>
 #include <QComboBox>
 #include <QPushButton>
 #include <QLabel>
 #include <QVBoxLayout>
-#include <QRadioButton>
-#include <QButtonGroup>
-
-// 前向声明
-struct VideoTask;
-#include <QHBoxLayout>
+#include <QStackedWidget>
 #include <QTableWidget>
 #include <QListWidget>
 #include <QCheckBox>
 #include <QScrollArea>
 #include <QSpinBox>
-#include <QStackedWidget>
 #include <QGridLayout>
 #include <QShowEvent>
 #include <QTimer>
+#include <QHBoxLayout>
+#include <QTextEdit>
 
-// 单个视频生成 Tab
+// 前向声明
+struct VideoTask;
+class VeoGenPage;
+class GrokGenPage;
+class WanGenPage;
+
+// 单个视频生成 Tab（调度器）
 class VideoSingleTab : public QWidget
 {
     Q_OBJECT
-
-public:
-    enum class ModelType { VEO3, Grok, Wan };
 
 public:
     explicit VideoSingleTab(QWidget *parent = nullptr);
@@ -42,145 +40,17 @@ signals:
 public slots:
     void refreshApiKeys();
 
-protected:
-    bool eventFilter(QObject *obj, QEvent *event) override;
-
 private slots:
-    void generateVideo();
-    void resetForm();
     void onModelChanged(int index);
-    void onModelVariantChanged(int index);
-    void onVariantTypeChanged();
-    void uploadImage();
-    void uploadEndFrameImage();
-    void uploadMiddleFrameImage();
-    void uploadGrokImage2();
-    void uploadGrokImage3();
-    void clearGrokImage(int index);
-    void removeImage(int index);
-    void uploadWanAudio();           // 上传 WAN 音频
-    void clearWanAudio();            // 清空 WAN 音频
 
 private:
     void setupUI();
-    void connectSignals();
-    void loadApiKeys();
-    void updateResolutionOptions(bool is4K, bool isVariant2 = false);
-    void updateImageUploadUI(const QString &modelName);
-    void updateImagePreview();
-    void onVideoCreated(const QString &taskId, const QString &status);
-    void onTaskStatusUpdated(const QString &taskId, const QString &status, const QString &videoUrl, int progress);
-    void onApiError(const QString &error);
-    void queueSaveSettings();
-    void saveSettings();
-    void loadSettings();
-    QString buildSettingsSnapshot() const;
-    QString calculateParamsHash() const;
-    bool checkDuplicateSubmission();
-    void onAnyParameterChanged();
-    QString copyImagesToPersistentStorage(const QString &taskId);
-    QString normalizeImageReferences(const QString &prompt) const;
-    bool validateImageFile(const QString &filePath, QString &errorMsg) const;
-    QString selectAndValidateImageFile(const QString &dialogTitle, bool warnIfEmpty);
-    
-    // 提取的公共方法
-    QStringList filterValidImagePaths() const;
-    bool validateImgbbKey(QString &errorMsg) const;
-    ModelType detectModelType(const QString &modelName) const;
-    void updateWanAudioWidgetVisibility(const QString &modelVariant);
-    void setupWanRequestAndUpload(const QString &modelVariant);
 
-    QTextEdit *promptInput;
+    QStackedWidget *stack;
+    VeoGenPage *veoPage;
+    GrokGenPage *grokPage;
+    WanGenPage *wanPage;
     QComboBox *modelCombo;
-    QComboBox *apiKeyCombo;
-    QPushButton *addKeyButton;
-    QComboBox *serverCombo;
-    QComboBox *modelVariantCombo;
-    QComboBox *resolutionCombo;
-    QLabel *resolutionLabel;  // 分辨率标签
-    QComboBox *durationCombo;
-    QLabel *durationLabel;  // 时长标签
-    QComboBox *sizeCombo;  // Grok专用：720P/1080P
-    QLabel *sizeLabel;  // size标签
-    QCheckBox *watermarkCheckBox;
-    QLabel *watermarkLabel;  // 水印标签
-    QLabel *imageLabel;
-    QLabel *imagePreviewLabel;
-    QPushButton *uploadImageButton;
-    QPushButton *clearImageButton;
-    QStringList uploadedImagePaths;  // 改为支持多图
-    QWidget *endFrameWidget;
-    QLabel *endFrameLabel;
-    QLabel *endFramePreviewLabel;
-    QPushButton *uploadEndFrameButton;
-    QString uploadedEndFrameImagePath;
-
-    // 中间帧上传（components 模型用）
-    QWidget *middleFrameWidget;
-    QLabel *middleFrameLabel;
-    QLabel *middleFramePreviewLabel;
-    QPushButton *uploadMiddleFrameButton;
-    QString uploadedMiddleFrameImagePath;
-
-    // Grok 图片2/3 上传
-    QWidget *grokImage2Widget;
-    QLabel *grokImage2PreviewLabel;
-    QPushButton *uploadGrokImage2Button;
-    QPushButton *clearGrokImage2Button;
-
-    QWidget *grokImage3Widget;
-    QLabel *grokImage3PreviewLabel;
-    QPushButton *uploadGrokImage3Button;
-    QPushButton *clearGrokImage3Button;
-
-    // 变体类型单选按钮
-    QWidget *variantTypeWidget;
-    QRadioButton *variantType1Radio;  // OpenAI格式
-    QRadioButton *variantType2Radio;  // 统一格式
-
-    // Variant 2 专用控件
-    QCheckBox *enhancePromptCheckBox;
-    QLabel *enhancePromptLabel;
-    QCheckBox *enableUpsampleCheckBox;
-    QLabel *enableUpsampleLabel;
-    QLabel *previewLabel;
-    QPushButton *generateButton;
-    QPushButton *resetButton;
-
-    class VideoAPI *veo3API;  // API 实例（保留变量名兼容性）
-    QString currentTaskId;   // 当前任务 ID
-    QString lastSubmittedParamsHash;  // 上次提交的参数哈希
-    bool suppressDuplicateWarning;    // 本次会话是否抑制重复提交警告
-    bool parametersModified;          // 参数是否被修改过
-    bool pendingSaveSettings;         // 是否有待处理的延迟保存
-    bool suppressAutoSave;            // 模型联动期间抑制自动保存
-    QString lastSavedSettingsSnapshot; // 最近一次已落盘的配置快照
-    QLabel *promptLabel;              // 提示词标签（VEO3/Grok 显示，WAN 隐藏）
-    QLabel *imageUploadHintLabel;  // 垫图尺寸提示
-
-    // WAN 视频参数控件
-    QWidget *wanParamsWidget;          // WAN 参数容器
-    QLabel *wanPromptLabel;          // WAN 正向提示词标签（仅 WAN 显示）
-    QLabel *wanDurationLabel;        // 视频时长标签
-    QComboBox *wanDurationCombo;     // WAN 视频时长下拉
-    QLabel *wanResolutionLabel;     // 视频分辨率标签
-    QComboBox *wanResolutionCombo; // WAN 视频分辨率下拉
-    QLabel *wanNegativePromptLabel;  // 反向提示词
-    QTextEdit *wanNegativePromptInput; // 反向提示词输入
-    QLabel *wanTemplateLabel;        // 特效模板
-    QComboBox *wanTemplateCombo;     // 特效模板下拉
-    QCheckBox *wanPromptExtendCheckBox; // Prompt智能改写
-    QLabel *wanSeedLabel;            // 随机数种子
-    QSpinBox *wanSeedInput;          // 随机数种子（整数 +/-）
-    QCheckBox *wanAudioCheckBox;     // 自动添加音频（仅 wan2.5）
-    QWidget *wanAudioUploadWidget;   // 音频上传区域
-    QPushButton *wanAudioUploadButton; // 音频上传按钮
-    QLabel *wanAudioFileLabel;       // 音频文件名显示
-    QPushButton *clearWanAudioButton; // 清空音频按钮
-    QCheckBox *wanWatermarkCheckBox; // 保留水印
-    QString uploadedWanAudioPath;     // 已上传音频路径
-    QString uploadedWanAudioUrl;     // 已上传音频URL
-    bool wanAudioUploading;          // 音频上传中，防止重复触发
 };
 
 // 批量视频生成 Tab
