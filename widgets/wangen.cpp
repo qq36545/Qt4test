@@ -16,6 +16,26 @@
 #include <QDateTime>
 #include <QRandomGenerator>
 
+namespace {
+
+void applyAudioFileLabelState(QLabel *label, bool hasAudio, const QString &fileName = QString())
+{
+    if (!label) {
+        return;
+    }
+
+    if (hasAudio) {
+        label->setText("✓ " + fileName);
+        label->setStyleSheet("font-size: 12px; color: palette(highlight);");
+        return;
+    }
+
+    label->setText("未选择音频文件");
+    label->setStyleSheet("font-size: 12px; color: palette(mid);");
+}
+
+} // namespace
+
 // WanGenPage 实现
 WanGenPage::WanGenPage(QWidget *parent)
     : QWidget(parent),
@@ -172,7 +192,7 @@ void WanGenPage::setupUI()
     audioUploadButton->setFixedWidth(120);
     connect(audioUploadButton, &QPushButton::clicked, this, &WanGenPage::uploadAudio);
     audioFileLabel = new QLabel("未选择音频文件");
-    audioFileLabel->setStyleSheet("font-size: 12px; color: palette(mid);");
+    applyAudioFileLabelState(audioFileLabel, false);
     audioFileLabel->setWordWrap(true);
     clearAudioButton = new QPushButton("🗑️ 清空");
     clearAudioButton->setFixedWidth(80);
@@ -529,8 +549,7 @@ void WanGenPage::uploadAudio()
     }
 
     uploadedAudioPath = filePath;
-    audioFileLabel->setText("✓ " + fi.fileName());
-    audioFileLabel->setStyleSheet("font-size: 12px; color: palette(highlight);");
+    applyAudioFileLabelState(audioFileLabel, true, fi.fileName());
     clearAudioButton->setVisible(true);
 
     audioUploading = true;
@@ -556,8 +575,7 @@ void WanGenPage::clearAudio()
     uploadedAudioPath.clear();
     uploadedAudioUrl.clear();
     audioUploading = false;
-    audioFileLabel->setText("未选择音频文件");
-    audioFileLabel->setStyleSheet("font-size: 12px; color: palette(mid);");
+    applyAudioFileLabelState(audioFileLabel, false);
     clearAudioButton->setVisible(false);
     queueSaveSettings();
 }
@@ -852,8 +870,7 @@ void WanGenPage::loadSettings()
     uploadedAudioUrl = settings.value("wan_audioUrl", "").toString();
     if (!uploadedAudioPath.isEmpty() && QFile::exists(uploadedAudioPath)) {
         QFileInfo fi(uploadedAudioPath);
-        audioFileLabel->setText("✓ " + fi.fileName());
-        audioFileLabel->setStyleSheet("font-size: 12px; color: palette(highlight);");
+        applyAudioFileLabelState(audioFileLabel, true, fi.fileName());
         clearAudioButton->setVisible(true);
     }
     watermarkCheckBox->setChecked(settings.value("wan_watermark", false).toBool());
