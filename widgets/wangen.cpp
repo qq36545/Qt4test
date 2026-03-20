@@ -66,103 +66,6 @@ void WanGenPage::setupUI()
     variantLayout->addWidget(modelVariantCombo, 1);
     contentLayout->addLayout(variantLayout);
 
-    // ========== API Key 选择 ==========
-    QHBoxLayout *keyLayout = new QHBoxLayout();
-    QLabel *keyLabel = new QLabel("API 密钥:");
-    keyLabel->setStyleSheet("font-size: 14px;");
-    apiKeyCombo = new QComboBox();
-    addKeyButton = new QPushButton("➕ 添加密钥");
-    connect(addKeyButton, &QPushButton::clicked, []() {
-        QMessageBox::information(nullptr, "提示", "请前往配置页面添加密钥");
-    });
-    keyLayout->addWidget(keyLabel);
-    keyLayout->addWidget(apiKeyCombo, 1);
-    keyLayout->addWidget(addKeyButton);
-    contentLayout->addLayout(keyLayout);
-
-    // ========== 服务器选择 ==========
-    QHBoxLayout *serverLayout = new QHBoxLayout();
-    QLabel *serverLabel = new QLabel("请求服务器:");
-    serverLabel->setStyleSheet("font-size: 14px;");
-    serverCombo = new QComboBox();
-    serverCombo->addItem("【主站】https://ai.kegeai.top", "https://ai.kegeai.top");
-    serverCombo->addItem("【备用】https://api.kuai.host", "https://api.kuai.host");
-    serverCombo->setCurrentIndex(0);
-    serverLayout->addWidget(serverLabel);
-    serverLayout->addWidget(serverCombo, 1);
-    contentLayout->addLayout(serverLayout);
-
-    // ========== 正向提示词 ==========
-    QHBoxLayout *promptHeaderLayout = new QHBoxLayout();
-    QLabel *promptLabel = new QLabel("正向提示词:");
-    promptLabel->setStyleSheet("font-size: 14px;");
-    QPushButton *clearPromptButton = new QPushButton("🧹 清空文本");
-    clearPromptButton->setCursor(Qt::PointingHandCursor);
-    connect(clearPromptButton, &QPushButton::clicked, this, [this]() {
-        promptInput->clear();
-    });
-    promptHeaderLayout->addWidget(promptLabel);
-    promptHeaderLayout->addStretch();
-    promptHeaderLayout->addWidget(clearPromptButton);
-    contentLayout->addLayout(promptHeaderLayout);
-
-    promptInput = new QTextEdit();
-    promptInput->setPlaceholderText("输入视频生成提示词...\n例如：一只可爱的猫咪在花园里玩耍，阳光明媚，电影级画质");
-    promptInput->setMinimumHeight(200);
-    promptInput->setStyleSheet("font-size: 15px;");
-    contentLayout->addWidget(promptInput);
-
-    // ========== 反向提示词 ==========
-    QHBoxLayout *negPromptLayout = new QHBoxLayout();
-    QLabel *negPromptLabel = new QLabel("反向提示词:");
-    negPromptLabel->setStyleSheet("font-size: 14px;");
-    negativePromptInput = new QTextEdit();
-    negativePromptInput->setPlaceholderText("输入不希望出现的元素...");
-    negativePromptInput->setMaximumHeight(60);
-    negativePromptInput->setStyleSheet("font-size: 13px;");
-    negPromptLayout->addWidget(negPromptLabel);
-    negPromptLayout->addWidget(negativePromptInput, 1);
-    contentLayout->addLayout(negPromptLayout);
-
-    // ========== 图片上传 ==========
-    QHBoxLayout *imageLabelLayout = new QHBoxLayout();
-    imageLabel = new QLabel("首帧图片:");
-    imageLabel->setStyleSheet("font-size: 14px;");
-    imageLabelLayout->setContentsMargins(0, 0, 0, 0);
-    imageLabelLayout->setSpacing(8);
-    imageLabelLayout->addWidget(imageLabel);
-    imageLabelLayout->addStretch();
-    contentLayout->addLayout(imageLabelLayout);
-
-    QHBoxLayout *imageLayout = new QHBoxLayout();
-    imagePreviewLabel = new QLabel("未选择图片\n点击此处上传");
-    imagePreviewLabel->setObjectName("imagePreviewLabel");
-    imagePreviewLabel->setAlignment(Qt::AlignCenter);
-    imagePreviewLabel->setCursor(Qt::PointingHandCursor);
-    imagePreviewLabel->setScaledContents(false);
-    imagePreviewLabel->installEventFilter(this);
-
-    uploadImageButton = new QPushButton("📁 选择首帧图片");
-    uploadImageButton->setFixedWidth(150);
-    connect(uploadImageButton, &QPushButton::clicked, this, &WanGenPage::uploadImage);
-
-    clearImageButton = new QPushButton("🗑️ 清空");
-    clearImageButton->setFixedWidth(80);
-    connect(clearImageButton, &QPushButton::clicked, [this]() {
-        uploadedImagePath.clear();
-        imagePreviewLabel->setText("未选择图片\n点击此处上传");
-        imagePreviewLabel->setPixmap(QPixmap());
-        imagePreviewLabel->setProperty("hasImage", false);
-        imagePreviewLabel->style()->unpolish(imagePreviewLabel);
-        imagePreviewLabel->style()->polish(imagePreviewLabel);
-        queueSaveSettings();
-    });
-
-    imageLayout->addWidget(imagePreviewLabel, 1);
-    imageLayout->addWidget(uploadImageButton);
-    imageLayout->addWidget(clearImageButton);
-    contentLayout->addLayout(imageLayout);
-
     // ========== 参数设置 ==========
     QHBoxLayout *paramsRow1 = new QHBoxLayout();
     paramsRow1->setSpacing(20);
@@ -290,6 +193,102 @@ void WanGenPage::setupUI()
     watermarkLayout->addWidget(watermarkCheckBox);
     watermarkLayout->addStretch();
     contentLayout->addLayout(watermarkLayout);
+
+    // ========== API Key 选择 ==========
+    QHBoxLayout *keyLayout = new QHBoxLayout();
+    QLabel *keyLabel = new QLabel("API 密钥:");
+    keyLabel->setStyleSheet("font-size: 14px;");
+    apiKeyCombo = new QComboBox();
+    addKeyButton = new QPushButton("➕ 添加密钥");
+    connect(addKeyButton, &QPushButton::clicked, []() {
+        QMessageBox::information(nullptr, "提示", "请前往配置页面添加密钥");
+    });
+    keyLayout->addWidget(keyLabel);
+    keyLayout->addWidget(apiKeyCombo, 1);
+    keyLayout->addWidget(addKeyButton);
+    contentLayout->addLayout(keyLayout);
+
+    // ========== 服务器选择 ==========
+    QHBoxLayout *serverLayout = new QHBoxLayout();
+    QLabel *serverLabel = new QLabel("请求服务器:");
+    serverLabel->setStyleSheet("font-size: 14px;");
+    serverCombo = new QComboBox();
+    serverCombo->addItem("【主站】https://ai.kegeai.top", "https://ai.kegeai.top");
+    serverCombo->addItem("【备用】https://api.kuai.host", "https://api.kuai.host");
+    serverCombo->setCurrentIndex(0);
+    serverLayout->addWidget(serverLabel);
+    serverLayout->addWidget(serverCombo, 1);
+    contentLayout->addLayout(serverLayout);
+
+    // ========== 正向提示词 ==========
+    QHBoxLayout *promptHeaderLayout = new QHBoxLayout();
+    QLabel *promptLabel = new QLabel("正向提示词:");
+    promptLabel->setStyleSheet("font-size: 14px;");
+    QPushButton *clearPromptButton = new QPushButton("🧹 清空文本");
+    clearPromptButton->setCursor(Qt::PointingHandCursor);
+    connect(clearPromptButton, &QPushButton::clicked, this, [this]() {
+        promptInput->clear();
+    });
+    promptHeaderLayout->addWidget(promptLabel);
+    promptHeaderLayout->addStretch();
+    promptHeaderLayout->addWidget(clearPromptButton);
+    contentLayout->addLayout(promptHeaderLayout);
+
+    promptInput = new QTextEdit();
+    promptInput->setPlaceholderText("输入视频生成提示词...\n例如：一只可爱的猫咪在花园里玩耍，阳光明媚，电影级画质");
+    promptInput->setMinimumHeight(200);
+    promptInput->setStyleSheet("font-size: 15px;");
+    contentLayout->addWidget(promptInput);
+
+    // ========== 反向提示词 ==========
+    QLabel *negPromptLabel = new QLabel("反向提示词:");
+    negPromptLabel->setStyleSheet("font-size: 14px;");
+    contentLayout->addWidget(negPromptLabel);
+
+    negativePromptInput = new QTextEdit();
+    negativePromptInput->setPlaceholderText("输入不希望出现的元素...");
+    negativePromptInput->setMaximumHeight(60);
+    negativePromptInput->setStyleSheet("font-size: 13px;");
+    contentLayout->addWidget(negativePromptInput);
+
+    // ========== 图片上传 ==========
+    QHBoxLayout *imageLabelLayout = new QHBoxLayout();
+    imageLabel = new QLabel("首帧图片:");
+    imageLabel->setStyleSheet("font-size: 14px;");
+    imageLabelLayout->setContentsMargins(0, 0, 0, 0);
+    imageLabelLayout->setSpacing(8);
+    imageLabelLayout->addWidget(imageLabel);
+    imageLabelLayout->addStretch();
+    contentLayout->addLayout(imageLabelLayout);
+
+    QHBoxLayout *imageLayout = new QHBoxLayout();
+    imagePreviewLabel = new QLabel("未选择图片\n点击此处上传");
+    imagePreviewLabel->setObjectName("imagePreviewLabel");
+    imagePreviewLabel->setAlignment(Qt::AlignCenter);
+    imagePreviewLabel->setCursor(Qt::PointingHandCursor);
+    imagePreviewLabel->setScaledContents(false);
+    imagePreviewLabel->installEventFilter(this);
+
+    uploadImageButton = new QPushButton("📁 选择首帧图片");
+    uploadImageButton->setFixedWidth(150);
+    connect(uploadImageButton, &QPushButton::clicked, this, &WanGenPage::uploadImage);
+
+    clearImageButton = new QPushButton("🗑️ 清空");
+    clearImageButton->setFixedWidth(80);
+    connect(clearImageButton, &QPushButton::clicked, [this]() {
+        uploadedImagePath.clear();
+        imagePreviewLabel->setText("未选择图片\n点击此处上传");
+        imagePreviewLabel->setPixmap(QPixmap());
+        imagePreviewLabel->setProperty("hasImage", false);
+        imagePreviewLabel->style()->unpolish(imagePreviewLabel);
+        imagePreviewLabel->style()->polish(imagePreviewLabel);
+        queueSaveSettings();
+    });
+
+    imageLayout->addWidget(imagePreviewLabel, 1);
+    imageLayout->addWidget(uploadImageButton);
+    imageLayout->addWidget(clearImageButton);
+    contentLayout->addLayout(imageLayout);
 
     // ========== 预览区域 ==========
     previewLabel = new QLabel();
