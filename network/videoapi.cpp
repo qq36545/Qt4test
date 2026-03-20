@@ -23,6 +23,26 @@ VideoAPI::~VideoAPI()
 {
 }
 
+void VideoAPI::prepareWanRequest(const WanVideoParams &params)
+{
+    currentRequest.apiKey = params.apiKey;
+    currentRequest.baseUrl = params.baseUrl;
+    currentRequest.model = params.model;
+    currentRequest.prompt = params.prompt;
+    currentRequest.negativePrompt = params.negativePrompt;
+    currentRequest.localImagePaths = params.localImagePaths;
+    currentRequest.uploadedUrls.clear();
+    currentRequest.uploadIndex = 0;
+    currentRequest.targetMethod = "wan";
+    currentRequest.audioUrl = params.audioUrl;
+    currentRequest.templateName = params.templateName;
+    currentRequest.resolution = params.resolution;
+    currentRequest.duration = params.duration;
+    currentRequest.promptExtend = params.promptExtend;
+    currentRequest.watermark = params.watermark;
+    currentRequest.seed = params.seed;
+}
+
 void VideoAPI::createVideo(const QString &apiKey,
                            const QString &baseUrl,
                            const QString &modelName,
@@ -65,21 +85,12 @@ void VideoAPI::createVideo(const QString &apiKey,
         // VEO3 OpenAI格式：直接上传文件
         createVeo3Video(apiKey, baseUrl, model, prompt, imagePaths, size, seconds, watermark);
     } else if (model.contains("wan", Qt::CaseInsensitive)) {
-        // WAN 视频：先上传图片到 imgbb
-        currentRequest.apiKey = apiKey;
-        currentRequest.baseUrl = baseUrl;
-        currentRequest.model = model;
-        currentRequest.prompt = prompt;
-        currentRequest.imgbbApiKey = imgbbApiKey;
-        currentRequest.localImagePaths = imagePaths;
-        currentRequest.uploadedUrls.clear();
-        currentRequest.uploadIndex = 0;
-        currentRequest.targetMethod = "wan";
-        // WAN 参数通过扩展参数传入，这里只处理图片上传
-        if (!imagePaths.isEmpty()) {
-            imageUploader->uploadToImgbb(imagePaths.first(), imgbbApiKey);
+        // WAN 视频：参数通过 prepareWanRequest 设置，这里只触发图片上传
+        // 注意：调用方必须先调用 prepareWanRequest 设置完整参数
+        if (!currentRequest.localImagePaths.isEmpty()) {
+            imageUploader->uploadToImgbb(currentRequest.localImagePaths.first(), 
+                                          currentRequest.imgbbApiKey);
         } else {
-            // 无图片直接调用（需要调用方传入完整参数）
             emit errorOccurred("WAN 模型需要上传图片");
         }
     } else {

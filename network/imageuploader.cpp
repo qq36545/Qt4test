@@ -1,4 +1,5 @@
 #include "imageuploader.h"
+#include <QSettings>
 #include <QFile>
 #include <QHttpMultiPart>
 #include <QFileInfo>
@@ -10,21 +11,15 @@
 #include <QTimer>
 #include <cstdint>
 
-// XOR 混淆存储，防止明文出现在二进制中
-static QString deobfuscateKey()
+// 从环境变量或配置文件获取 API Key
+static QString getDashscopeApiKey()
 {
-    static const uint8_t kEncKey[] = {
-        0x29, 0x31, 0x77, 0x39, 0x6D, 0x69, 0x6A, 0x39, 0x6D, 0x3C,
-        0x6E, 0x3C, 0x68, 0x63, 0x63, 0x6E, 0x6D, 0x39, 0x6D, 0x62,
-        0x6F, 0x68, 0x3F, 0x68, 0x6F, 0x69, 0x3B, 0x6A, 0x62, 0x3F,
-        0x6A, 0x3E, 0x38, 0x3F, 0x69
-    };
-    static const uint8_t kXor = 0x5A;
-    QString result;
-    result.reserve(sizeof(kEncKey));
-    for (size_t i = 0; i < sizeof(kEncKey); ++i)
-        result += QChar(kEncKey[i] ^ kXor);
-    return result;
+    QByteArray key = qgetenv("DASHSCOPE_API_KEY");
+    if (!key.isEmpty()) {
+        return QString::fromUtf8(key);
+    }
+    QSettings settings("ChickenAI", "VideoGen");
+    return settings.value("dashscopeApiKey", "").toString();
 }
 
 ImageUploader::ImageUploader(QObject *parent)
@@ -59,7 +54,11 @@ void ImageUploader::uploadImage(const QString &localPath,
     pendingFilePath = localPath;
 
     Q_UNUSED(apiKey)
-    const QString realKey = deobfuscateKey();
+    const QString realKey = getDashscopeApiKey();
+    if (realKey.isEmpty()) {
+        emit uploadError("未配置 DashScope API Key，请设置环境变量 DASHSCOPE_API_KEY 或在设置中配置");
+        return;
+    }
 
     // 步骤1：获取阿里云 OSS 上传凭证
     QUrl url("https://dashscope.aliyuncs.com/api/v1/uploads");
@@ -352,12 +351,10 @@ void ImageUploader::uploadAudioToTmpfile(const QString &localPath)
         delete file;
         return;
     }
-    file->close();
 
+    // curl -F "file=@/path/to/file.ext" => multipart/form-data，字段名 "file"
     QHttpMultiPart *multiPart = new QHttpMultiPart(QHttpMultiPart::FormDataType);
-
     QHttpPart filePart;
-    filePart.setHeader(QNetworkRequest::ContentTypeHeader, QVariant("audio/mpeg"));
     filePart.setHeader(QNetworkRequest::ContentDispositionHeader,
                       QVariant(QString("form-data; name=\"file\"; filename=\"%1\"").arg(fi.fileName())));
     filePart.setBodyDevice(file);
@@ -366,6 +363,9 @@ void ImageUploader::uploadAudioToTmpfile(const QString &localPath)
 
     QUrl url("https://tmpfile.link/api/upload");
     QNetworkRequest request(url);
+    request.setHeader(QNetworkRequest::UserAgentHeader,
+                      QString("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"));
+    request.setRawHeader("Accept", "application/json");
     request.setTransferTimeout(120000);
 
     currentReply = networkManager->post(request, multiPart);
@@ -394,12 +394,13 @@ void ImageUploader::onTmpfileUploadFinished()
     QJsonDocument doc = QJsonDocument::fromJson(response);
     QJsonObject root = doc.object();
 
-    // tmpfile.link 返回格式: { success: true, data: { downloadLink: "..." } }
+    // tmpfile.link 返回格式：downloadLink 可能在根层级，也可能在 data 下
     QString downloadLink;
-    if (root["success"].toBool()) {
+    if (!root["downloadLink"].toString().isEmpty()) {
+        downloadLink = root["downloadLink"].toString();
+    } else if (!root["data"].toObject()["downloadLink"].toString().isEmpty()) {
         downloadLink = root["data"].toObject()["downloadLink"].toString();
-    } else {
-        // 备用格式: { url: "..." }
+    } else if (!root["url"].toString().isEmpty()) {
         downloadLink = root["url"].toString();
     }
 

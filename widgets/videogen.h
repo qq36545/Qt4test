@@ -18,6 +18,7 @@ struct VideoTask;
 #include <QListWidget>
 #include <QCheckBox>
 #include <QScrollArea>
+#include <QSpinBox>
 #include <QStackedWidget>
 #include <QGridLayout>
 #include <QShowEvent>
@@ -27,6 +28,9 @@ struct VideoTask;
 class VideoSingleTab : public QWidget
 {
     Q_OBJECT
+
+public:
+    enum class ModelType { VEO3, Grok, Wan };
 
 public:
     explicit VideoSingleTab(QWidget *parent = nullptr);
@@ -78,6 +82,13 @@ private:
     QString normalizeImageReferences(const QString &prompt) const;
     bool validateImageFile(const QString &filePath, QString &errorMsg) const;
     QString selectAndValidateImageFile(const QString &dialogTitle, bool warnIfEmpty);
+    
+    // 提取的公共方法
+    QStringList filterValidImagePaths() const;
+    bool validateImgbbKey(QString &errorMsg) const;
+    ModelType detectModelType(const QString &modelName) const;
+    void updateWanAudioWidgetVisibility(const QString &modelVariant);
+    void setupWanRequestAndUpload(const QString &modelVariant);
 
     QTextEdit *promptInput;
     QComboBox *modelCombo;
@@ -144,24 +155,32 @@ private:
     bool pendingSaveSettings;         // 是否有待处理的延迟保存
     bool suppressAutoSave;            // 模型联动期间抑制自动保存
     QString lastSavedSettingsSnapshot; // 最近一次已落盘的配置快照
-    QLabel *imageUploadHintLabel;     // 垫图尺寸提示
+    QLabel *promptLabel;              // 提示词标签（VEO3/Grok 显示，WAN 隐藏）
+    QLabel *imageUploadHintLabel;  // 垫图尺寸提示
 
     // WAN 视频参数控件
     QWidget *wanParamsWidget;          // WAN 参数容器
-    QLabel *wanNegativePromptLabel;   // 反向提示词
+    QLabel *wanPromptLabel;          // WAN 正向提示词标签（仅 WAN 显示）
+    QLabel *wanDurationLabel;        // 视频时长标签
+    QComboBox *wanDurationCombo;     // WAN 视频时长下拉
+    QLabel *wanResolutionLabel;     // 视频分辨率标签
+    QComboBox *wanResolutionCombo; // WAN 视频分辨率下拉
+    QLabel *wanNegativePromptLabel;  // 反向提示词
     QTextEdit *wanNegativePromptInput; // 反向提示词输入
-    QLabel *wanTemplateLabel;         // 特效模板
-    QComboBox *wanTemplateCombo;      // 特效模板下拉
+    QLabel *wanTemplateLabel;        // 特效模板
+    QComboBox *wanTemplateCombo;     // 特效模板下拉
     QCheckBox *wanPromptExtendCheckBox; // Prompt智能改写
-    QLabel *wanSeedLabel;             // 随机数种子
-    QLineEdit *wanSeedInput;         // 随机数种子输入
-    QCheckBox *wanAudioCheckBox;      // 自动添加音频（仅 wan2.5）
-    QWidget *wanAudioUploadWidget;    // 音频上传区域
+    QLabel *wanSeedLabel;            // 随机数种子
+    QSpinBox *wanSeedInput;          // 随机数种子（整数 +/-）
+    QCheckBox *wanAudioCheckBox;     // 自动添加音频（仅 wan2.5）
+    QWidget *wanAudioUploadWidget;   // 音频上传区域
     QPushButton *wanAudioUploadButton; // 音频上传按钮
     QLabel *wanAudioFileLabel;       // 音频文件名显示
     QPushButton *clearWanAudioButton; // 清空音频按钮
+    QCheckBox *wanWatermarkCheckBox; // 保留水印
     QString uploadedWanAudioPath;     // 已上传音频路径
-    QString uploadedWanAudioUrl;      // 已上传音频URL
+    QString uploadedWanAudioUrl;     // 已上传音频URL
+    bool wanAudioUploading;          // 音频上传中，防止重复触发
 };
 
 // 批量视频生成 Tab

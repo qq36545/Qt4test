@@ -266,7 +266,8 @@ VideoSingleTab::VideoSingleTab(QWidget *parent)
       suppressDuplicateWarning(false),
       parametersModified(false),
       pendingSaveSettings(false),
-      suppressAutoSave(false)
+      suppressAutoSave(false),
+      wanAudioUploading(false)
 {
     veo3API = new VideoAPI(this);
     connect(veo3API, &VideoAPI::videoCreated, this, &VideoSingleTab::onVideoCreated);
@@ -367,6 +368,37 @@ void VideoSingleTab::setupUI()
     variantLayout->addWidget(modelVariantCombo, 1);
     contentLayout->addLayout(variantLayout);
 
+    // WAN 视频时长（仅 WAN 显示，插入模型变体下方）
+    QHBoxLayout *wanDurationLayout = new QHBoxLayout();
+    wanDurationLayout->setSpacing(20);
+    wanDurationLabel = new QLabel("视频时长:");
+    wanDurationLabel->setStyleSheet("font-size: 14px;");
+    wanDurationLabel->setVisible(false);
+    wanDurationCombo = new QComboBox();
+    wanDurationCombo->addItem("5秒", 5);
+    wanDurationCombo->addItem("10秒", 10);
+    wanDurationCombo->setVisible(false);
+    wanResolutionLabel = new QLabel("视频分辨率:");
+    wanResolutionLabel->setStyleSheet("font-size: 14px;");
+    wanResolutionLabel->setVisible(false);
+    wanResolutionCombo = new QComboBox();
+    wanResolutionCombo->addItem("480P", "480P");
+    wanResolutionCombo->addItem("720P", "720P");
+    wanResolutionCombo->addItem("1080P", "1080P");
+    wanResolutionCombo->setVisible(false);
+    wanDurationLayout->addWidget(wanDurationLabel);
+    wanDurationLayout->addWidget(wanDurationCombo);
+    wanDurationLayout->addSpacing(20);
+    wanDurationLayout->addWidget(wanResolutionLabel);
+    wanDurationLayout->addWidget(wanResolutionCombo);
+    wanDurationLayout->addStretch();
+    contentLayout->addLayout(wanDurationLayout);
+
+    // WAN 正向提示词标签（仅 WAN 显示，覆盖通用 promptLabel）
+    wanPromptLabel = new QLabel("正向提示词:");
+    wanPromptLabel->setStyleSheet("font-size: 14px;");
+    wanPromptLabel->setVisible(false);
+
     // API Key 选择
     QHBoxLayout *keyLayout = new QHBoxLayout();
     QLabel *keyLabel = new QLabel("API 密钥:");
@@ -395,7 +427,7 @@ void VideoSingleTab::setupUI()
 
     // 提示词输入
     QHBoxLayout *promptHeaderLayout = new QHBoxLayout();
-    QLabel *promptLabel = new QLabel("提示词:");
+    promptLabel = new QLabel("提示词:");
     promptLabel->setStyleSheet("font-size: 14px;");
     QPushButton *clearPromptButton = new QPushButton("🧹 清空文本");
     clearPromptButton->setCursor(Qt::PointingHandCursor);
@@ -654,6 +686,9 @@ void VideoSingleTab::setupUI()
 
     contentLayout->addLayout(paramsLayout);
 
+    // resolutionCombo 已在 paramsLayout 中创建，现在加入 wanDurationLayout
+    wanDurationLayout->insertWidget(3, resolutionCombo);
+
     // WAN 参数容器（默认隐藏）
     wanParamsWidget = new QWidget();
     QVBoxLayout *wanParamsLayout = new QVBoxLayout(wanParamsWidget);
@@ -720,10 +755,14 @@ void VideoSingleTab::setupUI()
     wanPromptExtendCheckBox->setChecked(true);
     wanSeedLabel = new QLabel("随机种子:");
     wanSeedLabel->setStyleSheet("font-size: 14px;");
-    wanSeedInput = new QLineEdit();
-    wanSeedInput->setPlaceholderText("留空则随机");
+    wanSeedInput = new QSpinBox();
+    wanSeedInput->setRange(0, 999999999);
+    wanSeedInput->setValue(0);
     wanSeedInput->setMaximumWidth(150);
-    wanSeedInput->setStyleSheet("font-size: 13px;");
+    wanSeedInput->setStyleSheet(
+        "QSpinBox { color: white; background-color: #2a2a2a; border: 1px solid #555; border-radius: 4px; padding: 2px 4px; font-size: 13px; } "
+        "QSpinBox::up-button, QSpinBox::down-button { background-color: #444; width: 16px; } "
+        "QSpinBox::up-arrow, QSpinBox::down-arrow { border-color: white; }");
     wanOptionLayout->addWidget(wanPromptExtendCheckBox);
     wanOptionLayout->addSpacing(20);
     wanOptionLayout->addWidget(wanSeedLabel);
@@ -733,10 +772,11 @@ void VideoSingleTab::setupUI()
 
     // WAN 音频上传（仅 wan2.5 支持）
     wanAudioUploadWidget = new QWidget();
+    wanAudioUploadWidget->setMinimumHeight(36);
     QHBoxLayout *wanAudioLayout = new QHBoxLayout(wanAudioUploadWidget);
     wanAudioLayout->setContentsMargins(0, 0, 0, 0);
     wanAudioLayout->setSpacing(10);
-    wanAudioCheckBox = new QCheckBox("自动添加音频（仅wan2.5）");
+    wanAudioCheckBox = new QCheckBox("为视频添加音频（仅wan2.5）");
     wanAudioCheckBox->setStyleSheet("color: white; font-size: 13px;");
     wanAudioCheckBox->setChecked(false);
     wanAudioUploadButton = new QPushButton("🎵 上传音频");
@@ -756,7 +796,19 @@ void VideoSingleTab::setupUI()
     wanParamsLayout->addWidget(wanAudioUploadWidget);
     wanAudioUploadWidget->setVisible(false);
 
-    contentLayout->addWidget(wanParamsWidget);
+    // WAN 保留水印
+    QHBoxLayout *wanWatermarkLayout = new QHBoxLayout();
+    wanWatermarkCheckBox = new QCheckBox("保留水印");
+    wanWatermarkCheckBox->setStyleSheet("color: white; font-size: 13px;");
+    wanWatermarkCheckBox->setChecked(false);
+    wanWatermarkLayout->addWidget(wanWatermarkCheckBox);
+    wanWatermarkLayout->addStretch();
+    wanParamsLayout->addLayout(wanWatermarkLayout);
+
+    // wanParamsWidget 和 wanPromptLabel 插入到 promptHeaderLayout 之前（WAN 时显示）
+    int phIdx = contentLayout->indexOf(promptHeaderLayout);
+    contentLayout->insertWidget(phIdx, wanParamsWidget);   // WAN 参数（negative_prompt、template 等）
+    contentLayout->insertWidget(phIdx, wanPromptLabel);   // "正向提示词:" 标签
     wanParamsWidget->setVisible(false);
 
     // 预览区域
@@ -833,8 +885,11 @@ void VideoSingleTab::connectSignals()
     connect(wanNegativePromptInput, &QTextEdit::textChanged, this, &VideoSingleTab::queueSaveSettings);
     connect(wanTemplateCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &VideoSingleTab::queueSaveSettings);
     connect(wanPromptExtendCheckBox, &QCheckBox::checkStateChanged, this, &VideoSingleTab::queueSaveSettings);
-    connect(wanSeedInput, &QLineEdit::textChanged, this, &VideoSingleTab::queueSaveSettings);
+    connect(wanSeedInput, &QSpinBox::valueChanged, this, &VideoSingleTab::queueSaveSettings);
     connect(wanAudioCheckBox, &QCheckBox::checkStateChanged, this, &VideoSingleTab::queueSaveSettings);
+    connect(wanDurationCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &VideoSingleTab::queueSaveSettings);
+    connect(wanResolutionCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &VideoSingleTab::queueSaveSettings);
+    connect(wanWatermarkCheckBox, &QCheckBox::checkStateChanged, this, &VideoSingleTab::queueSaveSettings);
 }
 
 void VideoSingleTab::loadApiKeys()
@@ -916,6 +971,12 @@ void VideoSingleTab::onModelChanged(int index)
 
         // 3. 隐藏 WAN 参数
         wanParamsWidget->setVisible(false);
+        wanDurationLabel->setVisible(false);
+        wanDurationCombo->setVisible(false);
+        wanResolutionLabel->setVisible(false);
+        wanResolutionCombo->setVisible(false);
+        wanPromptLabel->setVisible(false);
+        promptLabel->setVisible(true);
 
         // 4. 修改分辨率标签和选项为宽高比
         resolutionLabel->setText("宽高比");
@@ -939,6 +1000,12 @@ void VideoSingleTab::onModelChanged(int index)
 
         // 隐藏 WAN 参数
         wanParamsWidget->setVisible(false);
+        wanDurationLabel->setVisible(false);
+        wanDurationCombo->setVisible(false);
+        wanResolutionLabel->setVisible(false);
+        wanResolutionCombo->setVisible(false);
+        wanPromptLabel->setVisible(false);
+        promptLabel->setVisible(true);
 
         // 触发 onVariantTypeChanged 更新变体列表和控件
         onVariantTypeChanged();
@@ -954,10 +1021,18 @@ void VideoSingleTab::onModelChanged(int index)
 
         // 显示 WAN 参数控件
         wanParamsWidget->setVisible(true);
+        wanDurationLabel->setVisible(true);
+        wanDurationCombo->setVisible(true);
+        wanResolutionLabel->setVisible(true);
+        wanResolutionCombo->setVisible(true);
+        resolutionCombo->setVisible(false);  // VEO3/Grok 的 combo 隐藏
+        wanPromptLabel->setVisible(true);
+        promptLabel->setVisible(false);
 
         // 隐藏其他模型参数
         durationCombo->setVisible(false);
         durationLabel->setVisible(false);
+        resolutionLabel->setVisible(false);
         watermarkCheckBox->setVisible(false);
         watermarkLabel->setVisible(false);
         variantTypeWidget->setVisible(false);
@@ -967,18 +1042,6 @@ void VideoSingleTab::onModelChanged(int index)
         enableUpsampleLabel->setVisible(false);
         sizeCombo->setVisible(false);
         sizeLabel->setVisible(false);
-
-        // 设置分辨率选项
-        resolutionLabel->setText("分辨率");
-        resolutionCombo->clear();
-        resolutionCombo->addItem("480P", "480P");
-        resolutionCombo->addItem("720P", "720P");
-        resolutionCombo->addItem("1080P", "1080P");
-
-        // 设置时长选项
-        durationCombo->clear();
-        durationCombo->addItem("5秒", "5");
-        durationCombo->addItem("10秒", "10");
 
         // 根据变体更新音频控件可见性
         onModelVariantChanged(0);
@@ -1005,7 +1068,14 @@ void VideoSingleTab::onModelChanged(int index)
 
         // 隐藏 WAN 参数
         wanParamsWidget->setVisible(false);
+        wanDurationLabel->setVisible(false);
+        wanDurationCombo->setVisible(false);
+        wanResolutionLabel->setVisible(false);
+        wanResolutionCombo->setVisible(false);
+        wanPromptLabel->setVisible(false);
+        promptLabel->setVisible(true);
 
+        // resolutionCombo 在 resLayout 中，不需要显式 show
         resolutionLabel->setText("分辨率");
         resolutionCombo->clear();
         resolutionCombo->addItem("1280x720 (横屏)", "1280x720");
@@ -1078,6 +1148,43 @@ void VideoSingleTab::onVariantTypeChanged()
 
     // 触发变体变化以更新图片上传UI和分辨率
     onModelVariantChanged(0);
+}
+
+QStringList VideoSingleTab::filterValidImagePaths() const
+{
+    QStringList validPaths;
+    for (const QString& path : uploadedImagePaths) {
+        if (!path.isEmpty()) {
+            validPaths.append(path);
+        }
+    }
+    if (!uploadedMiddleFrameImagePath.isEmpty()) {
+        validPaths.append(uploadedMiddleFrameImagePath);
+    }
+    if (!uploadedEndFrameImagePath.isEmpty()) {
+        validPaths.append(uploadedEndFrameImagePath);
+    }
+    return validPaths;
+}
+
+bool VideoSingleTab::validateImgbbKey(QString &errorMsg) const
+{
+    ImgbbKey activeImgbbKey = DBManager::instance()->getActiveImgbbKey();
+    if (activeImgbbKey.apiKey.isEmpty()) {
+        errorMsg = "请先到设置页应用临时图床密钥";
+        return false;
+    }
+    return true;
+}
+
+VideoSingleTab::ModelType VideoSingleTab::detectModelType(const QString &modelName) const
+{
+    if (modelName.contains("wan", Qt::CaseInsensitive)) {
+        return ModelType::Wan;
+    } else if (modelName.contains("grok", Qt::CaseInsensitive)) {
+        return ModelType::Grok;
+    }
+    return ModelType::VEO3;
 }
 
 void VideoSingleTab::uploadMiddleFrameImage()
@@ -1242,6 +1349,8 @@ void VideoSingleTab::clearGrokImage(int index)
 
 void VideoSingleTab::uploadWanAudio()
 {
+    if (wanAudioUploading) return;
+
     QString filePath = QFileDialog::getOpenFileName(this, "选择音频文件",
         QString(), "音频文件 (*.mp3 *.wav *.m4a *.aac *.ogg);;所有文件 (*.*)");
     if (filePath.isEmpty()) return;
@@ -1257,14 +1366,17 @@ void VideoSingleTab::uploadWanAudio()
     wanAudioFileLabel->setStyleSheet("font-size: 12px; color: #4CAF50;");
     clearWanAudioButton->setVisible(true);
 
-    // 上传到 tmpfile.link，使用 ImageUploader 的音频上传方法
-    ImageUploader *uploader = veo3API->imageUploader;
+    // 上传到 tmpfile.link
+    wanAudioUploading = true;
+    ImageUploader *uploader = veo3API->getImageUploader();
     connect(uploader, &ImageUploader::audioUploadSuccess, this, [this, uploader](const QString &url) {
         uploadedWanAudioUrl = url;
+        wanAudioUploading = false;
         qDebug() << "[WAN] Audio uploaded:" << url;
         disconnect(uploader, &ImageUploader::audioUploadSuccess, this, nullptr);
     });
     connect(uploader, &ImageUploader::uploadError, this, [this, uploader](const QString &error) {
+        wanAudioUploading = false;
         QMessageBox::warning(this, "上传失败", error);
         disconnect(uploader, &ImageUploader::uploadError, this, nullptr);
     });
@@ -1277,6 +1389,7 @@ void VideoSingleTab::clearWanAudio()
 {
     uploadedWanAudioPath.clear();
     uploadedWanAudioUrl.clear();
+    wanAudioUploading = false;
     wanAudioFileLabel->setText("未选择音频文件");
     wanAudioFileLabel->setStyleSheet("font-size: 12px; color: #888;");
     clearWanAudioButton->setVisible(false);
@@ -1387,13 +1500,43 @@ void VideoSingleTab::uploadEndFrameImage()
 
 void VideoSingleTab::onModelVariantChanged(int index)
 {
-    QString modelName = modelVariantCombo->currentData().toString();
-    updateImageUploadUI(modelName);
-    bool isGrok = modelName.contains("grok", Qt::CaseInsensitive);
+    QString modelVariant = modelVariantCombo->currentData().toString();
+    QString fullModelName = modelCombo->currentText();
+    updateImageUploadUI(modelVariant);
+    
+    bool isGrok = modelVariant.contains("grok", Qt::CaseInsensitive);
+    bool isWan = fullModelName.contains("wan", Qt::CaseInsensitive);
+    
+    if (isGrok) {
+        grokImage2Widget->setVisible(true);
+        grokImage3Widget->setVisible(true);
+        imageUploadHintLabel->setVisible(true);
+        wanParamsWidget->setVisible(false);
+    } else if (isWan) {
+        wanParamsWidget->setVisible(true);
+        updateWanAudioWidgetVisibility(modelVariant);
+    } else {
+        wanParamsWidget->setVisible(false);
+    }
+    
     if (!isGrok) {
-        bool is4K = modelName.contains("4K") || modelName.contains("4k");
+        bool is4K = modelVariant.contains("4K") || modelVariant.contains("4k");
         bool isVariant2 = variantType2Radio && variantType2Radio->isChecked();
         updateResolutionOptions(is4K, isVariant2);
+    }
+}
+
+void VideoSingleTab::updateWanAudioWidgetVisibility(const QString &modelVariant)
+{
+    bool isWan25 = modelVariant.contains("wan2.5", Qt::CaseInsensitive);
+    wanAudioUploadWidget->setVisible(isWan25);
+    if (!isWan25) {
+        clearWanAudio();
+    }
+    // macOS Qt: setVisible 不会自动触发父布局重新计算，需显式 invalidate + activate
+    if (QLayout *l = wanParamsWidget->layout()) {
+        l->invalidate();
+        l->activate();
     }
 }
 
@@ -1623,47 +1766,37 @@ void VideoSingleTab::generateVideo()
         );
     } else if (model.contains("wan", Qt::CaseInsensitive)) {
         // WAN 模型：使用专用 API
-        ImgbbKey activeImgbbKey = DBManager::instance()->getActiveImgbbKey();
-        if (activeImgbbKey.apiKey.isEmpty()) {
-            QMessageBox::warning(this, "提示", "请先到设置页应用临时图床密钥");
+        QString errorMsg;
+        if (!validateImgbbKey(errorMsg)) {
+            QMessageBox::warning(this, "提示", errorMsg);
             return;
         }
 
-        // WAN 必须有图片
-        bool hasValidImage = !uploadedImagePaths.isEmpty() && !uploadedImagePaths.first().isEmpty();
-        if (!hasValidImage) {
+        QStringList validImagePaths = filterValidImagePaths();
+        if (validImagePaths.isEmpty()) {
             QMessageBox::warning(this, "提示", "WAN 模型需要上传图片");
             return;
         }
 
-        // 准备 WAN 参数
-        QString negativePrompt = wanNegativePromptInput->toPlainText().trimmed();
-        QString templateName = wanTemplateCombo->currentData().toString();
-        bool promptExtend = wanPromptExtendCheckBox->isChecked();
-        QString seed = wanSeedInput->text().trimmed();
-        int wanDuration = duration.toInt();
+        ImgbbKey activeImgbbKey = DBManager::instance()->getActiveImgbbKey();
+        VideoAPI::WanVideoParams params;
+        params.apiKey = apiKeyData.apiKey;
+        params.baseUrl = server;
+        params.model = modelVariant;
+        params.prompt = prompt;
+        params.negativePrompt = wanNegativePromptInput->toPlainText().trimmed();
+        params.localImagePaths = validImagePaths;
+        params.audioUrl = (wanAudioCheckBox->isChecked() && !uploadedWanAudioUrl.isEmpty())
+                         ? uploadedWanAudioUrl : QString();
+        params.templateName = wanTemplateCombo->currentData().toString();
+        params.resolution = resolution;
+        params.duration = wanDurationCombo->currentData().toInt();
+        params.promptExtend = wanPromptExtendCheckBox->isChecked();
+        params.watermark = wanWatermarkCheckBox->isChecked();
+        params.seed = QString::number(wanSeedInput->value());
 
-        // 设置 currentRequest 以便图片上传后调用 createWanVideo
-        veo3API->currentRequest.apiKey = apiKeyData.apiKey;
-        veo3API->currentRequest.baseUrl = server;
-        veo3API->currentRequest.model = modelVariant;
-        veo3API->currentRequest.prompt = prompt;
-        veo3API->currentRequest.imgbbApiKey = activeImgbbKey.apiKey;
-        veo3API->currentRequest.localImagePaths = uploadedImagePaths;
-        veo3API->currentRequest.uploadedUrls.clear();
-        veo3API->currentRequest.uploadIndex = 0;
-        veo3API->currentRequest.targetMethod = "wan";
-        veo3API->currentRequest.negativePrompt = negativePrompt;
-        veo3API->currentRequest.audioUrl = uploadedWanAudioUrl;
-        veo3API->currentRequest.templateName = templateName;
-        veo3API->currentRequest.resolution = resolution;
-        veo3API->currentRequest.duration = wanDuration;
-        veo3API->currentRequest.promptExtend = promptExtend;
-        veo3API->currentRequest.watermark = true;
-        veo3API->currentRequest.seed = seed;
-
-        // 上传图片到 imgbb
-        veo3API->uploadImageToImgbb(uploadedImagePaths.first(), activeImgbbKey.apiKey);
+        veo3API->prepareWanRequest(params);
+        veo3API->uploadImageToImgbb(validImagePaths.first(), activeImgbbKey.apiKey);
     } else if (variantType2Radio && variantType2Radio->isChecked()) {
         // VEO3 Variant 2 统一格式：校验imgbb密钥，上传图片后 JSON POST
         ImgbbKey activeImgbbKey = DBManager::instance()->getActiveImgbbKey();
@@ -1967,7 +2100,7 @@ void VideoSingleTab::saveSettings()
         settings.setValue("grok_aspectRatio", resolutionCombo->currentData().toString());
         settings.setValue("grok_size", sizeCombo->currentData().toString());
     } else if (modelType.contains("wan", Qt::CaseInsensitive)) {
-        settings.setValue("wan_resolution", resolutionCombo->currentData().toString());
+        settings.setValue("wan_resolution", wanResolutionCombo->currentData().toString());
         settings.setValue("wan_duration", durationCombo->currentData().toString());
     } else {
         settings.setValue("veo_resolution", resolutionCombo->currentData().toString());
@@ -1989,7 +2122,9 @@ void VideoSingleTab::saveSettings()
     settings.setValue("wan_negativePrompt", wanNegativePromptInput->toPlainText());
     settings.setValue("wan_template", wanTemplateCombo->currentData().toString());
     settings.setValue("wan_promptExtend", wanPromptExtendCheckBox->isChecked());
-    settings.setValue("wan_seed", wanSeedInput->text());
+    settings.setValue("wan_seed", wanSeedInput->value());
+    settings.setValue("wan_duration", wanDurationCombo->currentData().toInt());
+    settings.setValue("wan_watermark", wanWatermarkCheckBox->isChecked());
     settings.setValue("wan_audioEnabled", wanAudioCheckBox->isChecked());
     settings.setValue("wan_audioPath", uploadedWanAudioPath);
     settings.setValue("wan_audioUrl", uploadedWanAudioUrl);
@@ -2222,21 +2357,8 @@ void VideoSingleTab::loadSettings()
         }
     } else if (savedModelType.contains("wan", Qt::CaseInsensitive)) {
         // WAN 模型：恢复分辨率
-        QString wanResolution = settings.value("wan_resolution", "720P").toString();
-        for (int i = 0; i < resolutionCombo->count(); ++i) {
-            if (resolutionCombo->itemData(i).toString() == wanResolution) {
-                resolutionCombo->setCurrentIndex(i);
-                break;
-            }
-        }
-
-        QString wanDuration = settings.value("wan_duration", "5").toString();
-        for (int i = 0; i < durationCombo->count(); ++i) {
-            if (durationCombo->itemData(i).toString() == wanDuration) {
-                durationCombo->setCurrentIndex(i);
-                break;
-            }
-        }
+        wanResolutionCombo->setCurrentIndex(
+            wanResolutionCombo->findData(settings.value("wan_resolution", "720P").toString()));
 
         // 恢复 WAN 参数
         wanNegativePromptInput->setPlainText(settings.value("wan_negativePrompt", "").toString());
@@ -2248,7 +2370,10 @@ void VideoSingleTab::loadSettings()
             }
         }
         wanPromptExtendCheckBox->setChecked(settings.value("wan_promptExtend", true).toBool());
-        wanSeedInput->setText(settings.value("wan_seed", "").toString());
+        wanSeedInput->setValue(settings.value("wan_seed", 0).toInt());
+        wanDurationCombo->setCurrentIndex(
+            wanDurationCombo->findData(settings.value("wan_duration", 5).toInt()));
+        wanWatermarkCheckBox->setChecked(settings.value("wan_watermark", false).toBool());
         wanAudioCheckBox->setChecked(settings.value("wan_audioEnabled", false).toBool());
         uploadedWanAudioPath = settings.value("wan_audioPath", "").toString();
         uploadedWanAudioUrl = settings.value("wan_audioUrl", "").toString();

@@ -107,16 +107,9 @@ private:
 
     QNetworkAccessManager *networkManager;
     QMap<QNetworkReply*, QString> replyMap;
-public:
     ImageUploader *imageUploader;
 
-public:
-    // 公共方法：用于 WAN 等模型直接上传图片
-    void uploadImageToImgbb(const QString &localPath, const QString &imgbbApiKey) {
-        imageUploader->uploadToImgbb(localPath, imgbbApiKey);
-    }
-
-    // 图片上传临时数据（Grok 和 VEO3统一格式共用）
+    // 图片上传临时数据（内部使用）
     struct UnifiedFormatRequest {
         QString apiKey;
         QString baseUrl;
@@ -142,6 +135,35 @@ public:
         QString seed;
     };
     UnifiedFormatRequest currentRequest;
+
+public:
+    // 获取 ImageUploader 实例（只读访问）
+    ImageUploader* getImageUploader() { return imageUploader; }
+    
+    // 公共方法：用于上传图片
+    void uploadImageToImgbb(const QString &localPath, const QString &imgbbApiKey) {
+        imageUploader->uploadToImgbb(localPath, imgbbApiKey);
+    }
+    
+    // WAN 视频参数结构体
+    struct WanVideoParams {
+        QString apiKey;
+        QString baseUrl;
+        QString model;
+        QString prompt;
+        QString negativePrompt;
+        QStringList localImagePaths;
+        QString audioUrl;
+        QString templateName;
+        QString resolution;
+        int duration;
+        bool promptExtend;
+        bool watermark;
+        QString seed;
+    };
+    
+    // 准备 WAN 请求（封装参数传递）
+    void prepareWanRequest(const WanVideoParams &params);
 };
 
 #endif // VIDEOAPI_H
