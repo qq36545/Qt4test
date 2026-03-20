@@ -64,7 +64,6 @@ QTabBar::tab:hover:!selected {
     border-radius: 12px;
     color: #F8FAFC;
     font-size: 24px;
-    transition: all 0.2s ease;
 }
 
 #sidebarButton:hover {
