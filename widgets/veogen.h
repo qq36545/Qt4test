@@ -100,6 +100,8 @@ protected:
     QLabel *imagePreviewLabel;
     QPushButton *uploadImageButton;
     QPushButton *clearImageButton;
+    QPushButton *clearEndFrameButton;
+    QPushButton *clearMiddleFrameButton;
     QStringList uploadedImagePaths;
     QWidget *endFrameWidget;
     QLabel *endFrameLabel;

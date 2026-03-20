@@ -211,7 +211,7 @@ void VeoGenPage::setupUI()
     uploadImageButton->setFixedWidth(150);
     connect(uploadImageButton, &QPushButton::clicked, this, &VeoGenPage::uploadImage);
 
-    clearImageButton = new QPushButton("🗑️ 清空");
+    clearImageButton = new QPushButton("🗑️清除");
     clearImageButton->setFixedWidth(80);
     connect(clearImageButton, &QPushButton::clicked, [this]() { clearImage(0); });
 
@@ -239,8 +239,16 @@ void VeoGenPage::setupUI()
     uploadEndFrameButton = new QPushButton("📁 选择尾帧图片");
     uploadEndFrameButton->setFixedWidth(150);
     connect(uploadEndFrameButton, &QPushButton::clicked, this, &VeoGenPage::uploadEndFrameImage);
+    clearEndFrameButton = new QPushButton("🗑️清除");
+    clearEndFrameButton->setFixedWidth(80);
+    connect(clearEndFrameButton, &QPushButton::clicked, [this]() {
+        uploadedEndFrameImagePath.clear();
+        updateImagePreview();
+        queueSaveSettings();
+    });
     endFrameImageLayout->addWidget(endFramePreviewLabel, 1);
     endFrameImageLayout->addWidget(uploadEndFrameButton);
+    endFrameImageLayout->addWidget(clearEndFrameButton);
     endFrameLayout->addLayout(endFrameImageLayout);
     contentLayout->addWidget(endFrameWidget);
 
@@ -263,8 +271,16 @@ void VeoGenPage::setupUI()
     uploadMiddleFrameButton = new QPushButton("📁 选择图片2");
     uploadMiddleFrameButton->setFixedWidth(150);
     connect(uploadMiddleFrameButton, &QPushButton::clicked, this, &VeoGenPage::uploadMiddleFrameImage);
+    clearMiddleFrameButton = new QPushButton("🗑️清除");
+    clearMiddleFrameButton->setFixedWidth(80);
+    connect(clearMiddleFrameButton, &QPushButton::clicked, [this]() {
+        uploadedMiddleFrameImagePath.clear();
+        updateImagePreview();
+        queueSaveSettings();
+    });
     middleFrameImageLayout->addWidget(middleFramePreviewLabel, 1);
     middleFrameImageLayout->addWidget(uploadMiddleFrameButton);
+    middleFrameImageLayout->addWidget(clearMiddleFrameButton);
     middleFrameLayout->addLayout(middleFrameImageLayout);
     contentLayout->addWidget(middleFrameWidget);
     middleFrameWidget->setVisible(false);
@@ -480,7 +496,6 @@ void VeoGenPage::updateImageUploadUI(const QString &modelName)
     if (isComponents) {
         imageLabel->setText("图片1（可选）:");
         uploadImageButton->setText("📁 选择图片1");
-        clearImageButton->setVisible(false);
         endFrameWidget->setVisible(true);
         endFrameLabel->setText("图片2（可选）:");
         uploadEndFrameButton->setText("📁 选择图片2");
@@ -491,14 +506,12 @@ void VeoGenPage::updateImageUploadUI(const QString &modelName)
     } else if (isFrames) {
         imageLabel->setText("首帧图片（单张）:");
         uploadImageButton->setText("📁 选择首帧图片");
-        clearImageButton->setVisible(false);
         endFrameWidget->setVisible(false);
         middleFrameWidget->setVisible(false);
         imageUploadHintLabel->setVisible(false);
     } else {
         imageLabel->setText("首帧图片:");
         uploadImageButton->setText("📁 选择首帧图片");
-        clearImageButton->setVisible(false);
         endFrameWidget->setVisible(true);
         endFrameLabel->setText("尾帧图片（可选）:");
         uploadEndFrameButton->setText("📁 选择尾帧图片");
@@ -564,13 +577,7 @@ void VeoGenPage::uploadEndFrameImage()
     if (fileName.isEmpty()) return;
 
     uploadedEndFrameImagePath = fileName;
-    QPixmap pixmap(fileName);
-    QPixmap scaledPixmap = pixmap.scaled(200, 120, Qt::KeepAspectRatio, Qt::SmoothTransformation);
-    endFramePreviewLabel->setPixmap(scaledPixmap);
-    endFramePreviewLabel->setText("");
-    endFramePreviewLabel->setProperty("hasImage", true);
-    endFramePreviewLabel->style()->unpolish(endFramePreviewLabel);
-    endFramePreviewLabel->style()->polish(endFramePreviewLabel);
+    updateImagePreview();
     queueSaveSettings();
 }
 
@@ -587,13 +594,7 @@ void VeoGenPage::uploadMiddleFrameImage()
     if (fileName.isEmpty()) return;
 
     uploadedMiddleFrameImagePath = fileName;
-    QPixmap pixmap(fileName);
-    QPixmap scaledPixmap = pixmap.scaled(200, 120, Qt::KeepAspectRatio, Qt::SmoothTransformation);
-    middleFramePreviewLabel->setPixmap(scaledPixmap);
-    middleFramePreviewLabel->setText("");
-    middleFramePreviewLabel->setProperty("hasImage", true);
-    middleFramePreviewLabel->style()->unpolish(middleFramePreviewLabel);
-    middleFramePreviewLabel->style()->polish(middleFramePreviewLabel);
+    updateImagePreview();
     queueSaveSettings();
 }
 
@@ -652,6 +653,29 @@ void VeoGenPage::updateImagePreview()
         endFramePreviewLabel->setProperty("hasImage", false);
         endFramePreviewLabel->style()->unpolish(endFramePreviewLabel);
         endFramePreviewLabel->style()->polish(endFramePreviewLabel);
+    }
+
+    // 中间帧预览
+    if (!uploadedMiddleFrameImagePath.isEmpty()) {
+        QPixmap pixmap(uploadedMiddleFrameImagePath);
+        if (!pixmap.isNull()) {
+            QPixmap scaledPixmap = pixmap.scaled(200, 120, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+            middleFramePreviewLabel->setPixmap(scaledPixmap);
+            middleFramePreviewLabel->setText("");
+        } else {
+            middleFramePreviewLabel->setPixmap(QPixmap());
+            QFileInfo fileInfo(uploadedMiddleFrameImagePath);
+            middleFramePreviewLabel->setText("✓ " + fileInfo.fileName());
+        }
+        middleFramePreviewLabel->setProperty("hasImage", true);
+        middleFramePreviewLabel->style()->unpolish(middleFramePreviewLabel);
+        middleFramePreviewLabel->style()->polish(middleFramePreviewLabel);
+    } else {
+        middleFramePreviewLabel->setText("未选择图片\n点击此处上传");
+        middleFramePreviewLabel->setPixmap(QPixmap());
+        middleFramePreviewLabel->setProperty("hasImage", false);
+        middleFramePreviewLabel->style()->unpolish(middleFramePreviewLabel);
+        middleFramePreviewLabel->style()->polish(middleFramePreviewLabel);
     }
 }
 
@@ -1102,35 +1126,20 @@ void VeoGenPage::loadSettings()
     for (const QString &path : imagePaths) {
         if (QFile::exists(path)) uploadedImagePaths.append(path);
     }
-    if (!uploadedImagePaths.isEmpty()) updateImagePreview();
 
     QString endFramePath = settings.value("endFrameImagePath").toString();
+    uploadedEndFrameImagePath.clear();
     if (!endFramePath.isEmpty() && QFile::exists(endFramePath)) {
         uploadedEndFrameImagePath = endFramePath;
-        QPixmap pixmap(endFramePath);
-        if (!pixmap.isNull()) {
-            QPixmap scaledPixmap = pixmap.scaled(200, 120, Qt::KeepAspectRatio, Qt::SmoothTransformation);
-            endFramePreviewLabel->setPixmap(scaledPixmap);
-            endFramePreviewLabel->setText("");
-        }
-        endFramePreviewLabel->setProperty("hasImage", true);
-        endFramePreviewLabel->style()->unpolish(endFramePreviewLabel);
-        endFramePreviewLabel->style()->polish(endFramePreviewLabel);
     }
 
     QString middleFramePath = settings.value("middleFrameImagePath").toString();
+    uploadedMiddleFrameImagePath.clear();
     if (!middleFramePath.isEmpty() && QFile::exists(middleFramePath)) {
         uploadedMiddleFrameImagePath = middleFramePath;
-        QPixmap pixmap(middleFramePath);
-        if (!pixmap.isNull()) {
-            QPixmap scaledPixmap = pixmap.scaled(200, 120, Qt::KeepAspectRatio, Qt::SmoothTransformation);
-            middleFramePreviewLabel->setPixmap(scaledPixmap);
-            middleFramePreviewLabel->setText("");
-        }
-        middleFramePreviewLabel->setProperty("hasImage", true);
-        middleFramePreviewLabel->style()->unpolish(middleFramePreviewLabel);
-        middleFramePreviewLabel->style()->polish(middleFramePreviewLabel);
     }
+
+    updateImagePreview();
 
     lastSubmittedParamsHash = settings.value("lastSubmittedHash", "").toString();
 
