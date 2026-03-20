@@ -240,16 +240,21 @@ void WanGenPage::setupUI()
     promptInput->setStyleSheet("font-size: 15px;");
     contentLayout->addWidget(promptInput);
 
-    // ========== 反向提示词 ==========
+    // ========== 反向提示词（竖排：标题在上，输入框在下） ==========
+    QVBoxLayout *negativePromptLayout = new QVBoxLayout();
+    negativePromptLayout->setContentsMargins(0, 0, 0, 0);
+    negativePromptLayout->setSpacing(6);
+
     QLabel *negPromptLabel = new QLabel("反向提示词:");
     negPromptLabel->setStyleSheet("font-size: 14px;");
-    contentLayout->addWidget(negPromptLabel);
+    negativePromptLayout->addWidget(negPromptLabel);
 
     negativePromptInput = new QTextEdit();
     negativePromptInput->setPlaceholderText("输入不希望出现的元素...");
     negativePromptInput->setMaximumHeight(60);
     negativePromptInput->setStyleSheet("font-size: 13px;");
-    contentLayout->addWidget(negativePromptInput);
+    negativePromptLayout->addWidget(negativePromptInput);
+    contentLayout->addLayout(negativePromptLayout);
 
     // ========== 图片上传 ==========
     QHBoxLayout *imageLabelLayout = new QHBoxLayout();
