@@ -237,7 +237,7 @@ void WanGenPage::setupUI()
     // ========== Prompt智能改写 + 随机种子 ==========
     QHBoxLayout *optionLayout = new QHBoxLayout();
     promptExtendCheckBox = new QCheckBox("Prompt智能改写");
-    promptExtendCheckBox->setStyleSheet("color: white; font-size: 13px;");
+    promptExtendCheckBox->setStyleSheet("font-size: 13px;");
     promptExtendCheckBox->setChecked(true);
     seedLabel = new QLabel("随机种子:");
     seedLabel->setStyleSheet("font-size: 14px;");
@@ -246,9 +246,9 @@ void WanGenPage::setupUI()
     seedInput->setValue(0);
     seedInput->setMaximumWidth(150);
     seedInput->setStyleSheet(
-        "QSpinBox { color: white; background-color: #2a2a2a; border: 1px solid #555; border-radius: 4px; padding: 2px 4px; font-size: 13px; } "
-        "QSpinBox::up-button, QSpinBox::down-button { background-color: #444; width: 16px; } "
-        "QSpinBox::up-arrow, QSpinBox::down-arrow { border-color: white; }");
+        "QSpinBox { color: palette(text); background-color: palette(base); border: 1px solid palette(mid); border-radius: 4px; padding: 2px 4px; font-size: 13px; } "
+        "QSpinBox::up-button, QSpinBox::down-button { background-color: palette(button); width: 16px; } "
+        "QSpinBox::up-arrow, QSpinBox::down-arrow { border-color: palette(text); }");
     optionLayout->addWidget(promptExtendCheckBox);
     optionLayout->addSpacing(20);
     optionLayout->addWidget(seedLabel);
@@ -263,13 +263,13 @@ void WanGenPage::setupUI()
     audioLayout->setContentsMargins(0, 0, 0, 0);
     audioLayout->setSpacing(10);
     audioCheckBox = new QCheckBox("为视频添加音频（仅wan2.5）");
-    audioCheckBox->setStyleSheet("color: white; font-size: 13px;");
+    audioCheckBox->setStyleSheet("font-size: 13px;");
     audioCheckBox->setChecked(false);
     audioUploadButton = new QPushButton("🎵 上传音频");
     audioUploadButton->setFixedWidth(120);
     connect(audioUploadButton, &QPushButton::clicked, this, &WanGenPage::uploadAudio);
     audioFileLabel = new QLabel("未选择音频文件");
-    audioFileLabel->setStyleSheet("font-size: 12px; color: #888;");
+    audioFileLabel->setStyleSheet("font-size: 12px; color: palette(mid);");
     audioFileLabel->setWordWrap(true);
     clearAudioButton = new QPushButton("🗑️ 清空");
     clearAudioButton->setFixedWidth(80);
@@ -285,7 +285,7 @@ void WanGenPage::setupUI()
     // ========== 保留水印 ==========
     QHBoxLayout *watermarkLayout = new QHBoxLayout();
     watermarkCheckBox = new QCheckBox("保留水印");
-    watermarkCheckBox->setStyleSheet("color: white; font-size: 13px;");
+    watermarkCheckBox->setStyleSheet("font-size: 13px;");
     watermarkCheckBox->setChecked(false);
     watermarkLayout->addWidget(watermarkCheckBox);
     watermarkLayout->addStretch();
@@ -385,6 +385,19 @@ void WanGenPage::onModelVariantChanged(int index)
 {
     Q_UNUSED(index);
     QString modelVariant = modelVariantCombo->currentData().toString();
+
+    const bool needsTallNegativePrompt =
+        modelVariant == "wan2.5-i2v-preview" ||
+        modelVariant == "wan2.6-i2v-flash" ||
+        modelVariant == "wan2.6-i2v";
+    if (needsTallNegativePrompt) {
+        negativePromptInput->setMinimumHeight(120);
+        negativePromptInput->setMaximumHeight(120);
+    } else {
+        negativePromptInput->setMinimumHeight(0);
+        negativePromptInput->setMaximumHeight(60);
+    }
+
     updateAudioWidgetVisibility(modelVariant);
 }
 
@@ -513,7 +526,7 @@ void WanGenPage::uploadAudio()
 
     uploadedAudioPath = filePath;
     audioFileLabel->setText("✓ " + fi.fileName());
-    audioFileLabel->setStyleSheet("font-size: 12px; color: #4CAF50;");
+    audioFileLabel->setStyleSheet("font-size: 12px; color: palette(highlight);");
     clearAudioButton->setVisible(true);
 
     audioUploading = true;
@@ -540,7 +553,7 @@ void WanGenPage::clearAudio()
     uploadedAudioUrl.clear();
     audioUploading = false;
     audioFileLabel->setText("未选择音频文件");
-    audioFileLabel->setStyleSheet("font-size: 12px; color: #888;");
+    audioFileLabel->setStyleSheet("font-size: 12px; color: palette(mid);");
     clearAudioButton->setVisible(false);
     queueSaveSettings();
 }
@@ -836,7 +849,7 @@ void WanGenPage::loadSettings()
     if (!uploadedAudioPath.isEmpty() && QFile::exists(uploadedAudioPath)) {
         QFileInfo fi(uploadedAudioPath);
         audioFileLabel->setText("✓ " + fi.fileName());
-        audioFileLabel->setStyleSheet("font-size: 12px; color: #4CAF50;");
+        audioFileLabel->setStyleSheet("font-size: 12px; color: palette(highlight);");
         clearAudioButton->setVisible(true);
     }
     watermarkCheckBox->setChecked(settings.value("wan_watermark", false).toBool());
