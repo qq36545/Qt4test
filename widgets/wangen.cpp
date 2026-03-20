@@ -623,7 +623,7 @@ void WanGenPage::generateVideo()
     task.taskType = "video_single";
     task.prompt = prompt;
     task.modelVariant = modelVariantText;
-    task.modelName = "wan视频";
+    task.modelName = "WAN视频";
     task.apiKeyName = apiKeyCombo->currentText();
     task.serverUrl = server;
     task.status = "submitting";
@@ -681,7 +681,7 @@ void WanGenPage::onVideoCreated(const QString &taskId, const QString &status)
     QString server = serverCombo->currentData().toString();
 
     TaskPollManager *pollMgr = TaskPollManager::getInstance();
-    pollMgr->startPolling(taskId, "video_single", apiKeyData.apiKey, server, "wan视频");
+    pollMgr->startPolling(taskId, "video_single", apiKeyData.apiKey, server, "WAN视频");
 
     lastSubmittedParamsHash = calculateParamsHash();
     parametersModified = false;
