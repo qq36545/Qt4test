@@ -91,6 +91,7 @@ public:
     bool updateGenerationHistory(int id, const QString& status, const QString& resultPath);
     bool deleteGenerationHistory(int id);
     QList<GenerationHistory> getAllGenerationHistory();
+    QList<GenerationHistory> getGenerationHistoryByModelAndType(const QString& modelType, const QString& type);
     GenerationHistory getGenerationHistory(int id);
 
     // Video Tasks (异步轮询)

@@ -348,6 +348,42 @@ QList<GenerationHistory> DBManager::getAllGenerationHistory()
     return histories;
 }
 
+QList<GenerationHistory> DBManager::getGenerationHistoryByModelAndType(const QString& modelType, const QString& type)
+{
+    QList<GenerationHistory> histories;
+    QSqlQuery query;
+    query.prepare(R"(
+        SELECT * FROM generation_history
+        WHERE model_type = :model_type AND type = :type
+        ORDER BY created_at DESC
+    )");
+    query.bindValue(":model_type", modelType);
+    query.bindValue(":type", type);
+
+    if (!query.exec()) {
+        qCritical() << "Failed to get generation history by model/type:" << query.lastError().text();
+        return histories;
+    }
+
+    while (query.next()) {
+        GenerationHistory history;
+        history.id = query.value(0).toInt();
+        history.date = query.value(1).toString();
+        history.type = query.value(2).toString();
+        history.modelType = query.value(3).toString();
+        history.modelName = query.value(4).toString();
+        history.prompt = query.value(5).toString();
+        history.imagePath = query.value(6).toString();
+        history.parameters = query.value(7).toString();
+        history.status = query.value(8).toString();
+        history.resultPath = query.value(9).toString();
+        history.createdAt = query.value(10).toDateTime();
+        histories.append(history);
+    }
+
+    return histories;
+}
+
 GenerationHistory DBManager::getGenerationHistory(int id)
 {
     GenerationHistory history;

@@ -10,8 +10,68 @@
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QTableWidget>
+#include <QStackedWidget>
 
-// 单个图片生成 Tab
+class ImageAPI;
+struct GenerationHistory;
+
+// Gemini 图片生成页
+class GeminiImagePage : public QWidget
+{
+    Q_OBJECT
+
+public:
+    explicit GeminiImagePage(QWidget *parent = nullptr);
+
+signals:
+    void imageGeneratedSuccessfully();
+
+public slots:
+    void refreshApiKeys();
+
+private slots:
+    void onVariantChanged(int index);
+    void uploadReferenceImage();
+    void clearReferenceImage();
+    void clearPrompt();
+    void resetForm();
+    void generateImage();
+    void onApiImageGenerated(const QByteArray &imageBytes, const QString &mimeType);
+    void onApiError(const QString &error);
+
+private:
+    void setupUI();
+    void loadApiKeys();
+    void updateImageSizeVisibility();
+    void rebuildAspectRatioOptions();
+    void updateReferenceImagePreview();
+    QString currentModelValue() const;
+    QString currentVariantLabel() const;
+    QString saveGeneratedImage(const QByteArray &imageBytes, const QString &mimeType, QString &error);
+
+    ImageAPI *imageApi;
+
+    QComboBox *variantCombo;
+    QComboBox *apiKeyCombo;
+    QPushButton *addKeyButton;
+    QComboBox *serverCombo;
+    QWidget *imageSizeWidget;
+    QLabel *imageSizeLabel;
+    QComboBox *imageSizeCombo;
+    QComboBox *aspectRatioCombo;
+    QTextEdit *promptInput;
+    QLabel *referenceImagePreviewLabel;
+    QPushButton *uploadReferenceButton;
+    QPushButton *clearReferenceButton;
+    QLabel *resultPreviewLabel;
+    QPushButton *generateButton;
+    QPushButton *resetButton;
+
+    QString referenceImagePath;
+    int currentHistoryId;
+};
+
+// 单个图片生成 Tab（路由容器）
 class ImageSingleTab : public QWidget
 {
     Q_OBJECT
@@ -19,21 +79,21 @@ class ImageSingleTab : public QWidget
 public:
     explicit ImageSingleTab(QWidget *parent = nullptr);
 
+signals:
+    void imageGeneratedSuccessfully();
+
+public slots:
+    void refreshApiKeys();
+
 private slots:
-    void generateImage();
+    void onModelChanged(int index);
 
 private:
     void setupUI();
-    void loadApiKeys();
 
-    QTextEdit *promptInput;
-    QComboBox *apiKeyCombo;
-    QPushButton *addKeyButton;
-    QComboBox *resolutionCombo;
-    QComboBox *aspectRatioCombo;
-    QComboBox *styleCombo;
-    QLabel *previewLabel;
-    QPushButton *generateButton;
+    QComboBox *modelCombo;
+    QStackedWidget *stack;
+    GeminiImagePage *geminiPage;
 };
 
 // 批量图片生成 Tab
@@ -69,9 +129,12 @@ class ImageHistoryTab : public QWidget
 public:
     explicit ImageHistoryTab(QWidget *parent = nullptr);
 
-private slots:
+public slots:
     void refreshHistory();
+
+private slots:
     void onRowDoubleClicked(int row, int column);
+    void openSelectedFolder();
 
 private:
     void setupUI();
@@ -79,6 +142,7 @@ private:
 
     QTableWidget *historyTable;
     QPushButton *refreshButton;
+    QPushButton *openFolderButton;
 };
 
 // 主图片生成 Widget
@@ -88,6 +152,7 @@ class ImageGenWidget : public QWidget
 
 public:
     explicit ImageGenWidget(QWidget *parent = nullptr);
+    ImageSingleTab* getSingleTab() const { return singleTab; }
 
 protected:
     void resizeEvent(QResizeEvent *event) override;

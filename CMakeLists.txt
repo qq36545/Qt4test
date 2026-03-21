@@ -30,6 +30,7 @@ set(SOURCES
     widgets/helpwidget.cpp
     database/dbmanager.cpp
     network/videoapi.cpp
+    network/imageapi.cpp
     network/imageuploader.cpp
     network/taskpollmanager.cpp
     network/updatemanager.cpp
@@ -48,6 +49,7 @@ set(HEADERS
     widgets/helpwidget.h
     database/dbmanager.h
     network/videoapi.h
+    network/imageapi.h
     network/imageuploader.h
     network/taskpollmanager.h
 )
