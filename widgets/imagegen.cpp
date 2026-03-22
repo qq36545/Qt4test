@@ -333,24 +333,39 @@ void GeminiImagePage::onVariantChanged(int)
     rebuildAspectRatioOptions();
     restorePreferences();
 
-    // 切换参考图模式
-    if (isMultiImageMode()) {
-        // 香蕉2：多图模式
+    const QString model = currentModelValue();
+    const int maxImages = maxReferenceImages();
+
+    if (model == "gemini-3.1-flash-image-preview") {
+        // 香蕉2：最多14张
         referenceHintLabel->setVisible(true);
         referenceHintLabel->setText(
+            "当前选择的变体模型「香蕉2」：\n"
             "• 最多 10 张与最终图片高度一致的对象图片\n"
             "• 最多 4 张角色图片，以保持角色一致性"
         );
         referenceCountLabel->setVisible(true);
+    } else if (model == "gemini-3-pro-image-preview") {
+        // 香蕉Pro：最多11张
+        referenceHintLabel->setVisible(true);
+        referenceHintLabel->setText(
+            "当前选择的变体模型「香蕉Pro」：\n"
+            "• 最多 6 张高保真对象图片，用于包含在最终图片中\n"
+            "• 最多 5 张角色图片，以保持角色一致性"
+        );
+        referenceCountLabel->setVisible(true);
+    } else if (model == "gemini-2.5-flash-image") {
+        // 香蕉1：最多3张
+        referenceHintLabel->setVisible(true);
+        referenceHintLabel->setText(
+            "当前选择的变体模型「香蕉1」支持上传 10 张参考图"
+        );
+        referenceCountLabel->setVisible(true);
     } else {
-        // 香蕉1/Pro：单图模式
         referenceHintLabel->setVisible(false);
         referenceCountLabel->setVisible(false);
-        // 如果多图模式下有多张图，只保留第一张，其余丢弃
-        if (referenceImagePaths.size() > 1) {
-            QString first = referenceImagePaths.first();
+        if (!referenceImagePaths.isEmpty()) {
             referenceImagePaths.clear();
-            referenceImagePaths.append(first);
         }
     }
     updateThumbnailGrid();
@@ -441,50 +456,29 @@ void GeminiImagePage::rebuildAspectRatioOptions()
 
 void GeminiImagePage::uploadReferenceImage()
 {
-    if (isMultiImageMode()) {
-        if (referenceImagePaths.size() >= 10) {
-            QMessageBox::warning(this, "提示", "只支持最多10张图片");
-            return;
-        }
-        // 多图：追加模式
-        QString filePath = QFileDialog::getOpenFileName(
-            this,
-            "选择参考图",
-            QString(),
-            "图片文件 (*.png *.jpg *.jpeg *.webp *.bmp)"
-        );
-
-        if (filePath.isEmpty()) return;
-
-        QFileInfo info(filePath);
-        if (!info.exists() || !info.isFile()) {
-            QMessageBox::warning(this, "错误", "参考图不存在或不可读");
-            return;
-        }
-
-        referenceImagePaths.append(filePath);
-        updateThumbnailGrid();
-    } else {
-        // 单图：覆盖模式
-        QString filePath = QFileDialog::getOpenFileName(
-            this,
-            "选择参考图",
-            QString(),
-            "图片文件 (*.png *.jpg *.jpeg *.webp *.bmp)"
-        );
-
-        if (filePath.isEmpty()) return;
-
-        QFileInfo info(filePath);
-        if (!info.exists() || !info.isFile()) {
-            QMessageBox::warning(this, "错误", "参考图不存在或不可读");
-            return;
-        }
-
-        referenceImagePaths.clear();
-        referenceImagePaths.append(filePath);
-        updateThumbnailGrid();
+    const int maxImages = maxReferenceImages();
+    if (referenceImagePaths.size() >= maxImages) {
+        QMessageBox::warning(this, "提示", QString("只支持最多%1张图片").arg(maxImages));
+        return;
     }
+    // 多图：追加模式
+    QString filePath = QFileDialog::getOpenFileName(
+        this,
+        "选择参考图",
+        QString(),
+        "图片文件 (*.png *.jpg *.jpeg *.webp *.bmp)"
+    );
+
+    if (filePath.isEmpty()) return;
+
+    QFileInfo info(filePath);
+    if (!info.exists() || !info.isFile()) {
+        QMessageBox::warning(this, "错误", "参考图不存在或不可读");
+        return;
+    }
+
+    referenceImagePaths.append(filePath);
+    updateThumbnailGrid();
 }
 
 void GeminiImagePage::clearReferenceImage()
@@ -500,7 +494,22 @@ void GeminiImagePage::clearPrompt()
 
 bool GeminiImagePage::isMultiImageMode() const
 {
-    return currentModelValue() == "gemini-3.1-flash-image-preview";
+    return maxReferenceImages() > 0;
+}
+
+int GeminiImagePage::maxReferenceImages() const
+{
+    const QString model = currentModelValue();
+    if (model == "gemini-3.1-flash-image-preview") {
+        return 14; // 香蕉2：最多14张
+    }
+    if (model == "gemini-3-pro-image-preview") {
+        return 11; // 香蕉Pro：最多11张
+    }
+    if (model == "gemini-2.5-flash-image") {
+        return 10; // 香蕉1：最多10张
+    }
+    return 0; // 默认不支持
 }
 
 void GeminiImagePage::updateThumbnailGrid()
@@ -513,7 +522,8 @@ void GeminiImagePage::updateThumbnailGrid()
     }
 
     int count = referenceImagePaths.size();
-    referenceCountLabel->setText(QString("已选 %1/10 张").arg(count));
+    int maxImages = maxReferenceImages();
+    referenceCountLabel->setText(QString("已选 %1/%2 张").arg(count).arg(maxImages));
 
     // 设置容器高度（2排=140px，3排=210px）
     int rows = (count <= 5) ? 2 : 3;
@@ -580,11 +590,6 @@ void GeminiImagePage::removeReferenceImage(int index)
 void GeminiImagePage::replaceReferenceImage(int index)
 {
     if (index < 0 || index >= referenceImagePaths.size()) {
-        return;
-    }
-
-    if (referenceImagePaths.size() >= 10 && !isMultiImageMode()) {
-        QMessageBox::warning(this, "提示", "只支持最多10张图片");
         return;
     }
 

@@ -54,6 +54,7 @@ private:
     QString currentVariantLabel() const;
     QString saveGeneratedImage(const QByteArray &imageBytes, const QString &mimeType, QString &error);
     bool isMultiImageMode() const;
+    int maxReferenceImages() const;
     void updateThumbnailGrid();
     void removeReferenceImage(int index);
     void replaceReferenceImage(int index);
