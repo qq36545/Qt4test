@@ -70,6 +70,18 @@ struct ImagePreferences {
     QString aspectRatio;
     QString serverUrl;
     int apiKeyId;
+    QString prompt;                 // 提示词
+    QString referenceImagePaths;    // 参考图路径（用 | 分隔）
+};
+
+struct ImageDraft {
+    QString modelVariant;
+    QString apiKeyId;
+    QString serverUrl;
+    QString imageSize;
+    QString aspectRatio;
+    QString prompt;
+    QString referenceImagePaths;
 };
 
 class DBManager : public QObject
@@ -118,6 +130,14 @@ public:
     // Image Preferences (图片生成参数持久化)
     bool saveImagePreferences(const ImagePreferences& prefs);
     ImagePreferences loadImagePreferences(const QString& modelVariant);
+
+    // Image Draft (图片生成草稿)
+    bool saveImageDraft(const ImageDraft& draft);
+    ImageDraft loadImageDraft(const QString& modelVariant);
+
+    // App Preferences (全局应用偏好)
+    bool saveAppPreference(const QString &key, const QString &value);
+    QString loadAppPreference(const QString &key, const QString &defaultValue = QString());
 
 private:
     explicit DBManager(QObject *parent = nullptr);

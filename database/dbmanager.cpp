@@ -4,6 +4,7 @@
 #include <QDebug>
 #include <QStandardPaths>
 #include <QDir>
+#include <QDateTime>
 
 DBManager* DBManager::m_instance = nullptr;
 
@@ -195,12 +196,85 @@ bool DBManager::createTables()
             image_size TEXT,
             aspect_ratio TEXT,
             server_url TEXT,
-            api_key_id INTEGER
+            api_key_id INTEGER,
+            prompt TEXT,
+            reference_image_paths TEXT
         )
     )";
 
     if (!query.exec(createImagePrefsTable)) {
         qCritical() << "Failed to create image_preferences table:" << query.lastError().text();
+        return false;
+    }
+
+    // 创建 App Preferences 表（全局应用偏好）
+    QString createAppPrefsTable = R"(
+        CREATE TABLE IF NOT EXISTS app_preferences (
+            key TEXT PRIMARY KEY,
+            value TEXT
+        )
+    )";
+
+    if (!query.exec(createAppPrefsTable)) {
+        qCritical() << "Failed to create app_preferences table:" << query.lastError().text();
+        return false;
+    }
+
+    // 为已存在的表添加新列（兼容旧数据）
+    QStringList newImagePrefColumns = {
+        "prompt TEXT",
+        "reference_image_paths TEXT"
+    };
+
+    for (const QString& columnDef : newImagePrefColumns) {
+        QString columnName = columnDef.split(' ').first();
+        query.exec("PRAGMA table_info(image_preferences)");
+        bool hasColumn = false;
+        while (query.next()) {
+            if (query.value(1).toString() == columnName) {
+                hasColumn = true;
+                break;
+            }
+        }
+        if (!hasColumn) {
+            QString alterSql = QString("ALTER TABLE image_preferences ADD COLUMN %1").arg(columnDef);
+            if (!query.exec(alterSql)) {
+                qWarning() << "Failed to add column" << columnName << "to image_preferences:" << query.lastError().text();
+            } else {
+                qDebug() << "Added column" << columnName << "to image_preferences";
+            }
+        }
+    }
+
+    // 创建 Image Draft 表（草稿，按模型分别保存）
+    // 检查旧表是否有 id 列，如有则删除重建（数据库版本升级）
+    query.exec("PRAGMA table_info(image_draft)");
+    bool hasIdColumn = false;
+    while (query.next()) {
+        if (query.value(1).toString() == "id") {
+            hasIdColumn = true;
+            break;
+        }
+    }
+    if (hasIdColumn) {
+        query.exec("DROP TABLE image_draft");
+    }
+
+    QString createImageDraftTable = R"(
+        CREATE TABLE IF NOT EXISTS image_draft (
+            model_variant TEXT PRIMARY KEY,
+            api_key_id TEXT,
+            server_url TEXT,
+            image_size TEXT,
+            aspect_ratio TEXT,
+            prompt TEXT,
+            reference_image_paths TEXT,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    )";
+
+    if (!query.exec(createImageDraftTable)) {
+        qCritical() << "Failed to create image_draft table:" << query.lastError().text();
         return false;
     }
 
@@ -818,13 +892,15 @@ bool DBManager::saveImagePreferences(const ImagePreferences& prefs)
 {
     QSqlQuery query;
     query.prepare(R"(
-        INSERT INTO image_preferences (model_variant, image_size, aspect_ratio, server_url, api_key_id)
-        VALUES (:model_variant, :image_size, :aspect_ratio, :server_url, :api_key_id)
+        INSERT INTO image_preferences (model_variant, image_size, aspect_ratio, server_url, api_key_id, prompt, reference_image_paths)
+        VALUES (:model_variant, :image_size, :aspect_ratio, :server_url, :api_key_id, :prompt, :reference_image_paths)
         ON CONFLICT(model_variant) DO UPDATE SET
             image_size = excluded.image_size,
             aspect_ratio = excluded.aspect_ratio,
             server_url = excluded.server_url,
-            api_key_id = excluded.api_key_id
+            api_key_id = excluded.api_key_id,
+            prompt = excluded.prompt,
+            reference_image_paths = excluded.reference_image_paths
     )");
 
     query.bindValue(":model_variant", prefs.modelVariant);
@@ -832,6 +908,8 @@ bool DBManager::saveImagePreferences(const ImagePreferences& prefs)
     query.bindValue(":aspect_ratio", prefs.aspectRatio);
     query.bindValue(":server_url", prefs.serverUrl);
     query.bindValue(":api_key_id", prefs.apiKeyId);
+    query.bindValue(":prompt", prefs.prompt);
+    query.bindValue(":reference_image_paths", prefs.referenceImagePaths);
 
     if (!query.exec()) {
         qCritical() << "Failed to save image preferences:" << query.lastError().text();
@@ -848,9 +926,11 @@ ImagePreferences DBManager::loadImagePreferences(const QString& modelVariant)
     prefs.aspectRatio = "1:1";
     prefs.serverUrl = "";
     prefs.apiKeyId = -1;
+    prefs.prompt = "";
+    prefs.referenceImagePaths = "";
 
     QSqlQuery query;
-    query.prepare("SELECT image_size, aspect_ratio, server_url, api_key_id FROM image_preferences WHERE model_variant = :model_variant");
+    query.prepare("SELECT image_size, aspect_ratio, server_url, api_key_id, prompt, reference_image_paths FROM image_preferences WHERE model_variant = :model_variant");
     query.bindValue(":model_variant", modelVariant);
 
     if (query.exec() && query.next()) {
@@ -858,8 +938,98 @@ ImagePreferences DBManager::loadImagePreferences(const QString& modelVariant)
         prefs.aspectRatio = query.value(1).toString();
         prefs.serverUrl = query.value(2).toString();
         prefs.apiKeyId = query.value(3).toInt();
+        prefs.prompt = query.value(4).toString();
+        prefs.referenceImagePaths = query.value(5).toString();
     }
 
     return prefs;
+}
+
+// App Preferences CRUD
+bool DBManager::saveAppPreference(const QString &key, const QString &value)
+{
+    QSqlQuery query;
+    query.prepare(R"(
+        INSERT INTO app_preferences (key, value) VALUES (:key, :value)
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value
+    )");
+
+    query.bindValue(":key", key);
+    query.bindValue(":value", value);
+
+    if (!query.exec()) {
+        qCritical() << "Failed to save app preference:" << query.lastError().text();
+        return false;
+    }
+    // 强制提交事务，确保数据写入
+    db.commit();
+    db.transaction();
+    return true;
+}
+
+QString DBManager::loadAppPreference(const QString &key, const QString &defaultValue)
+{
+    QSqlQuery query;
+    query.prepare("SELECT value FROM app_preferences WHERE key = :key");
+    query.bindValue(":key", key);
+
+    if (query.exec() && query.next()) {
+        return query.value(0).toString();
+    }
+    return defaultValue;
+}
+
+// Image Draft CRUD
+bool DBManager::saveImageDraft(const ImageDraft& draft)
+{
+    QSqlQuery query;
+    query.prepare(R"(
+        INSERT INTO image_draft (model_variant, api_key_id, server_url, image_size, aspect_ratio, prompt, reference_image_paths)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(model_variant) DO UPDATE SET
+            api_key_id = excluded.api_key_id,
+            server_url = excluded.server_url,
+            image_size = excluded.image_size,
+            aspect_ratio = excluded.aspect_ratio,
+            prompt = excluded.prompt,
+            reference_image_paths = excluded.reference_image_paths,
+            updated_at = CURRENT_TIMESTAMP
+    )");
+
+    query.addBindValue(draft.modelVariant);
+    query.addBindValue(draft.apiKeyId);
+    query.addBindValue(draft.serverUrl);
+    query.addBindValue(draft.imageSize);
+    query.addBindValue(draft.aspectRatio);
+    query.addBindValue(draft.prompt);
+    query.addBindValue(draft.referenceImagePaths);
+
+    if (!query.exec()) {
+        qCritical() << "Failed to save image draft:" << query.lastError().text();
+        return false;
+    }
+    // 强制提交事务
+    db.commit();
+    db.transaction();
+    return true;
+}
+
+ImageDraft DBManager::loadImageDraft(const QString& modelVariant)
+{
+    ImageDraft draft;
+    draft.modelVariant = modelVariant;
+    QSqlQuery query;
+    query.prepare("SELECT api_key_id, server_url, image_size, aspect_ratio, prompt, reference_image_paths FROM image_draft WHERE model_variant = :model_variant");
+    query.bindValue(":model_variant", modelVariant);
+
+    if (query.exec() && query.next()) {
+        draft.apiKeyId = query.value(0).toString();
+        draft.serverUrl = query.value(1).toString();
+        draft.imageSize = query.value(2).toString();
+        draft.aspectRatio = query.value(3).toString();
+        draft.prompt = query.value(4).toString();
+        draft.referenceImagePaths = query.value(5).toString();
+    }
+    return draft;
 }
 

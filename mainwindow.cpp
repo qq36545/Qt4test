@@ -15,7 +15,7 @@
 #include <QSettings>
 #include <QTimer>
 #include <QMessageBox>
-#include <QDebug>
+#include <QCloseEvent>
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent), currentTheme(Dark)
@@ -406,4 +406,13 @@ void MainWindow::setupStartupUpdateCheck()
     QTimer::singleShot(500, this, [updateManager]() {
         updateManager->checkForUpdates(false);
     });
+}
+
+void MainWindow::closeEvent(QCloseEvent *event)
+{
+    // 程序关闭时，保存图片生成草稿
+    if (imageGenWidget && imageGenWidget->getSingleTab()) {
+        imageGenWidget->getSingleTab()->saveDraftOnClose();
+    }
+    QMainWindow::closeEvent(event);
 }

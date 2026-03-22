@@ -19,6 +19,9 @@
 #include <QPixmap>
 #include <QCoreApplication>
 #include <QProcess>
+#include <QMouseEvent>
+#include <QHideEvent>
+#include <QDebug>
 
 namespace {
 
@@ -136,13 +139,27 @@ GeminiImagePage::GeminiImagePage(QWidget *parent)
       imageApi(new ImageAPI(this)),
       currentHistoryId(-1)
 {
+    // 初始化草稿保存定时器
+    m_comboSaveTimer = new QTimer(this);
+    m_comboSaveTimer->setSingleShot(true);
+    m_comboSaveTimer->setInterval(1000);  // 1秒延迟
+
+    m_promptSaveTimer = new QTimer(this);
+    m_promptSaveTimer->setSingleShot(true);
+    m_promptSaveTimer->setInterval(3000);  // 3秒延迟
+
     setupUI();
     loadApiKeys();
+    restoreLastModelVariant();
 
     connect(imageApi, &ImageAPI::imageGenerated,
             this, &GeminiImagePage::onApiImageGenerated);
     connect(imageApi, &ImageAPI::errorOccurred,
             this, &GeminiImagePage::onApiError);
+
+    // 连接草稿保存定时器
+    connect(m_comboSaveTimer, &QTimer::timeout, this, &GeminiImagePage::saveDraft);
+    connect(m_promptSaveTimer, &QTimer::timeout, this, &GeminiImagePage::saveDraft);
 }
 
 void GeminiImagePage::setupUI()
@@ -186,6 +203,8 @@ void GeminiImagePage::setupUI()
             const ApiKey key = DBManager::instance()->getApiKey(keyId);
             emit apiKeySelectionChanged(key.apiKey);
         }
+        // API密钥变化时触发延迟保存
+        if (!m_initializing) m_comboSaveTimer->start();
     });
     keyLayout->addWidget(keyLabel);
     keyLayout->addWidget(apiKeyCombo, 1);
@@ -198,6 +217,9 @@ void GeminiImagePage::setupUI()
     serverCombo->addItem("【主站】https://ai.kegeai.top", "https://ai.kegeai.top");
     serverCombo->addItem("【备用】https://api.kuai.host", "https://api.kuai.host");
     serverCombo->setCurrentIndex(0);
+    // 服务器变化时触发延迟保存
+    connect(serverCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, [this]() { if (!m_initializing) m_comboSaveTimer->start(); });
     serverLayout->addWidget(serverLabel);
     serverLayout->addWidget(serverCombo, 1);
     contentLayout->addLayout(serverLayout);
@@ -207,18 +229,31 @@ void GeminiImagePage::setupUI()
     imageSizeWidget = new QWidget();
     QVBoxLayout *imageSizeLayout = new QVBoxLayout(imageSizeWidget);
     imageSizeLayout->setContentsMargins(0, 0, 0, 0);
-    imageSizeLabel = new QLabel("清晰度 imageSize");
+    imageSizeLabel = new QLabel("清晰度");
     imageSizeCombo = new QComboBox();
     imageSizeCombo->addItem("0.5k", "512");
     imageSizeCombo->addItem("1K", "1K");
     imageSizeCombo->addItem("2K", "2K");
     imageSizeCombo->addItem("4K", "4K");
+    // 清晰度变化时立即保存（blockSignals 防止 rebuild 时误触发）
+    imageSizeCombo->blockSignals(true);
+    connect(imageSizeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int) {
+        // combo 为空时跳过（rebuildImageSizeOptions 中 clear+addItem 会触发多次信号）
+        if (!m_initializing && imageSizeCombo->count() > 0) {
+            savePreferences(variantCombo->currentIndex());
+        }
+    });
+    imageSizeCombo->blockSignals(false);
     imageSizeLayout->addWidget(imageSizeLabel);
     imageSizeLayout->addWidget(imageSizeCombo);
 
     QVBoxLayout *aspectLayout = new QVBoxLayout();
-    QLabel *aspectLabel = new QLabel("宽高比 aspectRatio");
+    QLabel *aspectLabel = new QLabel("宽高比");
     aspectRatioCombo = new QComboBox();
+    // 宽高比变化时触发延迟保存
+    connect(aspectRatioCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int) {
+        if (!m_initializing) m_comboSaveTimer->start();
+    });
     aspectLayout->addWidget(aspectLabel);
     aspectLayout->addWidget(aspectRatioCombo);
 
@@ -239,6 +274,14 @@ void GeminiImagePage::setupUI()
     promptInput = new QTextEdit();
     promptInput->setPlaceholderText("输入图片生成提示词...");
     promptInput->setMinimumHeight(180);
+    // 提示词变化时触发3秒延迟保存
+    connect(promptInput, &QTextEdit::textChanged, this, [this]() {
+        if (!m_initializing) {
+            m_promptSaveTimer->start();
+        }
+    });
+    // 为 promptInput 安装事件过滤器，处理焦点离开
+    promptInput->installEventFilter(this);
     contentLayout->addWidget(promptInput);
 
     QLabel *referenceLabel = new QLabel("参考图（可选）:");
@@ -266,6 +309,7 @@ void GeminiImagePage::setupUI()
         thumbnailLayout->setColumnStretch(i % 5, 1);
     }
     contentLayout->addWidget(thumbnailContainer);
+    thumbnailContainer->installEventFilter(this);
 
     QHBoxLayout *referenceLayout = new QHBoxLayout();
     uploadReferenceButton = new QPushButton("上传参考图");
@@ -326,12 +370,58 @@ void GeminiImagePage::refreshApiKeys()
     loadApiKeys();
 }
 
-void GeminiImagePage::onVariantChanged(int)
+void GeminiImagePage::onVariantChanged(int newIndex)
 {
+    // 初始化阶段跳过保存
+    if (!m_initializing) {
+        // 保存切换前模型的参数到草稿
+        saveDraft();
+        // 保存当前选择的模型到全局设置
+        DBManager::instance()->saveAppPreference("last_image_model_variant", currentModelValue());
+    }
+    m_previousVariantIndex = newIndex;
     updateImageSizeVisibility();
     rebuildImageSizeOptions();
     rebuildAspectRatioOptions();
-    restorePreferences();
+
+    // 切换模型时，尝试从草稿恢复该模型的参数
+    const QString newModel = currentModelValue();
+    ImageDraft draft = DBManager::instance()->loadImageDraft(newModel);
+
+    if (!draft.serverUrl.isEmpty() || !draft.prompt.isEmpty()) {
+        // 有草稿数据，恢复参数
+        int serverIndex = serverCombo->findData(draft.serverUrl);
+        if (serverIndex >= 0) serverCombo->setCurrentIndex(serverIndex);
+
+        if (!draft.apiKeyId.isEmpty() && draft.apiKeyId != "0") {
+            int keyIndex = apiKeyCombo->findData(draft.apiKeyId.toInt());
+            if (keyIndex >= 0) apiKeyCombo->setCurrentIndex(keyIndex);
+        }
+
+        int aspectIndex = aspectRatioCombo->findData(draft.aspectRatio);
+        if (aspectIndex >= 0) aspectRatioCombo->setCurrentIndex(aspectIndex);
+
+        if (m_imageSizeVisible && !draft.imageSize.isEmpty()) {
+            int sizeIndex = imageSizeCombo->findData(draft.imageSize);
+            if (sizeIndex >= 0) imageSizeCombo->setCurrentIndex(sizeIndex);
+        }
+
+        if (!draft.prompt.isEmpty()) {
+            promptInput->setPlainText(draft.prompt);
+        }
+
+        // 恢复参考图
+        referenceImagePaths.clear();
+        if (!draft.referenceImagePaths.isEmpty()) {
+            QStringList paths = draft.referenceImagePaths.split("|");
+            for (const QString &path : paths) {
+                if (QFile::exists(path)) {
+                    referenceImagePaths.append(path);
+                }
+            }
+        }
+        updateThumbnailGrid();
+    }
 
     const QString model = currentModelValue();
     const int maxImages = maxReferenceImages();
@@ -358,7 +448,7 @@ void GeminiImagePage::onVariantChanged(int)
         // 香蕉1：最多3张
         referenceHintLabel->setVisible(true);
         referenceHintLabel->setText(
-            "当前选择的变体模型「香蕉1」支持上传 10 张参考图"
+            "当前选择的变体模型「香蕉1」支持上传 5 张参考图"
         );
         referenceCountLabel->setVisible(true);
     } else {
@@ -369,13 +459,14 @@ void GeminiImagePage::onVariantChanged(int)
         }
     }
     updateThumbnailGrid();
+    // 注意：不在此处保存 last_image_model_variant，避免覆盖用户关闭时的选择
 }
 
 void GeminiImagePage::updateImageSizeVisibility()
 {
     const QString model = currentModelValue();
-    const bool showImageSize = (model == "gemini-3.1-flash-image-preview" || model == "gemini-3-pro-image-preview");
-    imageSizeWidget->setVisible(showImageSize);
+    m_imageSizeVisible = (model == "gemini-3.1-flash-image-preview" || model == "gemini-3-pro-image-preview");
+    imageSizeWidget->setVisible(m_imageSizeVisible);
 }
 
 void GeminiImagePage::rebuildImageSizeOptions()
@@ -507,7 +598,7 @@ int GeminiImagePage::maxReferenceImages() const
         return 11; // 香蕉Pro：最多11张
     }
     if (model == "gemini-2.5-flash-image") {
-        return 10; // 香蕉1：最多10张
+        return 5; // 香蕉1：最多5张
     }
     return 0; // 默认不支持
 }
@@ -552,7 +643,32 @@ void GeminiImagePage::updateThumbnailGrid()
 
 bool GeminiImagePage::eventFilter(QObject *obj, QEvent *event)
 {
+    // 处理 promptInput 的焦点离开事件，立即保存
+    if (obj == promptInput && event->type() == QEvent::FocusOut) {
+        m_promptSaveTimer->stop();  // 停止延迟保存定时器
+        saveDraft();                 // 立即保存
+        return true;
+    }
+
     if (event->type() == QEvent::MouseButtonPress) {
+        // 点击的是缩略图容器空白区域
+        if (obj == thumbnailContainer) {
+            QMouseEvent *mouseEvent = static_cast<QMouseEvent*>(event);
+            QPoint pos = mouseEvent->pos();
+
+            // 检查点击位置是否在任何缩略图之内
+            for (int i = 0; i < thumbnailLayout->count(); ++i) {
+                QWidget *widget = thumbnailLayout->itemAt(i)->widget();
+                if (widget && widget->geometry().contains(pos)) {
+                    // 点击的是缩略图，交给下面的逻辑处理
+                    return QWidget::eventFilter(obj, event);
+                }
+            }
+            // 点击空白区域，触发上传
+            uploadReferenceImage();
+            return true;
+        }
+
         // 找到点击的缩略图索引
         for (int i = 0; i < thumbnailLayout->count(); ++i) {
             if (thumbnailLayout->itemAt(i)->widget() == obj) {
@@ -562,6 +678,13 @@ bool GeminiImagePage::eventFilter(QObject *obj, QEvent *event)
         }
     }
     return QWidget::eventFilter(obj, event);
+}
+
+void GeminiImagePage::hideEvent(QHideEvent *event)
+{
+    // 页面隐藏时保存当前参数
+    saveCurrentModelPreferences();
+    QWidget::hideEvent(event);
 }
 
 void GeminiImagePage::removeReferenceImage(int index)
@@ -610,6 +733,8 @@ void GeminiImagePage::restorePreferences()
 {
     const QString model = currentModelValue();
     ImagePreferences prefs = DBManager::instance()->loadImagePreferences(model);
+    FILE *f = fopen("/tmp/chickenai_debug.txt", "a");
+    if (f) { fprintf(f, "restorePreferences: model=%s imageSize=%s m_imageSizeVisible=%d\n", model.toUtf8().constData(), prefs.imageSize.toUtf8().constData(), m_imageSizeVisible); fclose(f); }
 
     // 恢复 aspectRatio
     int aspectIndex = aspectRatioCombo->findData(prefs.aspectRatio);
@@ -618,7 +743,7 @@ void GeminiImagePage::restorePreferences()
     }
 
     // 恢复 imageSize
-    if (imageSizeWidget->isVisible()) {
+    if (m_imageSizeVisible) {
         int sizeIndex = imageSizeCombo->findData(prefs.imageSize);
         if (sizeIndex >= 0) {
             imageSizeCombo->setCurrentIndex(sizeIndex);
@@ -639,18 +764,222 @@ void GeminiImagePage::restorePreferences()
         }
         // 如果找不到对应的 keyId，不弹出警告，静默处理
     }
+
+    // 恢复 prompt
+    if (!prefs.prompt.isEmpty()) {
+        promptInput->setPlainText(prefs.prompt);
+    }
+
+    // 恢复 referenceImagePaths
+    referenceImagePaths.clear();
+    if (!prefs.referenceImagePaths.isEmpty()) {
+        QStringList paths = prefs.referenceImagePaths.split("|");
+        for (const QString &path : paths) {
+            if (QFile::exists(path)) {
+                referenceImagePaths.append(path);
+            }
+            // 不存在的文件静默忽略
+        }
+    }
+    updateThumbnailGrid();
 }
 
-void GeminiImagePage::savePreferences()
+void GeminiImagePage::savePreferences(int modelIndex)
 {
-    const QString model = currentModelValue();
+    // modelIndex 是切换到的模型索引（来自 onVariantChanged 参数）
+    // 用于在 setupUI 场景下正确保存：restoreLastModelVariant 设置了 combo，
+    // 但 onVariantChanged(0) 被触发时，combo 已经在用户上次选择的模型上了
+    QString model;
+    if (modelIndex >= 0 && modelIndex < variantCombo->count()) {
+        model = variantCombo->itemData(modelIndex).toString();
+    } else {
+        model = currentModelValue();
+    }
+
     ImagePreferences prefs;
     prefs.modelVariant = model;
     prefs.aspectRatio = aspectRatioCombo->currentData().toString();
     prefs.imageSize = imageSizeWidget->isVisible() ? imageSizeCombo->currentData().toString() : "";
     prefs.serverUrl = serverCombo->currentData().toString();
     prefs.apiKeyId = apiKeyCombo->currentData().toInt();
+    prefs.prompt = promptInput->toPlainText();
+    prefs.referenceImagePaths = referenceImagePaths.join("|");
     DBManager::instance()->saveImagePreferences(prefs);
+}
+
+void GeminiImagePage::saveCurrentModelPreferences()
+{
+    // 保存当前模型的参数（保存当前 combo 选中的模型，即切换前的模型）
+    const int currentIdx = variantCombo->currentIndex();
+    savePreferences(currentIdx);
+}
+
+void GeminiImagePage::saveDraft()
+{
+    // 保存当前草稿到数据库
+    ImageDraft draft;
+    draft.modelVariant = currentModelValue();
+    draft.apiKeyId = QString::number(apiKeyCombo->currentData().toInt());
+    draft.serverUrl = serverCombo->currentData().toString();
+    draft.imageSize = imageSizeWidget->isVisible() ? imageSizeCombo->currentData().toString() : "";
+    draft.aspectRatio = aspectRatioCombo->currentData().toString();
+    draft.prompt = promptInput->toPlainText();
+    draft.referenceImagePaths = referenceImagePaths.join("|");
+    DBManager::instance()->saveImageDraft(draft);
+}
+
+void GeminiImagePage::saveDraftOnClose()
+{
+    // 关闭时保存草稿（立即保存，不使用延迟）
+    m_promptSaveTimer->stop();  // 停止延迟保存定时器
+    m_comboSaveTimer->stop();   // 停止下拉框延迟保存定时器
+
+    // blockSignals 避免 onVariantChanged 被触发
+    variantCombo->blockSignals(true);
+    apiKeyCombo->blockSignals(true);
+    serverCombo->blockSignals(true);
+    imageSizeCombo->blockSignals(true);
+    aspectRatioCombo->blockSignals(true);
+
+    saveDraft();
+
+    // 恢复 signals
+    variantCombo->blockSignals(false);
+    apiKeyCombo->blockSignals(false);
+    serverCombo->blockSignals(false);
+    imageSizeCombo->blockSignals(false);
+    aspectRatioCombo->blockSignals(false);
+
+    // 保存当前选择的模型
+    DBManager::instance()->saveAppPreference("last_image_model_variant", currentModelValue());
+}
+
+void GeminiImagePage::restoreDraft()
+{
+    // 1. 先恢复用户上次选择的模型变体
+    const QString lastModel = DBManager::instance()->loadAppPreference("last_image_model_variant");
+    if (lastModel.isEmpty()) return;
+
+    int idx = variantCombo->findData(lastModel);
+    if (idx < 0) return;
+
+    // blockSignals 阻止 setCurrentIndex 触发 onVariantChanged
+    variantCombo->blockSignals(true);
+    variantCombo->setCurrentIndex(idx);
+    variantCombo->blockSignals(false);
+
+    // 手动执行 UI 更新逻辑
+    updateImageSizeVisibility();
+    rebuildImageSizeOptions();
+    rebuildAspectRatioOptions();
+
+    // 2. 加载当前模型的草稿
+    const QString currentModel = currentModelValue();
+    ImageDraft draft = DBManager::instance()->loadImageDraft(currentModel);
+
+    // 如果草稿完全为空，保持默认值
+    if (draft.imageSize.isEmpty() && draft.aspectRatio.isEmpty() && draft.prompt.isEmpty()) {
+        return;
+    }
+
+    // 恢复参数
+    int serverIndex = serverCombo->findData(draft.serverUrl);
+    if (serverIndex >= 0) serverCombo->setCurrentIndex(serverIndex);
+
+    if (!draft.apiKeyId.isEmpty() && draft.apiKeyId != "0") {
+        int keyIndex = apiKeyCombo->findData(draft.apiKeyId.toInt());
+        if (keyIndex >= 0) apiKeyCombo->setCurrentIndex(keyIndex);
+    }
+
+    int aspectIndex = aspectRatioCombo->findData(draft.aspectRatio);
+    if (aspectIndex >= 0) aspectRatioCombo->setCurrentIndex(aspectIndex);
+
+    if (m_imageSizeVisible && !draft.imageSize.isEmpty()) {
+        int sizeIndex = imageSizeCombo->findData(draft.imageSize);
+        if (sizeIndex >= 0) imageSizeCombo->setCurrentIndex(sizeIndex);
+    }
+
+    if (!draft.prompt.isEmpty()) {
+        promptInput->setPlainText(draft.prompt);
+    }
+
+    // 恢复参考图
+    referenceImagePaths.clear();
+    if (!draft.referenceImagePaths.isEmpty()) {
+        QStringList paths = draft.referenceImagePaths.split("|");
+        for (const QString &path : paths) {
+            if (QFile::exists(path)) {
+                referenceImagePaths.append(path);
+            }
+        }
+    }
+    updateThumbnailGrid();
+}
+
+void GeminiImagePage::restoreLastModelVariant()
+{
+    // 读取上次选择的模型变体
+    const QString lastModel = DBManager::instance()->loadAppPreference("last_image_model_variant");
+    m_previousVariantIndex = variantCombo->currentIndex();  // 记录切换前索引
+    if (lastModel.isEmpty()) {
+        m_initializing = false;
+        // 无历史模型，恢复草稿
+        restoreDraft();
+        return;  // 没有保存的记录，保持默认选择
+    }
+
+    // 在 variantCombo 中查找对应的模型
+    int index = variantCombo->findData(lastModel);
+    if (index < 0) {
+        m_initializing = false;
+        // 找不到模型，恢复草稿
+        restoreDraft();
+        return;  // 找不到对应的模型，保持默认选择
+    }
+
+    // blockSignals 阻止 setCurrentIndex 触发 onVariantChanged，避免在 m_initializing=false 时错误保存默认参数
+    variantCombo->blockSignals(true);
+    variantCombo->setCurrentIndex(index);
+    variantCombo->blockSignals(false);
+    // 手动执行 onVariantChanged 中的 UI 更新逻辑（不触发保存）
+    updateImageSizeVisibility();
+    rebuildImageSizeOptions();
+    rebuildAspectRatioOptions();
+
+    const QString model = currentModelValue();
+    if (model == "gemini-3.1-flash-image-preview") {
+        referenceHintLabel->setVisible(true);
+        referenceHintLabel->setText(
+            "当前选择的变体模型「香蕉2」：\n"
+            "• 最多 10 张与最终图片高度一致的对象图片\n"
+            "• 最多 4 张角色图片，以保持角色一致性"
+        );
+        referenceCountLabel->setVisible(true);
+    } else if (model == "gemini-3-pro-image-preview") {
+        referenceHintLabel->setVisible(true);
+        referenceHintLabel->setText(
+            "当前选择的变体模型「香蕉Pro」：\n"
+            "• 最多 6 张高保真对象图片，用于包含在最终图片中\n"
+            "• 最多 5 张角色图片，以保持角色一致性"
+        );
+        referenceCountLabel->setVisible(true);
+    } else if (model == "gemini-2.5-flash-image") {
+        referenceHintLabel->setVisible(true);
+        referenceHintLabel->setText(
+            "当前选择的变体模型「香蕉1」支持上传 5 张参考图"
+        );
+        referenceCountLabel->setVisible(true);
+    } else {
+        referenceHintLabel->setVisible(false);
+        referenceCountLabel->setVisible(false);
+    }
+    updateThumbnailGrid();
+
+    // 初始化完成
+    m_initializing = false;
+
+    // 恢复草稿（从 image_draft 表恢复最后操作状态）
+    restoreDraft();
 }
 
 void GeminiImagePage::resetForm()
@@ -887,6 +1216,16 @@ void ImageSingleTab::onModelChanged(int index)
 void ImageSingleTab::refreshApiKeys()
 {
     geminiPage->refreshApiKeys();
+}
+
+void ImageSingleTab::saveCurrentModelPreferences()
+{
+    geminiPage->saveCurrentModelPreferences();
+}
+
+void ImageSingleTab::saveDraftOnClose()
+{
+    geminiPage->saveDraftOnClose();
 }
 
 // ImageBatchTab 实现（占位）

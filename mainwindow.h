@@ -43,6 +43,7 @@ private:
     void saveTheme();
     void setupStartupUpdateCheck();
     void ensureFirstRunVersionRecorded();
+    void closeEvent(QCloseEvent *event) override;
 
     // 主题相关
     enum Theme { Dark, Light };
