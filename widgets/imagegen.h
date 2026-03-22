@@ -11,6 +11,8 @@
 #include <QHBoxLayout>
 #include <QTableWidget>
 #include <QStackedWidget>
+#include <QGridLayout>
+#include <QEvent>
 
 class ImageAPI;
 struct GenerationHistory;
@@ -25,6 +27,7 @@ public:
 
 signals:
     void imageGeneratedSuccessfully();
+    void apiKeySelectionChanged(const QString &apiKeyValue);
 
 public slots:
     void refreshApiKeys();
@@ -47,10 +50,16 @@ private:
     void rebuildImageSizeOptions();
     void rebuildAspectRatioOptions();
     void restorePreferences();
-    void updateReferenceImagePreview();
     QString currentModelValue() const;
     QString currentVariantLabel() const;
     QString saveGeneratedImage(const QByteArray &imageBytes, const QString &mimeType, QString &error);
+    bool isMultiImageMode() const;
+    void updateThumbnailGrid();
+    void removeReferenceImage(int index);
+    void replaceReferenceImage(int index);
+
+protected:
+    bool eventFilter(QObject *obj, QEvent *event) override;
 
     ImageAPI *imageApi;
 
@@ -70,8 +79,12 @@ private:
     QPushButton *generateButton;
     QPushButton *resetButton;
 
-    QString referenceImagePath;
+    QStringList referenceImagePaths;
     int currentHistoryId;
+    QLabel *referenceCountLabel;
+    QWidget *thumbnailContainer;
+    QGridLayout *thumbnailLayout;
+    QLabel *referenceHintLabel;
 };
 
 // 单个图片生成 Tab（路由容器）
@@ -84,6 +97,7 @@ public:
 
 signals:
     void imageGeneratedSuccessfully();
+    void apiKeySelectionChanged(const QString &apiKeyValue);
 
 public slots:
     void refreshApiKeys();
@@ -134,6 +148,7 @@ public:
 
 public slots:
     void refreshHistory();
+    void refreshApiKeys();
 
 private slots:
     void onRowDoubleClicked(int row, int column);

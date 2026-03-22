@@ -25,7 +25,7 @@ void ImageAPI::generateImage(const QString &apiKey,
                              const QString &prompt,
                              const QString &aspectRatio,
                              const QString &imageSize,
-                             const QString &referenceImagePath)
+                             const QStringList &referenceImagePaths)
 {
     const QString endpoint = QString("%1/v1beta/models/%2:generateContent")
                                  .arg(baseUrl, model);
@@ -46,21 +46,23 @@ void ImageAPI::generateImage(const QString &apiKey,
     textPart["text"] = prompt;
     parts.append(textPart);
 
-    if (!referenceImagePath.isEmpty()) {
-        QString mimeType;
-        QString base64Data;
-        QString error;
-        if (!buildReferenceInlineData(referenceImagePath, mimeType, base64Data, error)) {
-            emit errorOccurred(error);
-            return;
-        }
+    if (!referenceImagePaths.isEmpty()) {
+        for (const QString &path : referenceImagePaths) {
+            QString mimeType;
+            QString base64Data;
+            QString error;
+            if (!buildReferenceInlineData(path, mimeType, base64Data, error)) {
+                emit errorOccurred(error);
+                return;
+            }
 
-        QJsonObject imagePart;
-        QJsonObject inlineData;
-        inlineData["mime_type"] = mimeType;
-        inlineData["data"] = base64Data;
-        imagePart["inline_data"] = inlineData;
-        parts.append(imagePart);
+            QJsonObject imagePart;
+            QJsonObject inlineData;
+            inlineData["mime_type"] = mimeType;
+            inlineData["data"] = base64Data;
+            imagePart["inline_data"] = inlineData;
+            parts.append(imagePart);
+        }
     }
 
     userContent["parts"] = parts;

@@ -93,6 +93,9 @@ void ImageGenWidget::setupUI()
 
     connect(singleTab, &ImageSingleTab::imageGeneratedSuccessfully,
             historyTab, &ImageHistoryTab::refreshHistory);
+    // 连接 API 密钥选择变化信号，用于同步历史页密钥（如需扩展）
+    connect(singleTab, &ImageSingleTab::apiKeySelectionChanged,
+            historyTab, &ImageHistoryTab::refreshApiKeys);
 
     mainLayout->addWidget(tabWidget);
 
@@ -176,6 +179,14 @@ void GeminiImagePage::setupUI()
     connect(addKeyButton, &QPushButton::clicked, []() {
         QMessageBox::information(nullptr, "提示", "请前往配置页面添加密钥");
     });
+    // 连接 API 密钥选择变化信号
+    connect(apiKeyCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int) {
+        int keyId = apiKeyCombo->currentData().toInt();
+        if (keyId > 0) {
+            const ApiKey key = DBManager::instance()->getApiKey(keyId);
+            emit apiKeySelectionChanged(key.apiKey);
+        }
+    });
     keyLayout->addWidget(keyLabel);
     keyLayout->addWidget(apiKeyCombo, 1);
     keyLayout->addWidget(addKeyButton);
@@ -233,15 +244,34 @@ void GeminiImagePage::setupUI()
     QLabel *referenceLabel = new QLabel("参考图（可选）:");
     contentLayout->addWidget(referenceLabel);
 
+    referenceHintLabel = new QLabel();
+    referenceHintLabel->setStyleSheet("color: #94a3b8; font-size: 12px;");
+    referenceHintLabel->setVisible(false);
+    referenceHintLabel->setWordWrap(true);
+    contentLayout->addWidget(referenceHintLabel);
+
+    referenceCountLabel = new QLabel("已选 0/10 张");
+    referenceCountLabel->setStyleSheet("color: #94a3b8; font-size: 12px;");
+    referenceCountLabel->setVisible(false);
+    contentLayout->addWidget(referenceCountLabel);
+
+    thumbnailContainer = new QWidget();
+    thumbnailContainer->setMinimumHeight(140);
+    thumbnailContainer->setStyleSheet("background-color: #1e293b; border-radius: 8px; border: 1px solid #334155;");
+    thumbnailLayout = new QGridLayout(thumbnailContainer);
+    thumbnailLayout->setSpacing(8);
+    thumbnailLayout->setContentsMargins(8, 8, 8, 8);
+    for (int i = 0; i < 10; ++i) {
+        thumbnailLayout->setRowStretch(i / 5, 1);
+        thumbnailLayout->setColumnStretch(i % 5, 1);
+    }
+    contentLayout->addWidget(thumbnailContainer);
+
     QHBoxLayout *referenceLayout = new QHBoxLayout();
-    referenceImagePreviewLabel = new QLabel("未选择图片");
-    referenceImagePreviewLabel->setAlignment(Qt::AlignCenter);
-    referenceImagePreviewLabel->setMinimumHeight(120);
     uploadReferenceButton = new QPushButton("上传参考图");
     clearReferenceButton = new QPushButton("清理参考图");
     connect(uploadReferenceButton, &QPushButton::clicked, this, &GeminiImagePage::uploadReferenceImage);
     connect(clearReferenceButton, &QPushButton::clicked, this, &GeminiImagePage::clearReferenceImage);
-    referenceLayout->addWidget(referenceImagePreviewLabel, 1);
     referenceLayout->addWidget(uploadReferenceButton);
     referenceLayout->addWidget(clearReferenceButton);
     contentLayout->addLayout(referenceLayout);
@@ -275,16 +305,20 @@ void GeminiImagePage::loadApiKeys()
     QList<ApiKey> keys = DBManager::instance()->getAllApiKeys();
 
     if (keys.isEmpty()) {
-        apiKeyCombo->addItem("无可用密钥");
-        apiKeyCombo->setEnabled(false);
-        addKeyButton->setVisible(true);
-    } else {
-        apiKeyCombo->setEnabled(true);
-        addKeyButton->setVisible(false);
-        for (const ApiKey& key : keys) {
-            apiKeyCombo->addItem(key.name, key.id);
-        }
+        // 密钥为空时不显示警告，静默处理
+        // 让 generateImage() 统一处理提示
+        return;
     }
+
+    apiKeyCombo->setEnabled(true);
+    addKeyButton->setVisible(false);
+    for (const ApiKey& key : keys) {
+        apiKeyCombo->addItem(key.name, key.id);
+    }
+
+    // 自动选择第一个
+    apiKeyCombo->setCurrentIndex(0);
+    emit apiKeySelectionChanged(keys.first().apiKey);
 }
 
 void GeminiImagePage::refreshApiKeys()
@@ -298,6 +332,28 @@ void GeminiImagePage::onVariantChanged(int)
     rebuildImageSizeOptions();
     rebuildAspectRatioOptions();
     restorePreferences();
+
+    // 切换参考图模式
+    if (isMultiImageMode()) {
+        // 香蕉2：多图模式
+        referenceHintLabel->setVisible(true);
+        referenceHintLabel->setText(
+            "• 最多 10 张与最终图片高度一致的对象图片\n"
+            "• 最多 4 张角色图片，以保持角色一致性"
+        );
+        referenceCountLabel->setVisible(true);
+    } else {
+        // 香蕉1/Pro：单图模式
+        referenceHintLabel->setVisible(false);
+        referenceCountLabel->setVisible(false);
+        // 如果多图模式下有多张图，只保留第一张，其余丢弃
+        if (referenceImagePaths.size() > 1) {
+            QString first = referenceImagePaths.first();
+            referenceImagePaths.clear();
+            referenceImagePaths.append(first);
+        }
+    }
+    updateThumbnailGrid();
 }
 
 void GeminiImagePage::updateImageSizeVisibility()
@@ -385,53 +441,164 @@ void GeminiImagePage::rebuildAspectRatioOptions()
 
 void GeminiImagePage::uploadReferenceImage()
 {
-    QString filePath = QFileDialog::getOpenFileName(
-        this,
-        "选择参考图",
-        QString(),
-        "图片文件 (*.png *.jpg *.jpeg *.webp)"
-    );
+    if (isMultiImageMode()) {
+        if (referenceImagePaths.size() >= 10) {
+            QMessageBox::warning(this, "提示", "只支持最多10张图片");
+            return;
+        }
+        // 多图：追加模式
+        QString filePath = QFileDialog::getOpenFileName(
+            this,
+            "选择参考图",
+            QString(),
+            "图片文件 (*.png *.jpg *.jpeg *.webp *.bmp)"
+        );
 
-    if (filePath.isEmpty()) return;
+        if (filePath.isEmpty()) return;
 
-    QFileInfo info(filePath);
-    if (!info.exists() || !info.isFile()) {
-        QMessageBox::warning(this, "错误", "参考图不存在或不可读");
-        return;
+        QFileInfo info(filePath);
+        if (!info.exists() || !info.isFile()) {
+            QMessageBox::warning(this, "错误", "参考图不存在或不可读");
+            return;
+        }
+
+        referenceImagePaths.append(filePath);
+        updateThumbnailGrid();
+    } else {
+        // 单图：覆盖模式
+        QString filePath = QFileDialog::getOpenFileName(
+            this,
+            "选择参考图",
+            QString(),
+            "图片文件 (*.png *.jpg *.jpeg *.webp *.bmp)"
+        );
+
+        if (filePath.isEmpty()) return;
+
+        QFileInfo info(filePath);
+        if (!info.exists() || !info.isFile()) {
+            QMessageBox::warning(this, "错误", "参考图不存在或不可读");
+            return;
+        }
+
+        referenceImagePaths.clear();
+        referenceImagePaths.append(filePath);
+        updateThumbnailGrid();
     }
-
-    referenceImagePath = filePath;
-    updateReferenceImagePreview();
 }
 
 void GeminiImagePage::clearReferenceImage()
 {
-    referenceImagePath.clear();
-    updateReferenceImagePreview();
-}
-
-void GeminiImagePage::updateReferenceImagePreview()
-{
-    if (referenceImagePath.isEmpty()) {
-        referenceImagePreviewLabel->setPixmap(QPixmap());
-        referenceImagePreviewLabel->setText("未选择图片");
-        return;
-    }
-
-    QPixmap pixmap(referenceImagePath);
-    if (pixmap.isNull()) {
-        referenceImagePreviewLabel->setPixmap(QPixmap());
-        referenceImagePreviewLabel->setText("参考图预览失败");
-        return;
-    }
-
-    referenceImagePreviewLabel->setText("");
-    referenceImagePreviewLabel->setPixmap(pixmap.scaled(260, 120, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+    referenceImagePaths.clear();
+    updateThumbnailGrid();
 }
 
 void GeminiImagePage::clearPrompt()
 {
     promptInput->clear();
+}
+
+bool GeminiImagePage::isMultiImageMode() const
+{
+    return currentModelValue() == "gemini-3.1-flash-image-preview";
+}
+
+void GeminiImagePage::updateThumbnailGrid()
+{
+    // 清空现有缩略图
+    QLayoutItem *item;
+    while ((item = thumbnailLayout->takeAt(0)) != nullptr) {
+        delete item->widget();
+        delete item;
+    }
+
+    int count = referenceImagePaths.size();
+    referenceCountLabel->setText(QString("已选 %1/10 张").arg(count));
+
+    // 设置容器高度（2排=140px，3排=210px）
+    int rows = (count <= 5) ? 2 : 3;
+    thumbnailContainer->setMinimumHeight(rows * 70);
+
+    for (int i = 0; i < count; ++i) {
+        QLabel *thumb = new QLabel();
+        QPixmap pix(referenceImagePaths[i]);
+        if (!pix.isNull()) {
+            thumb->setPixmap(pix.scaled(60, 60, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+        } else {
+            thumb->setText("加载失败");
+        }
+        thumb->setAlignment(Qt::AlignCenter);
+        thumb->setStyleSheet("border: 1px solid #475569; border-radius: 4px; background-color: #0f172a;");
+        thumb->setCursor(Qt::PointingHandCursor);
+        thumb->setToolTip(QString("点击替换/删除（第%1张）").arg(i + 1));
+
+        // 安装事件过滤器来处理点击
+        thumb->installEventFilter(this);
+
+        // 行 = i/5, 列 = i%5
+        thumbnailLayout->addWidget(thumb, i / 5, i % 5);
+    }
+}
+
+bool GeminiImagePage::eventFilter(QObject *obj, QEvent *event)
+{
+    if (event->type() == QEvent::MouseButtonPress) {
+        // 找到点击的缩略图索引
+        for (int i = 0; i < thumbnailLayout->count(); ++i) {
+            if (thumbnailLayout->itemAt(i)->widget() == obj) {
+                removeReferenceImage(i);
+                return true;
+            }
+        }
+    }
+    return QWidget::eventFilter(obj, event);
+}
+
+void GeminiImagePage::removeReferenceImage(int index)
+{
+    if (index < 0 || index >= referenceImagePaths.size()) {
+        return;
+    }
+
+    QMessageBox msgBox(this);
+    msgBox.setWindowTitle("参考图操作");
+    msgBox.setText(QString("已选 %1 张参考图，请选择操作").arg(referenceImagePaths.size()));
+    QPushButton *replaceBtn = msgBox.addButton("替换", QMessageBox::AcceptRole);
+    QPushButton *deleteBtn = msgBox.addButton("删除", QMessageBox::DestructiveRole);
+    QPushButton *cancelBtn = msgBox.addButton("取消", QMessageBox::RejectRole);
+
+    msgBox.exec();
+
+    if (msgBox.clickedButton() == replaceBtn) {
+        replaceReferenceImage(index);
+    } else if (msgBox.clickedButton() == deleteBtn) {
+        referenceImagePaths.removeAt(index);
+        updateThumbnailGrid();
+    }
+}
+
+void GeminiImagePage::replaceReferenceImage(int index)
+{
+    if (index < 0 || index >= referenceImagePaths.size()) {
+        return;
+    }
+
+    if (referenceImagePaths.size() >= 10 && !isMultiImageMode()) {
+        QMessageBox::warning(this, "提示", "只支持最多10张图片");
+        return;
+    }
+
+    QString filePath = QFileDialog::getOpenFileName(
+        this,
+        "选择替换图片",
+        QString(),
+        "图片文件 (*.png *.jpg *.jpeg *.webp *.bmp)"
+    );
+
+    if (!filePath.isEmpty()) {
+        referenceImagePaths[index] = filePath;
+        updateThumbnailGrid();
+    }
 }
 
 void GeminiImagePage::restorePreferences()
@@ -464,10 +631,8 @@ void GeminiImagePage::restorePreferences()
         int keyIndex = apiKeyCombo->findData(prefs.apiKeyId);
         if (keyIndex >= 0) {
             apiKeyCombo->setCurrentIndex(keyIndex);
-        } else {
-            // API Key 已被删除，弹出提示
-            QMessageBox::warning(this, "提示", "上次使用的 API Key 已不存在，请先到配置页面配置API key");
         }
+        // 如果找不到对应的 keyId，不弹出警告，静默处理
     }
 }
 
@@ -517,9 +682,13 @@ void GeminiImagePage::generateImage()
         return;
     }
 
-    if (!referenceImagePath.isEmpty() && !QFile::exists(referenceImagePath)) {
-        QMessageBox::warning(this, "提示", "参考图不存在或不可读");
-        return;
+    if (!referenceImagePaths.isEmpty()) {
+        for (const QString &path : referenceImagePaths) {
+            if (!QFile::exists(path)) {
+                QMessageBox::warning(this, "提示", "参考图不存在或不可读");
+                return;
+            }
+        }
     }
 
     int keyId = apiKeyCombo->currentData().toInt();
@@ -533,7 +702,7 @@ void GeminiImagePage::generateImage()
     const QString aspectRatio = aspectRatioCombo->currentData().toString();
     const QString imageSize = imageSizeWidget->isVisible() ? imageSizeCombo->currentData().toString() : QString();
     const QString serverUrl = serverCombo->currentData().toString();
-    const QString generationMode = referenceImagePath.isEmpty() ? "text_to_image" : "image_to_image";
+    const QString generationMode = referenceImagePaths.isEmpty() ? "text_to_image" : "image_to_image";
 
     QJsonObject params;
     params["model"] = model;
@@ -549,7 +718,7 @@ void GeminiImagePage::generateImage()
     history.modelType = "image";
     history.modelName = "Gemini（香蕉）";
     history.prompt = prompt;
-    history.imagePath = referenceImagePath;
+    history.imagePath = referenceImagePaths.join("|"); // 多图路径用 | 分隔
     history.parameters = QString::fromUtf8(QJsonDocument(params).toJson(QJsonDocument::Compact));
     history.status = "generating";
     history.resultPath.clear();
@@ -568,7 +737,7 @@ void GeminiImagePage::generateImage()
         prompt,
         aspectRatio,
         imageSize,
-        referenceImagePath
+        referenceImagePaths
     );
 }
 
@@ -696,6 +865,8 @@ void ImageSingleTab::setupUI()
 
     connect(geminiPage, &GeminiImagePage::imageGeneratedSuccessfully,
             this, &ImageSingleTab::imageGeneratedSuccessfully);
+    connect(geminiPage, &GeminiImagePage::apiKeySelectionChanged,
+            this, &ImageSingleTab::apiKeySelectionChanged);
 
     mainLayout->addWidget(stack);
 }
@@ -826,6 +997,12 @@ void ImageHistoryTab::loadHistory()
 void ImageHistoryTab::refreshHistory()
 {
     loadHistory();
+}
+
+void ImageHistoryTab::refreshApiKeys()
+{
+    // 图片历史页暂无 API 密钥选择功能，暂留空实现
+    // 后续如需添加密钥过滤功能，可在此扩展
 }
 
 void ImageHistoryTab::onRowDoubleClicked(int row, int)

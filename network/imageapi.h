@@ -19,7 +19,7 @@ public:
                        const QString &prompt,
                        const QString &aspectRatio,
                        const QString &imageSize,
-                       const QString &referenceImagePath = QString());
+                       const QStringList &referenceImagePaths = QStringList());
 
 signals:
     void imageGenerated(const QByteArray &imageBytes, const QString &mimeType);
