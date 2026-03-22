@@ -198,6 +198,7 @@ void GeminiImagePage::setupUI()
     imageSizeLayout->setContentsMargins(0, 0, 0, 0);
     imageSizeLabel = new QLabel("清晰度 imageSize");
     imageSizeCombo = new QComboBox();
+    imageSizeCombo->addItem("0.5k", "512");
     imageSizeCombo->addItem("1K", "1K");
     imageSizeCombo->addItem("2K", "2K");
     imageSizeCombo->addItem("4K", "4K");
@@ -294,7 +295,9 @@ void GeminiImagePage::refreshApiKeys()
 void GeminiImagePage::onVariantChanged(int)
 {
     updateImageSizeVisibility();
+    rebuildImageSizeOptions();
     rebuildAspectRatioOptions();
+    restorePreferences();
 }
 
 void GeminiImagePage::updateImageSizeVisibility()
@@ -304,26 +307,76 @@ void GeminiImagePage::updateImageSizeVisibility()
     imageSizeWidget->setVisible(showImageSize);
 }
 
+void GeminiImagePage::rebuildImageSizeOptions()
+{
+    const QString model = currentModelValue();
+    imageSizeCombo->blockSignals(true);
+    imageSizeCombo->clear();
+
+    if (model == "gemini-3.1-flash-image-preview") {
+        // 香蕉2: 512, 1K, 2K, 4K
+        imageSizeCombo->addItem("0.5k", "512");
+        imageSizeCombo->addItem("1K", "1K");
+        imageSizeCombo->addItem("2K", "2K");
+        imageSizeCombo->addItem("4K", "4K");
+    } else if (model == "gemini-3-pro-image-preview") {
+        // 香蕉Pro: 1K, 2K, 4K
+        imageSizeCombo->addItem("1K", "1K");
+        imageSizeCombo->addItem("2K", "2K");
+        imageSizeCombo->addItem("4K", "4K");
+    }
+    // 香蕉1 无 imageSize 参数，不添加选项
+
+    imageSizeCombo->setCurrentIndex(0);
+    imageSizeCombo->blockSignals(false);
+}
+
 void GeminiImagePage::rebuildAspectRatioOptions()
 {
     const QString model = currentModelValue();
     aspectRatioCombo->blockSignals(true);
     aspectRatioCombo->clear();
 
-    if (model == "gemini-2.5-flash-image") {
+    if (model == "gemini-3.1-flash-image-preview") {
+        // 香蕉2: 14种宽高比
         aspectRatioCombo->addItem("1:1", "1:1");
-        aspectRatioCombo->addItem("16:9", "16:9");
-        aspectRatioCombo->addItem("9:16", "9:16");
-        aspectRatioCombo->addItem("4:3", "4:3");
-        aspectRatioCombo->addItem("3:4", "3:4");
-    } else {
-        aspectRatioCombo->addItem("1:1", "1:1");
-        aspectRatioCombo->addItem("16:9", "16:9");
-        aspectRatioCombo->addItem("9:16", "9:16");
-        aspectRatioCombo->addItem("4:3", "4:3");
-        aspectRatioCombo->addItem("3:4", "3:4");
+        aspectRatioCombo->addItem("1:4", "1:4");
+        aspectRatioCombo->addItem("1:8", "1:8");
         aspectRatioCombo->addItem("2:3", "2:3");
         aspectRatioCombo->addItem("3:2", "3:2");
+        aspectRatioCombo->addItem("3:4", "3:4");
+        aspectRatioCombo->addItem("4:1", "4:1");
+        aspectRatioCombo->addItem("4:3", "4:3");
+        aspectRatioCombo->addItem("4:5", "4:5");
+        aspectRatioCombo->addItem("5:4", "5:4");
+        aspectRatioCombo->addItem("8:1", "8:1");
+        aspectRatioCombo->addItem("9:16", "9:16");
+        aspectRatioCombo->addItem("16:9", "16:9");
+        aspectRatioCombo->addItem("21:9", "21:9");
+    } else if (model == "gemini-3-pro-image-preview") {
+        // 香蕉Pro: 10种宽高比
+        aspectRatioCombo->addItem("1:1", "1:1");
+        aspectRatioCombo->addItem("2:3", "2:3");
+        aspectRatioCombo->addItem("3:2", "3:2");
+        aspectRatioCombo->addItem("3:4", "3:4");
+        aspectRatioCombo->addItem("4:3", "4:3");
+        aspectRatioCombo->addItem("4:5", "4:5");
+        aspectRatioCombo->addItem("5:4", "5:4");
+        aspectRatioCombo->addItem("9:16", "9:16");
+        aspectRatioCombo->addItem("16:9", "16:9");
+        aspectRatioCombo->addItem("21:9", "21:9");
+    } else {
+        // 香蕉1: 10种宽高比
+        aspectRatioCombo->addItem("1:1", "1:1");
+        aspectRatioCombo->addItem("2:3", "2:3");
+        aspectRatioCombo->addItem("3:2", "3:2");
+        aspectRatioCombo->addItem("3:4", "3:4");
+        aspectRatioCombo->addItem("4:3", "4:3");
+        aspectRatioCombo->addItem("4:5", "4:5");
+        aspectRatioCombo->addItem("5:4", "5:4");
+        aspectRatioCombo->addItem("9:16", "9:16");
+        aspectRatioCombo->addItem("16:9", "16:9");
+        aspectRatioCombo->addItem("21:9", "21:9");
     }
 
     aspectRatioCombo->setCurrentIndex(0);
@@ -379,6 +432,55 @@ void GeminiImagePage::updateReferenceImagePreview()
 void GeminiImagePage::clearPrompt()
 {
     promptInput->clear();
+}
+
+void GeminiImagePage::restorePreferences()
+{
+    const QString model = currentModelValue();
+    ImagePreferences prefs = DBManager::instance()->loadImagePreferences(model);
+
+    // 恢复 aspectRatio
+    int aspectIndex = aspectRatioCombo->findData(prefs.aspectRatio);
+    if (aspectIndex >= 0) {
+        aspectRatioCombo->setCurrentIndex(aspectIndex);
+    }
+
+    // 恢复 imageSize
+    if (imageSizeWidget->isVisible()) {
+        int sizeIndex = imageSizeCombo->findData(prefs.imageSize);
+        if (sizeIndex >= 0) {
+            imageSizeCombo->setCurrentIndex(sizeIndex);
+        }
+    }
+
+    // 恢复 serverUrl
+    int serverIndex = serverCombo->findData(prefs.serverUrl);
+    if (serverIndex >= 0) {
+        serverCombo->setCurrentIndex(serverIndex);
+    }
+
+    // 恢复 API Key
+    if (prefs.apiKeyId > 0) {
+        int keyIndex = apiKeyCombo->findData(prefs.apiKeyId);
+        if (keyIndex >= 0) {
+            apiKeyCombo->setCurrentIndex(keyIndex);
+        } else {
+            // API Key 已被删除，弹出提示
+            QMessageBox::warning(this, "提示", "上次使用的 API Key 已不存在，请先到配置页面配置API key");
+        }
+    }
+}
+
+void GeminiImagePage::savePreferences()
+{
+    const QString model = currentModelValue();
+    ImagePreferences prefs;
+    prefs.modelVariant = model;
+    prefs.aspectRatio = aspectRatioCombo->currentData().toString();
+    prefs.imageSize = imageSizeWidget->isVisible() ? imageSizeCombo->currentData().toString() : "";
+    prefs.serverUrl = serverCombo->currentData().toString();
+    prefs.apiKeyId = apiKeyCombo->currentData().toInt();
+    DBManager::instance()->saveImagePreferences(prefs);
 }
 
 void GeminiImagePage::resetForm()
@@ -514,6 +616,9 @@ void GeminiImagePage::onApiImageGenerated(const QByteArray &imageBytes, const QS
         onApiError("响应中未包含可用图片");
         return;
     }
+
+    // 保存用户偏好设置
+    savePreferences();
 
     QString saveError;
     const QString savedPath = saveGeneratedImage(imageBytes, mimeType, saveError);

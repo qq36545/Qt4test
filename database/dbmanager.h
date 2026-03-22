@@ -64,6 +64,14 @@ struct VideoTask {
     QString errorMessage;     // 失败原因（API返回的 message 字段）
 };
 
+struct ImagePreferences {
+    QString modelVariant;
+    QString imageSize;
+    QString aspectRatio;
+    QString serverUrl;
+    int apiKeyId;
+};
+
 class DBManager : public QObject
 {
     Q_OBJECT
@@ -106,6 +114,10 @@ public:
     QList<VideoTask> getPendingTasks();  // 获取所有待轮询的任务
     bool deleteVideoTask(const QString& taskId);  // 删除单个任务
     int deleteVideoTasks(const QStringList& taskIds);  // 批量删除任务，返回实际删除的数量
+
+    // Image Preferences (图片生成参数持久化)
+    bool saveImagePreferences(const ImagePreferences& prefs);
+    ImagePreferences loadImagePreferences(const QString& modelVariant);
 
 private:
     explicit DBManager(QObject *parent = nullptr);

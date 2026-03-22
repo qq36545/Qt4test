@@ -31,6 +31,7 @@ public slots:
 
 private slots:
     void onVariantChanged(int index);
+    void savePreferences();
     void uploadReferenceImage();
     void clearReferenceImage();
     void clearPrompt();
@@ -43,7 +44,9 @@ private:
     void setupUI();
     void loadApiKeys();
     void updateImageSizeVisibility();
+    void rebuildImageSizeOptions();
     void rebuildAspectRatioOptions();
+    void restorePreferences();
     void updateReferenceImagePreview();
     QString currentModelValue() const;
     QString currentVariantLabel() const;

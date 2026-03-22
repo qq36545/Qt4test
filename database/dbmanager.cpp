@@ -188,6 +188,22 @@ bool DBManager::createTables()
         return false;
     }
 
+    // 创建 Image Preferences 表
+    QString createImagePrefsTable = R"(
+        CREATE TABLE IF NOT EXISTS image_preferences (
+            model_variant TEXT PRIMARY KEY,
+            image_size TEXT,
+            aspect_ratio TEXT,
+            server_url TEXT,
+            api_key_id INTEGER
+        )
+    )";
+
+    if (!query.exec(createImagePrefsTable)) {
+        qCritical() << "Failed to create image_preferences table:" << query.lastError().text();
+        return false;
+    }
+
     return true;
 }
 
@@ -795,5 +811,55 @@ ImgbbKey DBManager::getActiveImgbbKey()
         key.isActive = true;
     }
     return key;
+}
+
+// Image Preferences CRUD
+bool DBManager::saveImagePreferences(const ImagePreferences& prefs)
+{
+    QSqlQuery query;
+    query.prepare(R"(
+        INSERT INTO image_preferences (model_variant, image_size, aspect_ratio, server_url, api_key_id)
+        VALUES (:model_variant, :image_size, :aspect_ratio, :server_url, :api_key_id)
+        ON CONFLICT(model_variant) DO UPDATE SET
+            image_size = excluded.image_size,
+            aspect_ratio = excluded.aspect_ratio,
+            server_url = excluded.server_url,
+            api_key_id = excluded.api_key_id
+    )");
+
+    query.bindValue(":model_variant", prefs.modelVariant);
+    query.bindValue(":image_size", prefs.imageSize);
+    query.bindValue(":aspect_ratio", prefs.aspectRatio);
+    query.bindValue(":server_url", prefs.serverUrl);
+    query.bindValue(":api_key_id", prefs.apiKeyId);
+
+    if (!query.exec()) {
+        qCritical() << "Failed to save image preferences:" << query.lastError().text();
+        return false;
+    }
+    return true;
+}
+
+ImagePreferences DBManager::loadImagePreferences(const QString& modelVariant)
+{
+    ImagePreferences prefs;
+    prefs.modelVariant = modelVariant;
+    prefs.imageSize = "1K";
+    prefs.aspectRatio = "1:1";
+    prefs.serverUrl = "";
+    prefs.apiKeyId = -1;
+
+    QSqlQuery query;
+    query.prepare("SELECT image_size, aspect_ratio, server_url, api_key_id FROM image_preferences WHERE model_variant = :model_variant");
+    query.bindValue(":model_variant", modelVariant);
+
+    if (query.exec() && query.next()) {
+        prefs.imageSize = query.value(0).toString();
+        prefs.aspectRatio = query.value(1).toString();
+        prefs.serverUrl = query.value(2).toString();
+        prefs.apiKeyId = query.value(3).toInt();
+    }
+
+    return prefs;
 }
 
