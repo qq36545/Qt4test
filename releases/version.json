@@ -4,7 +4,7 @@
   "updateType": "optional",
   "forceReason": "",
   "releaseDate": "2026-03-23",
-  "releaseNotes": "1. 发布 1.0.2.2（macOS Intel 本地包 + CI 构建 Windows/macOS ARM）\n2. 统一版本来源为 version.txt\n3. windows_x64 与 macos_arm64 的大小和哈希待 CI 完成后回填",
+  "releaseNotes": "1. 发布 1.0.2.2（macOS Intel 本地包 + CI 构建 Windows/macOS ARM）\n2. 统一版本来源为 version.txt\n3. 回填 windows_x64 与 macos_arm64 的真实大小和 sha256",
   "minSupportedVersion": "1.0.0",
   "downloadUrls": {
     "macos_arm64": {
@@ -24,13 +24,13 @@
     }
   },
   "fileSize": {
-    "macos_arm64": 0,
+    "macos_arm64": 48591160,
     "macos_intel": 47037626,
-    "windows_x64": 0
+    "windows_x64": 47285466
   },
   "sha256": {
-    "macos_arm64": "",
+    "macos_arm64": "89858435a6b1662ca8169465cc13fd410c039940fc0386ed5a2a43e6606468af",
     "macos_intel": "22363f0bb2359646e8550f7efce4fec03077cca5637e1cf544f0eaef398a35f2",
-    "windows_x64": ""
+    "windows_x64": "4f3666af532f915d372cb7be09657c1fde44af08c46abbaaebe593790a5444a0"
   }
 }
