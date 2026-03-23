@@ -14,6 +14,7 @@ class HelpWidget : public QWidget
 
 public:
     explicit HelpWidget(QWidget *parent = nullptr);
+    void refreshThemeStyles();
 
 protected:
     void resizeEvent(QResizeEvent *event) override;

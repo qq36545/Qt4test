@@ -14,6 +14,11 @@ HelpWidget::HelpWidget(QWidget *parent)
     setupUI();
 }
 
+void HelpWidget::refreshThemeStyles()
+{
+    updateThemeStyles();
+}
+
 void HelpWidget::setupUI()
 {
     QVBoxLayout *mainLayout = new QVBoxLayout(this);
@@ -32,7 +37,7 @@ void HelpWidget::setupUI()
     titleLabel = new QLabel("使用前必看");
     titleLabel->setObjectName("helpTitle");
     titleLabel->setAlignment(Qt::AlignCenter);
-    titleLabel->setStyleSheet("font-size: 28px; font-weight: 700;");
+    titleLabel->setStyleSheet("font-size: 30px; font-weight: 700;");
 
     // 内容文本浏览器
     textBrowser = new QTextBrowser();
@@ -42,24 +47,28 @@ void HelpWidget::setupUI()
 
     // 设置 HTML 内容
     QString htmlContent = R"(
-        <div style="font-size: 16px; line-height: 1.8; text-align: left;">
-            <h2 style="color: #4fc3f7; margin-top: 20px; text-align: left;">初次使用本软件需要做的两件事情：</h2>
-            <ol style="margin-left: 20px; text-align: left;">
-                <li style="margin-bottom: 15px;">
-                    配置AI模型的密钥，点击<a href="https://g1hzbw0p4dd.feishu.cn/docx/E9YedBOaGoaqS0xvx3qcTrG3n4e?from=from_copylink" style="color: #4fc3f7; text-decoration: none;">这里</a>
+        <div class="help-root">
+            <h2>🚀 快速开始</h2>
+            <p>首次使用建议先完成下面两步配置，成功后即可开始批量生成。</p>
+            <hr/>
+
+            <h3>✅ 必做两步</h3>
+            <ol>
+                <li>
+                    配置 AI 模型密钥：点击<a href="https://g1hzbw0p4dd.feishu.cn/docx/E9YedBOaGoaqS0xvx3qcTrG3n4e?from=from_copylink">这里</a>
                 </li>
-                <li style="margin-bottom: 15px;">
-                    配置临时图床的密钥，点击<a href="https://g1hzbw0p4dd.feishu.cn/docx/WBlkdfh30otuWTxvhhucazUpnyf?from=from_copylink" style="color: #4fc3f7; text-decoration: none;">这里</a>
+                <li>
+                    配置临时图床密钥：点击<a href="https://g1hzbw0p4dd.feishu.cn/docx/WBlkdfh30otuWTxvhhucazUpnyf?from=from_copylink">这里</a>
                 </li>
             </ol>
+            <hr/>
 
-            <p style="margin-top: 30px; font-size: 16px;">
-                如有任何问题，加我微信 <strong style="color: #4fc3f7;">312088415</strong> 拉你进群一起交流学习！
-            </p>
+            <h3>💬 常见支持</h3>
+            <p>遇到问题可添加微信 <strong>312088415</strong>，拉你进群一起交流学习。</p>
+            <hr/>
 
-            <p style="margin-top: 20px;">
-                更多使用教程集合点击<a href="https://g1hzbw0p4dd.feishu.cn/docx/TBeZdghZhoG9yzxju06cTxFBntg?from=from_copylink" style="color: #4fc3f7; text-decoration: none;">这里</a>
-            </p>
+            <h3>📚 更多教程</h3>
+            <p>完整教程集合：点击<a href="https://g1hzbw0p4dd.feishu.cn/docx/TBeZdghZhoG9yzxju06cTxFBntg?from=from_copylink">这里</a></p>
         </div>
     )";
     textBrowser->setHtml(htmlContent);
@@ -77,9 +86,9 @@ void HelpWidget::setupUI()
     mainLayout->addWidget(contentWidget, 0, Qt::AlignCenter);
     mainLayout->addStretch();
 
-    // 初始尺寸：宽度保持 50%，文本框高度增至 tab 页 100%
-    const int contentWidth = std::max(520, width() / 2);
-    const int contentHeight = height();
+    // 初始尺寸：在原基础上放大一倍（宽度 100%，高度 200%）
+    const int contentWidth = std::max(1040, width());
+    const int contentHeight = std::max(800, height() * 2);
     contentWidget->setFixedSize(contentWidth, contentHeight);
 }
 
@@ -87,9 +96,9 @@ void HelpWidget::resizeEvent(QResizeEvent *event)
 {
     QWidget::resizeEvent(event);
 
-    // 内容框：宽度 50%，文本框高度增至 tab 页 100%
-    const int contentWidth = std::max(520, width() / 2);
-    const int contentHeight = height();
+    // 内容框：在原基础上放大一倍（宽度 100%，高度 200%）
+    const int contentWidth = std::max(1040, width());
+    const int contentHeight = std::max(800, height() * 2);
     contentWidget->setFixedSize(contentWidth, contentHeight);
 }
 
@@ -103,20 +112,53 @@ void HelpWidget::changeEvent(QEvent *event)
 
 void HelpWidget::updateThemeStyles()
 {
-    // MainWindow 是通过 setStyleSheet() 应用主题，不在 qApp 上。
-    // 这里必须从顶层窗口读取样式，否则会误判为浅色主题。
     const QWidget *topLevel = window();
-    const QString hostStyle = topLevel ? topLevel->styleSheet() : styleSheet();
-    const bool isDarkTheme = hostStyle.contains("background: #000000")
-        || hostStyle.contains("stop:0 #000000");
+    QString theme = topLevel ? topLevel->property("appTheme").toString() : QString();
 
-    if (isDarkTheme) {
-        titleLabel->setStyleSheet("font-size: 28px; font-weight: 700; color: #ffffff;");
-        textBrowser->setStyleSheet("QTextBrowser { color: #ffffff; background: transparent; }");
-        textBrowser->document()->setDefaultStyleSheet("div, p, li, ol { color: #ffffff; }");
+    bool isDarkTheme = false;
+    if (theme == "dark") {
+        isDarkTheme = true;
+    } else if (theme == "light") {
+        isDarkTheme = false;
     } else {
-        titleLabel->setStyleSheet("font-size: 28px; font-weight: 700; color: #111111;");
-        textBrowser->setStyleSheet("QTextBrowser { color: #111111; background: transparent; }");
-        textBrowser->document()->setDefaultStyleSheet("div, p, li, ol { color: #111111; }");
+        const QPalette pal = topLevel ? topLevel->palette() : palette();
+        isDarkTheme = pal.color(QPalette::Window).lightness() < 128;
     }
+
+    const QString textColor = isDarkTheme ? "#FFFFFF" : "#000000";
+    const QString titleColor = textColor;
+    const QString linkColor = isDarkTheme ? "#FF9F1A" : "#0369A1";
+    const QString linkHoverColor = isDarkTheme ? "#FFC04D" : "#075985";
+    const QString dividerColor = isDarkTheme ? "rgba(255,255,255,0.28)" : "rgba(0,0,0,0.24)";
+
+    titleLabel->setStyleSheet(QString("font-size: 30px; font-weight: 700; color: %1;").arg(titleColor));
+    textBrowser->setStyleSheet(QString("QTextBrowser { background: transparent; border: none; color: %1; font-size: 20px; }").arg(textColor));
+
+    const QString htmlContent = QString(R"(
+        <div style="font-size:20px; line-height:1.8; color:%1; text-align:left;">
+            <h2 style="font-size:20px; color:%2; margin:8px 0 10px 0;">🚀 快速开始</h2>
+            <p style="font-size:20px; color:%1; margin:0 0 10px 0;">首次使用建议先完成下面两步配置，成功后即可开始批量生成。</p>
+            <hr style="border:none; border-top:1px solid %5; margin:16px 0;"/>
+
+            <h3 style="font-size:20px; color:%2; margin:8px 0 10px 0;">✅ 必做两步</h3>
+            <ol style="margin-left:20px; color:%1; font-size:20px;">
+                <li style="margin-bottom:12px; color:%1; font-size:20px;">
+                    配置 AI 模型密钥：点击<a href="https://g1hzbw0p4dd.feishu.cn/docx/E9YedBOaGoaqS0xvx3qcTrG3n4e?from=from_copylink" style="color:%3; font-size:22px; font-weight:700; text-decoration:none;">这里</a>
+                </li>
+                <li style="margin-bottom:12px; color:%1; font-size:20px;">
+                    配置临时图床密钥：点击<a href="https://g1hzbw0p4dd.feishu.cn/docx/WBlkdfh30otuWTxvhhucazUpnyf?from=from_copylink" style="color:%3; font-size:22px; font-weight:700; text-decoration:none;">这里</a>
+                </li>
+            </ol>
+            <hr style="border:none; border-top:1px solid %5; margin:16px 0;"/>
+
+            <h3 style="font-size:20px; color:%2; margin:8px 0 10px 0;">💬 常见支持</h3>
+            <p style="font-size:20px; color:%1; margin:0 0 10px 0;">遇到问题可添加微信 <strong style="color:%1; font-weight:700;">312088415</strong>，拉你进群一起交流学习。</p>
+            <hr style="border:none; border-top:1px solid %5; margin:16px 0;"/>
+
+            <h3 style="font-size:20px; color:%2; margin:8px 0 10px 0;">📚 更多教程</h3>
+            <p style="font-size:20px; color:%1; margin:0;">完整教程集合：点击<a href="https://g1hzbw0p4dd.feishu.cn/docx/TBeZdghZhoG9yzxju06cTxFBntg?from=from_copylink" style="color:%3; font-size:22px; font-weight:700; text-decoration:none;">这里</a></p>
+        </div>
+    )").arg(textColor, titleColor, linkColor, linkHoverColor, dividerColor);
+
+    textBrowser->setHtml(htmlContent);
 }

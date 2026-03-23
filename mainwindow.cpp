@@ -268,6 +268,7 @@ void MainWindow::showHistory()
 void MainWindow::showHelp()
 {
     contentArea->setCurrentWidget(helpWidget);
+    helpWidget->refreshThemeStyles();
     videoButton->setChecked(false);
     imageButton->setChecked(false);
     configButton->setChecked(false);
@@ -289,6 +290,7 @@ void MainWindow::applyStyles()
     QFile file(styleFile);
     if (file.open(QFile::ReadOnly)) {
         QString styleSheet = QLatin1String(file.readAll());
+        setProperty("appTheme", currentTheme == Dark ? "dark" : "light");
         setStyleSheet(styleSheet);
         file.close();
     }
@@ -304,6 +306,9 @@ void MainWindow::toggleTheme()
 
     // 重新应用样式
     applyStyles();
+    if (contentArea->currentWidget() == helpWidget) {
+        helpWidget->refreshThemeStyles();
+    }
 
     // 保存主题偏好
     saveTheme();
