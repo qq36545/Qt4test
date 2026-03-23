@@ -128,7 +128,6 @@ void HelpWidget::updateThemeStyles()
     const QString textColor = isDarkTheme ? "#FFFFFF" : "#000000";
     const QString titleColor = textColor;
     const QString linkColor = isDarkTheme ? "#FF9F1A" : "#0369A1";
-    const QString linkHoverColor = isDarkTheme ? "#FFC04D" : "#075985";
     const QString dividerColor = isDarkTheme ? "rgba(255,255,255,0.28)" : "rgba(0,0,0,0.24)";
 
     titleLabel->setStyleSheet(QString("font-size: 30px; font-weight: 700; color: %1;").arg(titleColor));
