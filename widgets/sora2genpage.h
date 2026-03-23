@@ -3,6 +3,7 @@
 
 #include <QWidget>
 #include <QVariantMap>
+#include <QEvent>
 
 class QComboBox;
 class QTextEdit;
@@ -11,6 +12,9 @@ class QLabel;
 class QCheckBox;
 class QPushButton;
 class QStackedWidget;
+class QRadioButton;
+class QButtonGroup;
+class QShowEvent;
 struct VideoTask;
 
 class Sora2GenPage : public QWidget
@@ -21,17 +25,23 @@ public:
     explicit Sora2GenPage(QWidget *parent = nullptr);
     void loadFromTask(const VideoTask &task);
 
+protected:
+    void changeEvent(QEvent *event) override;
+    void showEvent(QShowEvent *event) override;
+
 signals:
     void createTaskRequested(const QVariantMap &payload);
 
 private slots:
     void onSubmitClicked();
-    void onApiFormatChanged(int index);
+    void onApiFormatChanged();
     void onUploadImagesClicked();
 
 private:
     void setupUI();
     void refreshImageList();
+    void applyApiFormatRadioStyle();
+    QString resolveAppTheme() const;
 
     QString currentApiFormat() const;
     QString currentVariant() const;
@@ -41,7 +51,10 @@ private:
     QVariantMap buildOpenAIPayload() const;
 
 private:
-    QComboBox *apiFormatCombo;
+    QRadioButton *unifiedFormatRadio;
+    QRadioButton *openaiFormatRadio;
+    QButtonGroup *apiFormatGroup;
+    QLabel *apiFormatLabel;
     QComboBox *variantCombo;
     QTextEdit *promptInput;
     QPushButton *uploadImagesButton;

@@ -13,12 +13,21 @@
 #include <QListWidget>
 #include <QStackedWidget>
 #include <QGroupBox>
+#include <QRadioButton>
+#include <QButtonGroup>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QMessageBox>
 #include <QImageReader>
+#include <QScrollArea>
+#include <QFrame>
+#include <QPalette>
+#include <QColor>
+#include <QFont>
+#include <QShowEvent>
+#include <QObject>
 
 Sora2GenPage::Sora2GenPage(QWidget *parent)
     : QWidget(parent)
@@ -29,16 +38,32 @@ Sora2GenPage::Sora2GenPage(QWidget *parent)
 void Sora2GenPage::setupUI()
 {
     auto *mainLayout = new QVBoxLayout(this);
-    mainLayout->setContentsMargins(20, 20, 20, 20);
-    mainLayout->setSpacing(12);
+    mainLayout->setContentsMargins(0, 0, 0, 0);
+    mainLayout->setSpacing(0);
+
+    auto *scrollArea = new QScrollArea();
+    scrollArea->setWidgetResizable(true);
+    scrollArea->setFrameShape(QFrame::NoFrame);
+
+    auto *contentWidget = new QWidget();
+    auto *contentLayout = new QVBoxLayout(contentWidget);
+    contentLayout->setContentsMargins(20, 20, 20, 20);
+    contentLayout->setSpacing(12);
 
     auto *apiFormatLayout = new QHBoxLayout();
-    apiFormatLayout->addWidget(new QLabel("API格式:"));
-    apiFormatCombo = new QComboBox();
-    apiFormatCombo->addItem("统一格式", "unified");
-    apiFormatCombo->addItem("OpenAI格式", "openai");
-    apiFormatLayout->addWidget(apiFormatCombo, 1);
-    mainLayout->addLayout(apiFormatLayout);
+    apiFormatLabel = new QLabel("API格式:");
+    apiFormatLayout->addWidget(apiFormatLabel);
+    unifiedFormatRadio = new QRadioButton("统一格式");
+    openaiFormatRadio = new QRadioButton("OpenAI格式");
+    apiFormatGroup = new QButtonGroup(this);
+    apiFormatGroup->setExclusive(true);
+    apiFormatGroup->addButton(unifiedFormatRadio);
+    apiFormatGroup->addButton(openaiFormatRadio);
+    unifiedFormatRadio->setChecked(true);
+    apiFormatLayout->addWidget(unifiedFormatRadio);
+    apiFormatLayout->addWidget(openaiFormatRadio);
+    apiFormatLayout->addStretch();
+    contentLayout->addLayout(apiFormatLayout);
 
     auto *variantLayout = new QHBoxLayout();
     variantLayout->addWidget(new QLabel("模型变体:"));
@@ -51,54 +76,95 @@ void Sora2GenPage::setupUI()
         "sora-2-pro-all"
     });
     variantLayout->addWidget(variantCombo, 1);
-    mainLayout->addLayout(variantLayout);
-
-    mainLayout->addWidget(new QLabel("提示词:"));
-    promptInput = new QTextEdit();
-    promptInput->setMinimumHeight(180);
-    promptInput->setPlaceholderText("请输入视频生成提示词...");
-    mainLayout->addWidget(promptInput);
-
-    auto *imagesTitleLayout = new QHBoxLayout();
-    imagesTitleLayout->addWidget(new QLabel("参考图:"));
-    imagesTitleLayout->addStretch();
-    uploadImagesButton = new QPushButton("上传参考图");
-    imagesTitleLayout->addWidget(uploadImagesButton);
-    mainLayout->addLayout(imagesTitleLayout);
-
-    imageList = new QListWidget();
-    imageList->setMinimumHeight(96);
-    mainLayout->addWidget(imageList);
+    contentLayout->addLayout(variantLayout);
 
     paramsStack = new QStackedWidget();
 
     auto *unifiedWidget = new QWidget();
-    auto *unifiedForm = new QFormLayout(unifiedWidget);
+    auto *unifiedRow = new QHBoxLayout(unifiedWidget);
+    unifiedRow->setContentsMargins(0, 0, 0, 0);
+    unifiedRow->setSpacing(12);
+
+    auto *unifiedSizeLayout = new QVBoxLayout();
+    auto *unifiedSizeLabel = new QLabel("分辨率");
+    unifiedSizeLabel->setStyleSheet("font-size: 14px;");
     unifiedSizeCombo = new QComboBox();
     unifiedSizeCombo->addItem("small(720p)", "small");
     unifiedSizeCombo->addItem("large(1080p)", "large");
+    unifiedSizeLayout->addWidget(unifiedSizeLabel);
+    unifiedSizeLayout->addWidget(unifiedSizeCombo);
+
+    auto *unifiedOrientationLayout = new QVBoxLayout();
+    auto *unifiedOrientationLabel = new QLabel("方向");
+    unifiedOrientationLabel->setStyleSheet("font-size: 14px;");
     unifiedOrientationCombo = new QComboBox();
     unifiedOrientationCombo->addItem("竖屏", "portrait");
     unifiedOrientationCombo->addItem("横屏", "landscape");
+    unifiedOrientationLayout->addWidget(unifiedOrientationLabel);
+    unifiedOrientationLayout->addWidget(unifiedOrientationCombo);
+
+    auto *unifiedDurationLayout = new QVBoxLayout();
+    auto *unifiedDurationLabel = new QLabel("时长");
+    unifiedDurationLabel->setStyleSheet("font-size: 14px;");
     unifiedDurationCombo = new QComboBox();
     unifiedDurationCombo->addItem("5秒", "5");
     unifiedDurationCombo->addItem("10秒", "10");
-    unifiedForm->addRow("分辨率", unifiedSizeCombo);
-    unifiedForm->addRow("方向", unifiedOrientationCombo);
-    unifiedForm->addRow("时长", unifiedDurationCombo);
+    unifiedDurationLayout->addWidget(unifiedDurationLabel);
+    unifiedDurationLayout->addWidget(unifiedDurationCombo);
+
+    auto *unifiedWatermarkLayout = new QVBoxLayout();
+    auto *unifiedWatermarkLabel = new QLabel("watermark");
+    unifiedWatermarkLabel->setStyleSheet("font-size: 14px;");
+    watermarkCheckBox = new QCheckBox("开启");
+    watermarkCheckBox->setChecked(false);
+    unifiedWatermarkLayout->addWidget(unifiedWatermarkLabel);
+    unifiedWatermarkLayout->addWidget(watermarkCheckBox);
+
+    auto *unifiedPrivateLayout = new QVBoxLayout();
+    auto *unifiedPrivateLabel = new QLabel("private");
+    unifiedPrivateLabel->setStyleSheet("font-size: 14px;");
+    privateCheckBox = new QCheckBox("开启");
+    privateCheckBox->setChecked(false);
+    unifiedPrivateLayout->addWidget(unifiedPrivateLabel);
+    unifiedPrivateLayout->addWidget(privateCheckBox);
+
+    unifiedRow->addLayout(unifiedSizeLayout);
+    unifiedRow->addLayout(unifiedOrientationLayout);
+    unifiedRow->addLayout(unifiedDurationLayout);
+    unifiedRow->addLayout(unifiedWatermarkLayout);
+    unifiedRow->addLayout(unifiedPrivateLayout);
+    unifiedRow->addStretch();
     paramsStack->addWidget(unifiedWidget);
 
     auto *openaiWidget = new QWidget();
-    auto *openaiForm = new QFormLayout(openaiWidget);
-    openaiSecondsCombo = new QComboBox();
-    openaiSecondsCombo->addItem("4秒", "4");
-    openaiSecondsCombo->addItem("8秒", "8");
-    openaiSecondsCombo->addItem("12秒", "12");
+    auto *openaiRow = new QHBoxLayout(openaiWidget);
+    openaiRow->setContentsMargins(0, 0, 0, 0);
+    openaiRow->setSpacing(12);
+
+    auto *openaiSizeLayout = new QVBoxLayout();
+    auto *openaiSizeLabel = new QLabel("分辨率");
+    openaiSizeLabel->setStyleSheet("font-size: 14px;");
     openaiSizeCombo = new QComboBox();
     openaiSizeCombo->addItem("720x1280", "720x1280");
     openaiSizeCombo->addItem("1280x720", "1280x720");
     openaiSizeCombo->addItem("1024x1792", "1024x1792");
     openaiSizeCombo->addItem("1792x1024", "1792x1024");
+    openaiSizeLayout->addWidget(openaiSizeLabel);
+    openaiSizeLayout->addWidget(openaiSizeCombo);
+
+    auto *openaiDurationLayout = new QVBoxLayout();
+    auto *openaiDurationLabel = new QLabel("时长");
+    openaiDurationLabel->setStyleSheet("font-size: 14px;");
+    openaiSecondsCombo = new QComboBox();
+    openaiSecondsCombo->addItem("4秒", "4");
+    openaiSecondsCombo->addItem("8秒", "8");
+    openaiSecondsCombo->addItem("12秒", "12");
+    openaiDurationLayout->addWidget(openaiDurationLabel);
+    openaiDurationLayout->addWidget(openaiSecondsCombo);
+
+    auto *openaiStyleLayout = new QVBoxLayout();
+    auto *openaiStyleLabel = new QLabel("风格");
+    openaiStyleLabel->setStyleSheet("font-size: 14px;");
     openaiStyleCombo = new QComboBox();
     openaiStyleCombo->addItem("默认(空)", "");
     openaiStyleCombo->addItem("感恩节", "thanksgiving");
@@ -107,35 +173,169 @@ void Sora2GenPage::setupUI()
     openaiStyleCombo->addItem("自拍", "selfie");
     openaiStyleCombo->addItem("怀旧", "nostalgic");
     openaiStyleCombo->addItem("动漫", "anime");
-    openaiForm->addRow("时长", openaiSecondsCombo);
-    openaiForm->addRow("分辨率", openaiSizeCombo);
-    openaiForm->addRow("风格", openaiStyleCombo);
+    openaiStyleLayout->addWidget(openaiStyleLabel);
+    openaiStyleLayout->addWidget(openaiStyleCombo);
+
+    auto *openaiWatermarkLayout = new QVBoxLayout();
+    auto *openaiWatermarkLabel = new QLabel("watermark");
+    openaiWatermarkLabel->setStyleSheet("font-size: 14px;");
+    auto *openaiWatermarkCheckBox = new QCheckBox("开启");
+    openaiWatermarkCheckBox->setChecked(false);
+    openaiWatermarkLayout->addWidget(openaiWatermarkLabel);
+    openaiWatermarkLayout->addWidget(openaiWatermarkCheckBox);
+
+    auto *openaiPrivateLayout = new QVBoxLayout();
+    auto *openaiPrivateLabel = new QLabel("private");
+    openaiPrivateLabel->setStyleSheet("font-size: 14px;");
+    auto *openaiPrivateCheckBox = new QCheckBox("开启");
+    openaiPrivateCheckBox->setChecked(false);
+    openaiPrivateLayout->addWidget(openaiPrivateLabel);
+    openaiPrivateLayout->addWidget(openaiPrivateCheckBox);
+
+    connect(openaiWatermarkCheckBox, &QCheckBox::toggled, watermarkCheckBox, &QCheckBox::setChecked);
+    connect(watermarkCheckBox, &QCheckBox::toggled, openaiWatermarkCheckBox, &QCheckBox::setChecked);
+    connect(openaiPrivateCheckBox, &QCheckBox::toggled, privateCheckBox, &QCheckBox::setChecked);
+    connect(privateCheckBox, &QCheckBox::toggled, openaiPrivateCheckBox, &QCheckBox::setChecked);
+
+    openaiRow->addLayout(openaiSizeLayout);
+    openaiRow->addLayout(openaiDurationLayout);
+    openaiRow->addLayout(openaiStyleLayout);
+    openaiRow->addLayout(openaiWatermarkLayout);
+    openaiRow->addLayout(openaiPrivateLayout);
+    openaiRow->addStretch();
     paramsStack->addWidget(openaiWidget);
 
     auto *paramsGroup = new QGroupBox("参数设置");
     auto *paramsLayout = new QVBoxLayout(paramsGroup);
     paramsLayout->addWidget(paramsStack);
-    mainLayout->addWidget(paramsGroup);
+    contentLayout->addWidget(paramsGroup);
 
-    auto *flagsLayout = new QHBoxLayout();
-    watermarkCheckBox = new QCheckBox("watermark");
-    privateCheckBox = new QCheckBox("private");
-    watermarkCheckBox->setChecked(false);
-    privateCheckBox->setChecked(false);
-    flagsLayout->addWidget(watermarkCheckBox);
-    flagsLayout->addWidget(privateCheckBox);
-    flagsLayout->addStretch();
-    mainLayout->addLayout(flagsLayout);
+    auto *promptHeaderLayout = new QHBoxLayout();
+    auto *promptLabel = new QLabel("提示词:");
+    promptLabel->setStyleSheet("font-size: 14px;");
+    auto *clearPromptButton = new QPushButton("清空文本");
+    clearPromptButton->setCursor(Qt::PointingHandCursor);
+    connect(clearPromptButton, &QPushButton::clicked, this, [this]() {
+        promptInput->clear();
+    });
+    promptHeaderLayout->addWidget(promptLabel);
+    promptHeaderLayout->addStretch();
+    promptHeaderLayout->addWidget(clearPromptButton);
+    contentLayout->addLayout(promptHeaderLayout);
+
+    promptInput = new QTextEdit();
+    promptInput->setMinimumHeight(240);
+    promptInput->setPlaceholderText("输入视频生成提示词...\n例如：一只可爱的猫咪在花园里玩耍，阳光明媚，电影级画质");
+    promptInput->setStyleSheet("font-size: 15px;");
+    contentLayout->addWidget(promptInput);
+
+    auto *imagesTitleLayout = new QHBoxLayout();
+    auto *imagesLabel = new QLabel("参考图:");
+    imagesLabel->setStyleSheet("font-size: 14px;");
+    imagesTitleLayout->addWidget(imagesLabel);
+    imagesTitleLayout->addStretch();
+    contentLayout->addLayout(imagesTitleLayout);
+
+    auto *imagesLayout = new QHBoxLayout();
+    imageList = new QListWidget();
+    imageList->setMinimumHeight(150);
+    imageList->setStyleSheet("font-size: 14px;");
+
+    auto *imagesButtonsLayout = new QVBoxLayout();
+    uploadImagesButton = new QPushButton("选择参考图");
+    uploadImagesButton->setFixedWidth(150);
+    uploadImagesButton->setCursor(Qt::PointingHandCursor);
+
+    auto *clearImagesButton = new QPushButton("清除");
+    clearImagesButton->setFixedWidth(80);
+    clearImagesButton->setCursor(Qt::PointingHandCursor);
+    connect(clearImagesButton, &QPushButton::clicked, this, [this]() {
+        uploadedImagePaths.clear();
+        refreshImageList();
+    });
+
+    imagesButtonsLayout->addWidget(uploadImagesButton);
+    imagesButtonsLayout->addWidget(clearImagesButton);
+    imagesButtonsLayout->addStretch();
+
+    imagesLayout->addWidget(imageList, 1);
+    imagesLayout->addLayout(imagesButtonsLayout);
+    contentLayout->addLayout(imagesLayout);
 
     submitButton = new QPushButton("开始生成");
-    mainLayout->addWidget(submitButton);
+    contentLayout->addWidget(submitButton);
 
     connect(submitButton, &QPushButton::clicked, this, &Sora2GenPage::onSubmitClicked);
-    connect(apiFormatCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
-            this, &Sora2GenPage::onApiFormatChanged);
+    connect(unifiedFormatRadio, &QRadioButton::toggled, this, &Sora2GenPage::onApiFormatChanged);
+    connect(openaiFormatRadio, &QRadioButton::toggled, this, &Sora2GenPage::onApiFormatChanged);
     connect(uploadImagesButton, &QPushButton::clicked, this, &Sora2GenPage::onUploadImagesClicked);
 
-    onApiFormatChanged(apiFormatCombo->currentIndex());
+    contentLayout->addStretch();
+    scrollArea->setWidget(contentWidget);
+    mainLayout->addWidget(scrollArea);
+
+    onApiFormatChanged();
+    applyApiFormatRadioStyle();
+}
+
+void Sora2GenPage::applyApiFormatRadioStyle()
+{
+    const QFont labelFont = apiFormatLabel->font();
+    unifiedFormatRadio->setFont(labelFont);
+    openaiFormatRadio->setFont(labelFont);
+
+    const QString appTheme = resolveAppTheme();
+    QString textColor;
+    if (appTheme == "dark") {
+        textColor = "#FFFFFF";
+    } else if (appTheme == "light") {
+        textColor = "#000000";
+    } else {
+        const QColor windowColor = palette().color(QPalette::Window);
+        const int brightness = (windowColor.red() * 299 + windowColor.green() * 587 + windowColor.blue() * 114) / 1000;
+        textColor = (brightness < 128) ? "#FFFFFF" : "#000000";
+    }
+
+    const int fontSize = labelFont.pointSize() > 0 ? labelFont.pointSize() : font().pointSize();
+    const QString style = QString(
+        "QRadioButton { color: %1; font-size: %2pt; }"
+        "QRadioButton::indicator:disabled { border: 1px solid %1; }"
+    ).arg(textColor).arg(fontSize);
+
+    unifiedFormatRadio->setStyleSheet(style);
+    openaiFormatRadio->setStyleSheet(style);
+    unifiedFormatRadio->update();
+    openaiFormatRadio->update();
+}
+
+QString Sora2GenPage::resolveAppTheme() const
+{
+    const QObject *obj = this;
+    while (obj) {
+        const QVariant theme = obj->property("appTheme");
+        if (theme.isValid()) {
+            const QString value = theme.toString().trimmed().toLower();
+            if (value == "dark" || value == "light") {
+                return value;
+            }
+        }
+        obj = obj->parent();
+    }
+    return QString();
+}
+
+void Sora2GenPage::changeEvent(QEvent *event)
+{
+    QWidget::changeEvent(event);
+    if (event->type() == QEvent::PaletteChange || event->type() == QEvent::StyleChange || event->type() == QEvent::ThemeChange) {
+        applyApiFormatRadioStyle();
+    }
+}
+
+void Sora2GenPage::showEvent(QShowEvent *event)
+{
+    QWidget::showEvent(event);
+    applyApiFormatRadioStyle();
 }
 
 void Sora2GenPage::refreshImageList()
@@ -148,7 +348,7 @@ void Sora2GenPage::refreshImageList()
 
 QString Sora2GenPage::currentApiFormat() const
 {
-    return apiFormatCombo->currentData().toString();
+    return unifiedFormatRadio->isChecked() ? "unified" : "openai";
 }
 
 QString Sora2GenPage::currentVariant() const
@@ -213,9 +413,9 @@ void Sora2GenPage::onSubmitClicked()
     }
 }
 
-void Sora2GenPage::onApiFormatChanged(int index)
+void Sora2GenPage::onApiFormatChanged()
 {
-    paramsStack->setCurrentIndex(index == 0 ? 0 : 1);
+    paramsStack->setCurrentIndex(unifiedFormatRadio->isChecked() ? 0 : 1);
 }
 
 void Sora2GenPage::onUploadImagesClicked()
