@@ -368,71 +368,25 @@ void VideoBatchTab::setupUI()
     mainLayout->setContentsMargins(0, 0, 0, 0);
     mainLayout->setSpacing(0);
 
-    // 创建滚动区域
     QScrollArea *scrollArea = new QScrollArea();
     scrollArea->setWidgetResizable(true);
     scrollArea->setFrameShape(QFrame::NoFrame);
 
-    // 创建内容容器
     QWidget *contentWidget = new QWidget();
-    contentWidget->setObjectName("scrollContentWidget");  // 设置 objectName 用于 QSS
-    contentWidget->setAutoFillBackground(false);  // 关键：不自动填充背景
+    contentWidget->setObjectName("scrollContentWidget");
+    contentWidget->setAutoFillBackground(false);
     QVBoxLayout *contentLayout = new QVBoxLayout(contentWidget);
     contentLayout->setContentsMargins(20, 20, 20, 20);
     contentLayout->setSpacing(15);
-
-    // 模型选择
-    QHBoxLayout *modelLayout = new QHBoxLayout();
-    QLabel *modelLabel = new QLabel("视频模型:");
-    modelLabel->setStyleSheet("font-size: 14px;");
-    modelCombo = new QComboBox();
-    modelCombo->addItems({"VEO3视频", "Grok3视频", "WAN视频"});
-    modelCombo->setCurrentIndex(0); // 默认选择 VEO3
-    connect(modelCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &VideoBatchTab::onModelChanged);
-    modelLayout->addWidget(modelLabel);
-    modelLayout->addWidget(modelCombo, 1);
-    contentLayout->addLayout(modelLayout);
-
-    // VEO3 模型变体选择
-    QHBoxLayout *variantLayout = new QHBoxLayout();
-    QLabel *variantLabel = new QLabel("模型变体:");
-    variantLabel->setStyleSheet("font-size: 14px;");
-    modelVariantCombo = new QComboBox();
-    modelVariantCombo->addItem("veo_3_1-fast", "veo_3_1-fast");
-    modelVariantCombo->addItem("veo_3_1", "veo_3_1");
-    modelVariantCombo->addItem("veo_3_1-fast-4K", "veo_3_1-fast-4K");
-    modelVariantCombo->addItem("veo_3_1-fast-components-4K", "veo_3_1-fast-components-4K");
-    modelVariantCombo->addItem("veo3.1-fast", "veo3.1-fast");
-    modelVariantCombo->addItem("veo3.1", "veo3.1");
-    modelVariantCombo->addItem("veo3.1-fast-components", "veo3.1-fast-components");
-    modelVariantCombo->addItem("veo3.1-components", "veo3.1-components");
-    modelVariantCombo->addItem("veo3.1-4k", "veo3.1-4k");
-    modelVariantCombo->addItem("veo3-pro-frames", "veo3-pro-frames");
-    modelVariantCombo->addItem("veo3.1-components-4k", "veo3.1-components-4k");
-    modelVariantCombo->addItem("veo3.1-pro", "veo3.1-pro");
-    modelVariantCombo->addItem("veo3.1-pro-4k", "veo3.1-pro-4k");
-    modelVariantCombo->addItem("veo3", "veo3");
-    modelVariantCombo->addItem("veo3-fast", "veo3-fast");
-    modelVariantCombo->addItem("veo3-fast-frames", "veo3-fast-frames");
-    modelVariantCombo->addItem("veo3-frames", "veo3-frames");
-    modelVariantCombo->addItem("veo3-pro", "veo3-pro");
-    connect(modelVariantCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &VideoBatchTab::onModelVariantChanged);
-    variantLayout->addWidget(variantLabel);
-    variantLayout->addWidget(modelVariantCombo, 1);
-    contentLayout->addLayout(variantLayout);
 
     // API Key 选择
     QHBoxLayout *keyLayout = new QHBoxLayout();
     QLabel *keyLabel = new QLabel("API 密钥:");
     keyLabel->setStyleSheet("font-size: 14px;");
     apiKeyCombo = new QComboBox();
-    addKeyButton = new QPushButton("➕ 添加密钥");
-    connect(addKeyButton, &QPushButton::clicked, []() {
-        QMessageBox::information(nullptr, "提示", "请前往配置页面添加密钥");
-    });
+    addKeyButton = nullptr;
     keyLayout->addWidget(keyLabel);
     keyLayout->addWidget(apiKeyCombo, 1);
-    keyLayout->addWidget(addKeyButton);
     contentLayout->addLayout(keyLayout);
 
     // 请求服务器选择
@@ -442,105 +396,10 @@ void VideoBatchTab::setupUI()
     serverCombo = new QComboBox();
     serverCombo->addItem("【主站】https://ai.kegeai.top", "https://ai.kegeai.top");
     serverCombo->addItem("【备用】https://api.kuai.host", "https://api.kuai.host");
-    serverCombo->setCurrentIndex(0); // 默认选择主站
+    serverCombo->setCurrentIndex(0);
     serverLayout->addWidget(serverLabel);
     serverLayout->addWidget(serverCombo, 1);
     contentLayout->addLayout(serverLayout);
-
-    // 提示词输入（多行）
-    QHBoxLayout *promptHeaderLayout = new QHBoxLayout();
-    QLabel *promptLabel = new QLabel("批量提示词（每行一个）:");
-    promptLabel->setStyleSheet("font-size: 14px;");
-    QPushButton *clearPromptButton = new QPushButton("🧹 清空文本");
-    clearPromptButton->setCursor(Qt::PointingHandCursor);
-    connect(clearPromptButton, &QPushButton::clicked, this, [this]() {
-        promptInput->clear();
-    });
-    promptHeaderLayout->addWidget(promptLabel);
-    promptHeaderLayout->addStretch();
-    promptHeaderLayout->addWidget(clearPromptButton);
-
-    promptInput = new QTextEdit();
-    promptInput->setPlaceholderText("输入多个提示词，每行一个...\n例如：\n一只猫在花园玩耍\n日落时的海滩\n城市夜景");
-    promptInput->setMinimumHeight(120);  // 支持多行输入和滚动
-    contentLayout->addLayout(promptHeaderLayout);
-    contentLayout->addWidget(promptInput);
-
-    // 图片拖放区域
-    imageLabel = new QLabel("图片（可选，拖放图片到下方区域）:");
-    imageLabel->setStyleSheet("font-size: 14px;");
-    imageDropArea = new QLabel();
-    imageDropArea->setObjectName("imageDropArea");
-    imageDropArea->setAlignment(Qt::AlignCenter);
-    imageDropArea->setText("📁 拖放图片到这里\n（图生视频）");
-    imageDropArea->setMinimumHeight(100);
-    imageDropArea->setAcceptDrops(true);
-    contentLayout->addWidget(imageLabel);
-    contentLayout->addWidget(imageDropArea);
-
-    // 图片列表
-    imageList = new QListWidget();
-    imageList->setMaximumHeight(100);
-    contentLayout->addWidget(imageList);
-
-    // 尾帧提示（根据模型动态显示）
-    endFrameWidget = new QWidget();
-    QVBoxLayout *endFrameLayout = new QVBoxLayout(endFrameWidget);
-    endFrameLayout->setContentsMargins(0, 0, 0, 0);
-    endFrameLabel = new QLabel("提示：当前模型支持首尾帧垫图");
-    endFrameLabel->setStyleSheet("font-size: 12px; font-style: italic;");
-    endFrameLayout->addWidget(endFrameLabel);
-    contentLayout->addWidget(endFrameWidget);
-    endFrameWidget->setVisible(true);
-
-    // 参数设置
-    QHBoxLayout *paramsLayout = new QHBoxLayout();
-
-    QVBoxLayout *resLayout = new QVBoxLayout();
-    QLabel *resLabel = new QLabel("分辨率");
-    resLabel->setStyleSheet("font-size: 14px;");
-    resolutionCombo = new QComboBox();
-    resolutionCombo->addItem("横屏 16:9 (1280x720)", "1280x720");
-    resolutionCombo->addItem("竖屏 9:16 (720x1280)", "720x1280");
-    resLayout->addWidget(resLabel);
-    resLayout->addWidget(resolutionCombo);
-
-    QVBoxLayout *durLayout = new QVBoxLayout();
-    QLabel *durLabel = new QLabel("时长（秒）");
-    durLabel->setStyleSheet("font-size: 14px;");
-    durationCombo = new QComboBox();
-    durationCombo->addItem("8秒（固定）", "8");
-    durationCombo->setEnabled(false); // VEO3 固定 8 秒
-    durLayout->addWidget(durLabel);
-    durLayout->addWidget(durationCombo);
-
-    QVBoxLayout *watermarkLayout = new QVBoxLayout();
-    QLabel *watermarkLabel = new QLabel("水印");
-    watermarkLabel->setStyleSheet("font-size: 14px;");
-    watermarkCheckBox = new QCheckBox("添加水印");
-    watermarkLayout->addWidget(watermarkLabel);
-    watermarkLayout->addWidget(watermarkCheckBox);
-
-    paramsLayout->addLayout(resLayout);
-    paramsLayout->addLayout(durLayout);
-    paramsLayout->addLayout(watermarkLayout);
-    paramsLayout->addStretch();
-
-    contentLayout->addLayout(paramsLayout);
-
-    // 按钮行
-    QHBoxLayout *buttonLayout = new QHBoxLayout();
-    importButton = new QPushButton("📄 导入 CSV");
-    deleteButton = new QPushButton("🗑️ 删除选中");
-    deleteAllButton = new QPushButton("🗑️ 全部删除");
-    connect(importButton, &QPushButton::clicked, this, &VideoBatchTab::importCSV);
-    connect(deleteButton, &QPushButton::clicked, this, &VideoBatchTab::deleteSelected);
-    connect(deleteAllButton, &QPushButton::clicked, this, &VideoBatchTab::deleteAll);
-    buttonLayout->addWidget(importButton);
-    buttonLayout->addWidget(deleteButton);
-    buttonLayout->addWidget(deleteAllButton);
-    buttonLayout->addStretch();
-    contentLayout->addLayout(buttonLayout);
 
     // 生成按钮
     generateButton = new QPushButton("🚀 批量生成视频");
@@ -548,12 +407,14 @@ void VideoBatchTab::setupUI()
     connect(generateButton, &QPushButton::clicked, this, &VideoBatchTab::generateBatch);
     contentLayout->addWidget(generateButton);
 
-    // 设置滚动区域
+    // 开发状态提示
+    QLabel *comingSoonLabel = new QLabel("批量功能待开发中");
+    comingSoonLabel->setAlignment(Qt::AlignCenter);
+    comingSoonLabel->setStyleSheet("font-size: 28px;");
+    contentLayout->addWidget(comingSoonLabel);
+
     scrollArea->setWidget(contentWidget);
     mainLayout->addWidget(scrollArea);
-
-    // 初始化UI状态
-    onModelVariantChanged(0);
 }
 
 void VideoBatchTab::loadApiKeys()
@@ -564,13 +425,15 @@ void VideoBatchTab::loadApiKeys()
     if (keys.isEmpty()) {
         apiKeyCombo->addItem("无可用密钥");
         apiKeyCombo->setEnabled(false);
-        addKeyButton->setVisible(true);
     } else {
         apiKeyCombo->setEnabled(true);
-        addKeyButton->setVisible(false);
         for (const ApiKey& key : keys) {
             apiKeyCombo->addItem(key.name, key.id);
         }
+    }
+
+    if (addKeyButton) {
+        addKeyButton->setVisible(keys.isEmpty());
     }
 }
 
@@ -579,139 +442,14 @@ void VideoBatchTab::refreshApiKeys()
     loadApiKeys();
 }
 
-void VideoBatchTab::onModelChanged(int index)
-{
-    loadApiKeys();
-}
-
-void VideoBatchTab::onModelVariantChanged(int index)
-{
-    QString modelName = modelVariantCombo->currentData().toString();
-    updateImageUploadUI(modelName);
-    updateResolutionOptions(modelName.contains("4K") || modelName.contains("4k"));
-}
-
-void VideoBatchTab::updateImageUploadUI(const QString &modelName)
-{
-    bool isComponents = modelName.contains("components");
-    bool isFrames = modelName.contains("frames");
-
-    if (isComponents) {
-        imageLabel->setText("图片（1-3张首帧，拖放到下方区域）:");
-        endFrameLabel->setText("提示：当前模型仅支持首帧（1-3张图片）");
-        endFrameWidget->setVisible(true);
-    } else if (isFrames) {
-        imageLabel->setText("图片（单张首帧，拖放到下方区域）:");
-        endFrameLabel->setText("提示：当前模型仅支持首帧（单张图片）");
-        endFrameWidget->setVisible(true);
-    } else {
-        imageLabel->setText("图片（可选，拖放到下方区域）:");
-        endFrameLabel->setText("提示：当前模型支持首尾帧垫图");
-        endFrameWidget->setVisible(true);
-    }
-}
-
-void VideoBatchTab::updateResolutionOptions(bool is4K)
-{
-    resolutionCombo->clear();
-    if (is4K) {
-        resolutionCombo->addItem("横屏 16:9 (3840x2160)", "3840x2160");
-        resolutionCombo->addItem("竖屏 9:16 (2160x3840)", "2160x3840");
-    } else {
-        resolutionCombo->addItem("横屏 16:9 (1280x720)", "1280x720");
-        resolutionCombo->addItem("竖屏 9:16 (720x1280)", "720x1280");
-    }
-}
-
 void VideoBatchTab::generateBatch()
 {
-    QString prompts = promptInput->toPlainText().trimmed();
-    if (prompts.isEmpty()) {
-        QMessageBox::warning(this, "提示", "请输入至少一个提示词");
-        return;
-    }
-
     if (apiKeyCombo->count() == 0 || !apiKeyCombo->isEnabled()) {
         QMessageBox::warning(this, "提示", "请先添加 API 密钥");
         return;
     }
 
-    QStringList promptList = prompts.split('\n', Qt::SkipEmptyParts);
-    QString model = modelCombo->currentText();
-    QString modelVariant = modelVariantCombo->currentData().toString();
-    QString server = serverCombo->currentData().toString();
-    QString resolution = resolutionCombo->currentData().toString();
-    QString duration = durationCombo->currentData().toString();
-    bool watermark = watermarkCheckBox->isChecked();
-
-    // 保存批量任务到历史记录
-    for (const QString& prompt : promptList) {
-        GenerationHistory history;
-        history.date = QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss");
-        history.type = "batch";
-        history.modelType = "video";
-        history.modelName = model + " (" + modelVariant + ")";
-        history.prompt = prompt.trimmed();
-        history.parameters = QString("服务器:%1, 分辨率:%2, 时长:%3秒, 水印:%4, 批量生成")
-            .arg(server)
-            .arg(resolution)
-            .arg(duration)
-            .arg(watermark ? "是" : "否");
-        history.status = "pending";
-        DBManager::instance()->addGenerationHistory(history);
-    }
-
-    QMessageBox::information(this, "批量生成",
-        QString("已添加 %1 个视频生成任务到队列\n\n"
-                "模型: %2\n"
-                "模型变体: %3\n"
-                "服务器: %4\n"
-                "分辨率: %5\n"
-                "时长: %6秒\n"
-                "水印: %7\n\n"
-                "(演示版本，已保存到历史记录)")
-        .arg(promptList.size())
-        .arg(model)
-        .arg(modelVariant)
-        .arg(server)
-        .arg(resolution)
-        .arg(duration)
-        .arg(watermark ? "是" : "否"));
-}
-
-void VideoBatchTab::importCSV()
-{
-    // 读取上次图片上传路径（与单个生成共享）
-    QSettings settings("ChickenAI", "VideoGen");
-    QString lastDir = settings.value("lastImageUploadDir", QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation)).toString();
-
-    // 验证路径是否存在
-    if (!QDir(lastDir).exists()) {
-        lastDir = QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation);
-    }
-
-    QString fileName = QFileDialog::getOpenFileName(this, "导入 CSV", lastDir, "CSV Files (*.csv)");
-    if (!fileName.isEmpty()) {
-        // 保存文件所在目录
-        QFileInfo fileInfo(fileName);
-        settings.setValue("lastImageUploadDir", fileInfo.absolutePath());
-
-        QMessageBox::information(this, "提示", "CSV 导入功能待实现");
-    }
-}
-
-void VideoBatchTab::deleteSelected()
-{
-    QList<QListWidgetItem*> selected = imageList->selectedItems();
-    for (QListWidgetItem* item : selected) {
-        delete item;
-    }
-}
-
-void VideoBatchTab::deleteAll()
-{
-    imageList->clear();
-    promptInput->clear();
+    QMessageBox::information(this, "提示", "批量功能待开发中");
 }
 
 // VideoHistoryTab 实现
@@ -836,7 +574,7 @@ void VideoHistoryTab::onRowDoubleClicked(int row, int column)
     dialog.exec();
 }
 
-// VideoHistoryWidget 实现（新的 4 tab 容器）
+// VideoHistoryWidget 实现（新的 2 tab 容器）
 VideoHistoryWidget::VideoHistoryWidget(QWidget *parent)
     : QWidget(parent)
 {
@@ -861,8 +599,6 @@ void VideoHistoryWidget::setupUI()
 
     // 其他 tab 后续实现
     tabWidget->addTab(new QWidget(), "AI生成视频-批量记录");
-    tabWidget->addTab(new QWidget(), "AI生成图片-单个记录");
-    tabWidget->addTab(new QWidget(), "AI生成图片-批量记录");
 
     mainLayout->addWidget(tabWidget);
 }
@@ -918,6 +654,7 @@ void VideoSingleHistoryTab::setupUI()
     serverCombo = new QComboBox();
     serverCombo->addItem("【主站】https://ai.kegeai.top", "https://ai.kegeai.top");
     serverCombo->addItem("【备用】https://api.kuai.host", "https://api.kuai.host");
+    serverCombo->addItem("【备用】https://api.kegeai.top", "https://api.kegeai.top");
     serverCombo->setCurrentIndex(0);
     serverCombo->setMinimumWidth(150);
 

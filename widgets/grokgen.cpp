@@ -86,6 +86,7 @@ void GrokGenPage::setupUI()
     serverCombo = new QComboBox();
     serverCombo->addItem("【主站】https://ai.kegeai.top", "https://ai.kegeai.top");
     serverCombo->addItem("【备用】https://api.kuai.host", "https://api.kuai.host");
+    serverCombo->addItem("【备用】https://api.kegeai.top", "https://api.kegeai.top");
     serverCombo->setCurrentIndex(0);
     serverLayout->addWidget(serverLabel);
     serverLayout->addWidget(serverCombo, 1);

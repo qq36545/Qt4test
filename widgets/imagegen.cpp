@@ -228,6 +228,7 @@ void GeminiImagePage::setupUI()
     serverCombo = new QComboBox();
     serverCombo->addItem("【主站】https://ai.kegeai.top", "https://ai.kegeai.top");
     serverCombo->addItem("【备用】https://api.kuai.host", "https://api.kuai.host");
+    serverCombo->addItem("【备用】https://api.kegeai.top", "https://api.kegeai.top");
     serverCombo->setCurrentIndex(0);
     // 服务器变化时触发延迟保存
     connect(serverCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
@@ -1341,8 +1342,11 @@ ImageBatchTab::ImageBatchTab(QWidget *parent)
 void ImageBatchTab::setupUI()
 {
     QVBoxLayout *mainLayout = new QVBoxLayout(this);
-    QLabel *label = new QLabel("批量图片生成功能待实现");
-    mainLayout->addWidget(label);
+
+    QLabel *comingSoonLabel = new QLabel("批量功能待开发中");
+    comingSoonLabel->setAlignment(Qt::AlignCenter);
+    comingSoonLabel->setStyleSheet("font-size: 28px;");
+    mainLayout->addWidget(comingSoonLabel);
 }
 
 void ImageBatchTab::loadApiKeys() {}

@@ -66,35 +66,14 @@ public slots:
 
 private slots:
     void generateBatch();
-    void importCSV();
-    void deleteSelected();
-    void deleteAll();
-    void onModelChanged(int index);
-    void onModelVariantChanged(int index);
 
 private:
     void setupUI();
     void loadApiKeys();
-    void updateResolutionOptions(bool is4K);
-    void updateImageUploadUI(const QString &modelName);
 
-    QTextEdit *promptInput;
-    QLabel *imageDropArea;
-    QListWidget *imageList;
-    QComboBox *modelCombo;
     QComboBox *apiKeyCombo;
     QPushButton *addKeyButton;
     QComboBox *serverCombo;
-    QComboBox *modelVariantCombo;
-    QComboBox *resolutionCombo;
-    QComboBox *durationCombo;
-    QCheckBox *watermarkCheckBox;
-    QLabel *imageLabel;
-    QWidget *endFrameWidget;
-    QLabel *endFrameLabel;
-    QPushButton *importButton;
-    QPushButton *deleteButton;
-    QPushButton *deleteAllButton;
     QPushButton *generateButton;
 };
 
