@@ -34,6 +34,9 @@ void VideoAPI::prepareWanRequest(const WanVideoParams &params)
     currentRequest.uploadedUrls.clear();
     currentRequest.uploadIndex = 0;
     currentRequest.targetMethod = "wan";
+    currentRequest.durationText.clear();
+    currentRequest.orientation.clear();
+    currentRequest.privateMode = false;
     currentRequest.audioUrl = params.audioUrl;
     currentRequest.templateName = params.templateName;
     currentRequest.resolution = params.resolution;
@@ -55,7 +58,12 @@ void VideoAPI::createVideo(const QString &apiKey,
                            const QString &aspectRatio,
                            const QString &imgbbApiKey,
                            bool enhancePrompt,
-                           bool enableUpsample)
+                           bool enableUpsample,
+                           const QString &apiFormat,
+                           const QString &style,
+                           bool privateMode,
+                           const QString &orientation,
+                           const QString &duration)
 {
     // 根据模型名称分发到不同的实现
     if (modelName.contains("Grok", Qt::CaseInsensitive)) {
@@ -74,6 +82,10 @@ void VideoAPI::createVideo(const QString &apiKey,
         currentRequest.enableUpsample = enableUpsample;
         currentRequest.targetMethod = "grok";
         currentRequest.duration = seconds.toInt();
+        currentRequest.durationText.clear();
+        currentRequest.orientation.clear();
+        currentRequest.privateMode = false;
+        currentRequest.watermark = watermark;
 
         // 开始上传第一张图片到 imgbb；无图片则直接文生视频
         if (!imagePaths.isEmpty()) {
@@ -81,9 +93,43 @@ void VideoAPI::createVideo(const QString &apiKey,
         } else {
             createGrokVideo(apiKey, baseUrl, model, prompt, {}, aspectRatio, size, seconds.toInt());
         }
+    } else if (modelName.contains("Sora2", Qt::CaseInsensitive)) {
+        const QString normalizedFormat = apiFormat.trimmed().toLower();
+        const bool useOpenAIFormat = (normalizedFormat == "openai");
+
+        if (useOpenAIFormat) {
+            createVeo3Video(apiKey, baseUrl, model, prompt, imagePaths, size, seconds, watermark, style, privateMode);
+        } else {
+            // Sora2 统一格式：需要先上传图片到 imgbb 获取 URL（有图时）
+            currentRequest.apiKey = apiKey;
+            currentRequest.baseUrl = baseUrl;
+            currentRequest.model = model;
+            currentRequest.prompt = prompt;
+            currentRequest.aspectRatio = aspectRatio;
+            currentRequest.size = size;
+            currentRequest.imgbbApiKey = imgbbApiKey;
+            currentRequest.localImagePaths = imagePaths;
+            currentRequest.uploadedUrls.clear();
+            currentRequest.uploadIndex = 0;
+            currentRequest.enhancePrompt = enhancePrompt;
+            currentRequest.enableUpsample = enableUpsample;
+            currentRequest.targetMethod = "veo3_unified";
+            currentRequest.durationText = duration;
+            currentRequest.orientation = orientation;
+            currentRequest.privateMode = privateMode;
+            currentRequest.watermark = watermark;
+
+            if (!imagePaths.isEmpty()) {
+                imageUploader->uploadToImgbb(imagePaths.first(), imgbbApiKey);
+            } else {
+                createVeo3UnifiedVideo(apiKey, baseUrl, model, prompt, QStringList(),
+                                       aspectRatio, enhancePrompt, enableUpsample,
+                                       size, orientation, duration, watermark, privateMode);
+            }
+        }
     } else if (model.startsWith("veo_")) {
         // VEO3 OpenAI格式：直接上传文件
-        createVeo3Video(apiKey, baseUrl, model, prompt, imagePaths, size, seconds, watermark);
+        createVeo3Video(apiKey, baseUrl, model, prompt, imagePaths, size, seconds, watermark, style, privateMode);
     } else if (model.contains("wan", Qt::CaseInsensitive)) {
         // WAN 视频：参数通过 prepareWanRequest 设置，这里只触发图片上传
         // 注意：调用方必须先调用 prepareWanRequest 设置完整参数
@@ -108,13 +154,18 @@ void VideoAPI::createVideo(const QString &apiKey,
         currentRequest.enhancePrompt = enhancePrompt;
         currentRequest.enableUpsample = enableUpsample;
         currentRequest.targetMethod = "veo3_unified";
+        currentRequest.durationText.clear();
+        currentRequest.orientation.clear();
+        currentRequest.privateMode = false;
+        currentRequest.watermark = watermark;
 
         if (!imagePaths.isEmpty()) {
             imageUploader->uploadToImgbb(imagePaths.first(), imgbbApiKey);
         } else {
             // 无图片直接调用
             createVeo3UnifiedVideo(apiKey, baseUrl, model, prompt, QStringList(),
-                                   aspectRatio, enhancePrompt, enableUpsample);
+                                   aspectRatio, enhancePrompt, enableUpsample,
+                                   size, orientation, duration, watermark, privateMode);
         }
     }
 }
@@ -126,7 +177,9 @@ void VideoAPI::createVeo3Video(const QString &apiKey,
                                const QStringList &imagePaths,
                                const QString &size,
                                const QString &seconds,
-                               bool watermark)
+                               bool watermark,
+                               const QString &style,
+                               bool privateMode)
 {
     QUrl url(baseUrl + "/v1/videos");
     QNetworkRequest request(url);
@@ -170,6 +223,21 @@ void VideoAPI::createVeo3Video(const QString &apiKey,
     watermarkPart.setBody(watermark ? "true" : "false");
     multiPart->append(watermarkPart);
 
+    // Sora2/OpenAI 透传参数
+    if (!style.isEmpty()) {
+        QHttpPart stylePart;
+        stylePart.setHeader(QNetworkRequest::ContentDispositionHeader,
+                            QVariant("form-data; name=\"style\""));
+        stylePart.setBody(style.toUtf8());
+        multiPart->append(stylePart);
+    }
+
+    QHttpPart privatePart;
+    privatePart.setHeader(QNetworkRequest::ContentDispositionHeader,
+                          QVariant("form-data; name=\"private\""));
+    privatePart.setBody(privateMode ? "true" : "false");
+    multiPart->append(privatePart);
+
     // 添加图片文件
     for (const QString &imagePath : imagePaths) {
         QFile *file = new QFile(imagePath);
@@ -203,7 +271,12 @@ void VideoAPI::createVeo3UnifiedVideo(const QString &apiKey,
                                       const QStringList &imageUrls,
                                       const QString &aspectRatio,
                                       bool enhancePrompt,
-                                      bool enableUpsample)
+                                      bool enableUpsample,
+                                      const QString &size,
+                                      const QString &orientation,
+                                      const QString &duration,
+                                      bool watermark,
+                                      bool privateMode)
 {
     QUrl url(baseUrl + "/v1/video/create");
     QNetworkRequest request(url);
@@ -218,6 +291,17 @@ void VideoAPI::createVeo3UnifiedVideo(const QString &apiKey,
     jsonObj["aspect_ratio"] = aspectRatio;
     jsonObj["enhance_prompt"] = enhancePrompt;
     jsonObj["enable_upsample"] = enableUpsample;
+    if (!size.isEmpty()) {
+        jsonObj["size"] = size;
+    }
+    if (!orientation.isEmpty()) {
+        jsonObj["orientation"] = orientation;
+    }
+    if (!duration.isEmpty()) {
+        jsonObj["duration"] = duration;
+    }
+    jsonObj["watermark"] = watermark;
+    jsonObj["private"] = privateMode;
 
     QJsonArray imagesArray;
     for (const QString &imageUrl : imageUrls) {
@@ -309,6 +393,16 @@ void VideoAPI::queryTask(const QString &apiKey,
         QUrlQuery query;
         query.addQueryItem("id", taskId);
         url.setQuery(query);
+    } else if (modelName.contains("Sora2", Qt::CaseInsensitive)) {
+        // Sora2 查询：video_ 前缀走 OpenAI 路径，其余走 unified 查询路径
+        if (taskId.startsWith("video_")) {
+            url = QUrl(baseUrl + "/v1/videos/" + taskId);
+        } else {
+            url = QUrl(baseUrl + "/v1/video/query");
+            QUrlQuery query;
+            query.addQueryItem("id", taskId);
+            url.setQuery(query);
+        }
     } else if (modelName.contains("wan", Qt::CaseInsensitive)) {
         // WAN 查询接口
         url = QUrl(baseUrl + "/alibailian/api/v1/tasks/" + taskId);
@@ -463,7 +557,12 @@ void VideoAPI::onImageUploadSuccess(const QString &url)
                                    currentRequest.uploadedUrls,
                                    currentRequest.aspectRatio,
                                    currentRequest.enhancePrompt,
-                                   currentRequest.enableUpsample);
+                                   currentRequest.enableUpsample,
+                                   currentRequest.size,
+                                   currentRequest.orientation,
+                                   currentRequest.durationText,
+                                   currentRequest.watermark,
+                                   currentRequest.privateMode);
         }
     }
 }
@@ -493,10 +592,42 @@ void VideoAPI::onCreateVideoFinished()
             qDebug() << "[VideoAPI] WAN video created:" << requestId << taskId << status;
             emit videoCreated(taskId, status);
         } else {
-            // VEO3/Grok 格式 { id, status }
+            // VEO3/Grok/Sora2 格式：兼容 { id, status }、{ data: { id, status } }、{ task_id, task_status }
             QString taskId = jsonObj["id"].toString();
             QString status = jsonObj["status"].toString();
-            emit videoCreated(taskId, status);
+
+            if (taskId.isEmpty() && jsonObj.contains("task_id")) {
+                taskId = jsonObj["task_id"].toString();
+            }
+            if (status.isEmpty() && jsonObj.contains("task_status")) {
+                status = jsonObj["task_status"].toString();
+            }
+            if ((taskId.isEmpty() || status.isEmpty()) && jsonObj.contains("data") && jsonObj["data"].isObject()) {
+                QJsonObject dataObj = jsonObj["data"].toObject();
+                if (taskId.isEmpty()) {
+                    taskId = dataObj["id"].toString();
+                    if (taskId.isEmpty()) {
+                        taskId = dataObj["task_id"].toString();
+                    }
+                }
+                if (status.isEmpty()) {
+                    status = dataObj["status"].toString();
+                    if (status.isEmpty()) {
+                        status = dataObj["task_status"].toString();
+                    }
+                }
+            }
+
+            if (taskId.isEmpty()) {
+                qDebug() << "[VideoAPI] create response missing task id:" << responseData;
+                emit errorOccurred(QString("创建视频失败: 响应缺少任务ID (%1)")
+                                   .arg(QString::fromUtf8(responseData)));
+            } else {
+                if (status.isEmpty()) {
+                    status = "pending";
+                }
+                emit videoCreated(taskId, status);
+            }
         }
     } else {
         // 检查是否是超时错误

@@ -32,7 +32,12 @@ public:
                      const QString &aspectRatio = QString(),
                      const QString &imgbbApiKey = QString(),
                      bool enhancePrompt = true,
-                     bool enableUpsample = true);
+                     bool enableUpsample = true,
+                     const QString &apiFormat = QString(),
+                     const QString &style = QString(),
+                     bool privateMode = false,
+                     const QString &orientation = QString(),
+                     const QString &duration = QString());
 
     // 统一的查询任务接口
     void queryTask(const QString &apiKey,
@@ -68,7 +73,9 @@ private:
                          const QStringList &imagePaths,
                          const QString &size,
                          const QString &seconds,
-                         bool watermark);
+                         bool watermark,
+                         const QString &style = QString(),
+                         bool privateMode = false);
 
     // VEO3 统一格式方法（JSON POST /v1/video/create）
     void createVeo3UnifiedVideo(const QString &apiKey,
@@ -78,7 +85,12 @@ private:
                                 const QStringList &imageUrls,
                                 const QString &aspectRatio,
                                 bool enhancePrompt,
-                                bool enableUpsample);
+                                bool enableUpsample,
+                                const QString &size = QString(),
+                                const QString &orientation = QString(),
+                                const QString &duration = QString(),
+                                bool watermark = false,
+                                bool privateMode = false);
 
     // Grok 专用方法
     void createGrokVideo(const QString &apiKey,
@@ -117,14 +129,17 @@ private:
         QString prompt;
         QString aspectRatio;
         QString size;
+        QString orientation;   // Sora2 unified: 方向
+        QString durationText;  // Sora2 unified: 时长字符串
         QString imgbbApiKey;
         QStringList localImagePaths;
         QStringList uploadedUrls;
         int uploadIndex;
         bool enhancePrompt;
         bool enableUpsample;
+        bool privateMode;      // Sora2 openai/unified: private
         QString targetMethod;  // "grok" | "veo3_unified" | "wan"
-        int duration;          // Grok: 6/10/15
+        int duration;          // Grok/WAN: 秒数
         // WAN 专用字段
         QString negativePrompt;
         QString audioUrl;

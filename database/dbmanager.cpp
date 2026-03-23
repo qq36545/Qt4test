@@ -167,12 +167,6 @@ bool DBManager::createTables()
         }
     }
 
-    // 插入默认 API Key（如果表为空）
-    query.exec("SELECT COUNT(*) FROM api_keys");
-    if (query.next() && query.value(0).toInt() == 0) {
-        addApiKey("sora2密钥", "sk-***********jshfg");
-    }
-
     // 创建 imgbb_keys 表
     QString createImgbbKeysTable = R"(
         CREATE TABLE IF NOT EXISTS imgbb_keys (

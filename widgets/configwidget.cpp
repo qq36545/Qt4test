@@ -599,7 +599,7 @@ void ApiKeyDialog::setupUI()
     nameEdit->setPlaceholderText("例如: sora2密钥");
 
     apiKeyEdit = new QLineEdit();
-    apiKeyEdit->setPlaceholderText("例如: sk-***********jshfg");
+    apiKeyEdit->setPlaceholderText("请输入 API Key");
 
     formLayout->addRow("名称:", nameEdit);
     formLayout->addRow("密钥:", apiKeyEdit);

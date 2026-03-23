@@ -24,6 +24,7 @@ set(SOURCES
     widgets/veogen.cpp
     widgets/grokgen.cpp
     widgets/wangen.cpp
+    widgets/sora2genpage.cpp
     widgets/imagegen.cpp
     widgets/imagehistory.cpp
     widgets/configwidget.cpp

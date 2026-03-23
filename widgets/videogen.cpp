@@ -51,6 +51,11 @@ bool hasLocalVideoFile(const VideoTask& task)
     return !task.videoPath.isEmpty() && QFile::exists(task.videoPath);
 }
 
+bool isTempTaskId(const QString& taskId)
+{
+    return taskId.startsWith("temp_") || taskId.startsWith("temp-");
+}
+
 enum class VideoResolvedState {
     CompletedLocal,
     Failed,
@@ -263,10 +268,12 @@ void VideoGenWidget::updateTabWidths()
 #include "veogen.h"
 #include "grokgen.h"
 #include "wangen.h"
+#include "sora2genpage.h"
 
 // VideoSingleTab 实现（调度器）
 VideoSingleTab::VideoSingleTab(QWidget *parent)
     : QWidget(parent)
+    , sora2Api(new VideoAPI(this))
 {
     setupUI();
 
@@ -274,6 +281,13 @@ VideoSingleTab::VideoSingleTab(QWidget *parent)
     connect(veoPage, &VeoGenPage::apiKeySelectionChanged, this, &VideoSingleTab::apiKeySelectionChanged);
     connect(grokPage, &GrokGenPage::apiKeySelectionChanged, this, &VideoSingleTab::apiKeySelectionChanged);
     connect(wanPage, &WanGenPage::apiKeySelectionChanged, this, &VideoSingleTab::apiKeySelectionChanged);
+
+    connect(sora2Page, &Sora2GenPage::createTaskRequested,
+            this, &VideoSingleTab::onSora2CreateTaskRequested);
+    connect(sora2Api, &VideoAPI::videoCreated,
+            this, &VideoSingleTab::onSora2VideoCreated);
+    connect(sora2Api, &VideoAPI::errorOccurred,
+            this, &VideoSingleTab::onSora2ApiError);
 }
 
 void VideoSingleTab::setupUI()
@@ -288,7 +302,7 @@ void VideoSingleTab::setupUI()
     QLabel *modelLabel = new QLabel("视频模型:");
     modelLabel->setStyleSheet("font-size: 14px;");
     modelCombo = new QComboBox();
-    modelCombo->addItems({"VEO3视频", "Grok3视频", "WAN视频"});
+    modelCombo->addItems({"VEO3视频", "Grok3视频", "WAN视频", "Sora2视频"});
     modelCombo->setCurrentIndex(0);
     connect(modelCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &VideoSingleTab::onModelChanged);
     modelLayout->addWidget(modelLabel);
@@ -300,9 +314,11 @@ void VideoSingleTab::setupUI()
     veoPage = new VeoGenPage();
     grokPage = new GrokGenPage();
     wanPage = new WanGenPage();
+    sora2Page = new Sora2GenPage();
     stack->addWidget(veoPage);   // index 0: VEO3
     stack->addWidget(grokPage);  // index 1: Grok
     stack->addWidget(wanPage);    // index 2: WAN
+    stack->addWidget(sora2Page);  // index 3: Sora2
 
     mainLayout->addWidget(stack);
 }
@@ -322,6 +338,8 @@ void VideoSingleTab::onModelChanged(int index)
     case 2:
         wanPage->refreshApiKeys();
         break;
+    case 3:
+        break;
     }
 }
 
@@ -332,13 +350,174 @@ void VideoSingleTab::refreshApiKeys()
     wanPage->refreshApiKeys();
 }
 
+void VideoSingleTab::onSora2CreateTaskRequested(const QVariantMap& payload)
+{
+    const QString prompt = payload.value("prompt").toString().trimmed();
+    if (prompt.isEmpty()) {
+        QMessageBox::warning(this, "提示", "请输入提示词");
+        return;
+    }
+
+    const QString apiFormat = payload.value("api_format", "unified").toString();
+    const QString model = payload.value("model").toString();
+    QStringList imagePaths = payload.value("images").toStringList();
+    if (imagePaths.isEmpty()) {
+        const QVariantList imageList = payload.value("images").toList();
+        for (const QVariant &value : imageList) {
+            const QString path = value.toString();
+            if (!path.isEmpty()) {
+                imagePaths.append(path);
+            }
+        }
+    }
+
+    const QString size = payload.value("size").toString();
+    const QString seconds = payload.value("seconds").toString();
+    const QString style = payload.value("style").toString();
+    const QString orientation = payload.value("orientation").toString();
+    const QString duration = payload.value("duration").toString();
+    const bool watermark = payload.value("watermark").toBool();
+    const bool privateMode = payload.value("private").toBool();
+    const bool isImageToVideo = payload.value("is_image_to_video").toBool() || !imagePaths.isEmpty();
+
+    QList<ApiKey> keys = DBManager::instance()->getAllApiKeys();
+    if (keys.isEmpty()) {
+        QMessageBox::warning(this, "提示", "请先添加 API 密钥");
+        return;
+    }
+
+    QSettings settings("ChickenAI", "VideoGen");
+    settings.beginGroup("VideoSingleTab");
+    const QString selectedApiKeyValue = settings.value("selectedApiKeyValue").toString().trimmed();
+    const int serverIndex = settings.value("server", 0).toInt();
+    settings.endGroup();
+
+    ApiKey selectedKey = keys.first();
+    if (!selectedApiKeyValue.isEmpty()) {
+        for (const ApiKey &key : keys) {
+            if (key.apiKey == selectedApiKeyValue) {
+                selectedKey = key;
+                break;
+            }
+        }
+    }
+
+    const QStringList serverUrls = {
+        "https://ai.kegeai.top",
+        "https://api.kuai.host",
+        "https://api.kegeai.top"
+    };
+    const QString baseUrl = (serverIndex >= 0 && serverIndex < serverUrls.size())
+                            ? serverUrls.at(serverIndex)
+                            : serverUrls.first();
+
+    ImgbbKey activeImgbbKey = DBManager::instance()->getActiveImgbbKey();
+    const bool needImgbb = isImageToVideo && apiFormat == "unified";
+    if (needImgbb && activeImgbbKey.apiKey.isEmpty()) {
+        QMessageBox::warning(this, "提示", "Sora2 图生视频需要先到设置页应用临时图床密钥");
+        return;
+    }
+
+    QString tempTaskId = QString("temp_%1_%2")
+        .arg(QDateTime::currentMSecsSinceEpoch())
+        .arg(QRandomGenerator::global()->bounded(10000));
+
+    VideoTask task;
+    task.taskId = tempTaskId;
+    task.taskType = "video_single";
+    task.prompt = prompt;
+    task.modelVariant = model;
+    task.modelName = "Sora2视频";
+    task.apiKeyName = selectedKey.name;
+    task.serverUrl = baseUrl;
+    task.status = "submitting";
+    task.progress = 0;
+    task.resolution = size;
+    task.duration = apiFormat == "openai" ? seconds.toInt() : duration.toInt();
+    task.watermark = watermark;
+
+    QJsonArray imageArray;
+    for (const QString &path : imagePaths) {
+        if (!path.isEmpty()) {
+            imageArray.append(path);
+        }
+    }
+    task.imagePaths = QString::fromUtf8(QJsonDocument(imageArray).toJson(QJsonDocument::Compact));
+
+    int dbId = DBManager::instance()->insertVideoTask(task);
+    if (dbId < 0) {
+        QMessageBox::critical(this, "错误", "无法保存任务记录");
+        return;
+    }
+
+    sora2CurrentTaskId = tempTaskId;
+    sora2CurrentApiKey = selectedKey.apiKey;
+    sora2CurrentBaseUrl = baseUrl;
+
+    sora2Api->createVideo(
+        selectedKey.apiKey,
+        baseUrl,
+        "Sora2视频",
+        model,
+        prompt,
+        imagePaths,
+        size,
+        seconds,
+        watermark,
+        "",
+        activeImgbbKey.apiKey,
+        true,
+        true,
+        apiFormat,
+        style,
+        privateMode,
+        orientation,
+        duration
+    );
+}
+
+void VideoSingleTab::onSora2VideoCreated(const QString& taskId, const QString& status)
+{
+    Q_UNUSED(status);
+
+    if (!sora2CurrentTaskId.isEmpty() && sora2CurrentTaskId != taskId) {
+        DBManager::instance()->updateTaskId(sora2CurrentTaskId, taskId);
+    }
+
+    sora2CurrentTaskId = taskId;
+    DBManager::instance()->updateTaskStatus(taskId, "pending", 0, "");
+
+    if (!sora2CurrentApiKey.isEmpty() && !sora2CurrentBaseUrl.isEmpty()) {
+        TaskPollManager::getInstance()->startPolling(taskId, "video_single", sora2CurrentApiKey, sora2CurrentBaseUrl, "Sora2视频");
+    }
+
+    QMessageBox::information(this, "任务已提交",
+        "Sora2 视频生成任务已提交！\n\n请前往【生成历史记录】标签页查看任务状态。\n系统将自动轮询任务状态并下载完成的视频。");
+}
+
+void VideoSingleTab::onSora2ApiError(const QString& error)
+{
+    if (!sora2CurrentTaskId.isEmpty()) {
+        DBManager::instance()->updateTaskStatus(sora2CurrentTaskId, "failed", 0, "");
+        DBManager::instance()->updateTaskErrorMessage(sora2CurrentTaskId, error);
+    }
+
+    QMessageBox::critical(this, "错误", QString("Sora2 API 调用失败:\n%1").arg(error));
+}
+
 void VideoSingleTab::loadFromTask(const VideoTask& task)
 {
-    // 根据 task.modelName 切换到对应子页
-    if (task.modelName.contains("Grok", Qt::CaseInsensitive)) {
+    const QString modelName = task.modelName;
+    const QString modelVariant = task.modelVariant;
+
+    // 根据 task.modelName / modelVariant 切换到对应子页
+    if (modelName.contains("Grok", Qt::CaseInsensitive)) {
         modelCombo->setCurrentIndex(1);
-    } else if (task.modelName.contains("wan", Qt::CaseInsensitive)) {
+    } else if (modelName.contains("wan", Qt::CaseInsensitive)) {
         modelCombo->setCurrentIndex(2);
+    } else if (modelName.contains("sora", Qt::CaseInsensitive)
+               || modelVariant.contains("sora", Qt::CaseInsensitive)) {
+        modelCombo->setCurrentIndex(3);
     } else {
         modelCombo->setCurrentIndex(0);
     }
@@ -351,6 +530,8 @@ void VideoSingleTab::loadFromTask(const VideoTask& task)
         grokPage->loadFromTask(task);
     } else if (currentPage == wanPage) {
         wanPage->loadFromTask(task);
+    } else if (currentPage == sora2Page) {
+        sora2Page->loadFromTask(task);
     }
 }
 
@@ -704,7 +885,7 @@ void VideoSingleHistoryTab::showEvent(QShowEvent *event)
         QDateTime now = QDateTime::currentDateTime();
 
         for (const VideoTask& task : allTasks) {
-            if (task.taskId.startsWith("temp-")) {
+            if (isTempTaskId(task.taskId)) {
                 qint64 secondsElapsed = task.createdAt.secsTo(now);
                 if (secondsElapsed < 300) {  // 5分钟 = 300秒
                     recentTempIds.append(task.taskId);
@@ -939,7 +1120,7 @@ void VideoSingleHistoryTab::loadHistory(int offset, int limit)
             // 状态
             QString statusText = displayState.statusText;
             // 检测temp-ID任务
-            if (task.taskId.startsWith("temp-")) {
+            if (isTempTaskId(task.taskId)) {
                 statusText = "⚠️ 待恢复";
             }
             QTableWidgetItem *statusItem = new QTableWidgetItem(statusText);
@@ -949,7 +1130,7 @@ void VideoSingleHistoryTab::loadHistory(int offset, int limit)
             historyTable->setItem(row, 4, statusItem);
 
             // 如果是temp-ID任务，设置行背景色高亮
-            if (task.taskId.startsWith("temp-")) {
+            if (isTempTaskId(task.taskId)) {
                 QColor highlightColor = QColor(255, 250, 205);  // 浅黄色
                 // 检查是否为深色主题
                 QWidget* topWidget = window();
@@ -1378,7 +1559,7 @@ void VideoSingleHistoryTab::showContextMenu(const QPoint &pos)
 
     // 如果是 temp-ID，添加修复选项
     QAction *fixAction = nullptr;
-    if (taskId.startsWith("temp_")) {
+    if (isTempTaskId(taskId)) {
         fixAction = contextMenu.addAction("🔧 修复任务ID");
     }
 
@@ -1529,8 +1710,8 @@ void VideoSingleHistoryTab::onFixTaskId(const QString& tempTaskId)
     }
 
     // 验证真实任务ID格式（不能是temp-开头）
-    if (realTaskId.startsWith("temp_")) {
-        QMessageBox::warning(this, "错误", "真实任务ID不能以 temp_ 开头");
+    if (isTempTaskId(realTaskId)) {
+        QMessageBox::warning(this, "错误", "真实任务ID不能以 temp_ 或 temp- 开头");
         return;
     }
 

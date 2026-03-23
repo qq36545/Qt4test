@@ -18,12 +18,15 @@
 #include <QTimer>
 #include <QHBoxLayout>
 #include <QTextEdit>
+#include <QVariantMap>
 
 // 前向声明
 struct VideoTask;
+class VideoAPI;
 class VeoGenPage;
 class GrokGenPage;
 class WanGenPage;
+class Sora2GenPage;
 
 // 单个视频生成 Tab（调度器）
 class VideoSingleTab : public QWidget
@@ -42,6 +45,9 @@ public slots:
 
 private slots:
     void onModelChanged(int index);
+    void onSora2CreateTaskRequested(const QVariantMap& payload);
+    void onSora2VideoCreated(const QString& taskId, const QString& status);
+    void onSora2ApiError(const QString& error);
 
 private:
     void setupUI();
@@ -50,7 +56,12 @@ private:
     VeoGenPage *veoPage;
     GrokGenPage *grokPage;
     WanGenPage *wanPage;
+    Sora2GenPage *sora2Page;
     QComboBox *modelCombo;
+    VideoAPI *sora2Api;
+    QString sora2CurrentTaskId;
+    QString sora2CurrentApiKey;
+    QString sora2CurrentBaseUrl;
 };
 
 // 批量视频生成 Tab
