@@ -256,7 +256,7 @@ void ImageSingleHistoryTab::loadListViewData()
         QJsonDocument paramsDoc = QJsonDocument::fromJson(history.parameters.toUtf8(), &parseError);
         if (parseError.error == QJsonParseError::NoError && paramsDoc.isObject()) {
             QJsonObject obj = paramsDoc.object();
-            modelVariant = obj.value("generationMode").toString();
+            modelVariant = obj.value("model").toString();
             apiKeyName = obj.value("apiKeyName").toString();
             serverUrl = obj.value("serverUrl").toString();
             imageSize = obj.value("imageSize").toString();
@@ -606,13 +606,14 @@ void ImageSingleHistoryTab::onRegenerate(const QString& taskId)
     GenerationHistory history = DBManager::instance()->getGenerationHistory(id);
 
     // 解析 parameters JSON
-    QString modelVariant, apiKeyName, serverUrl, imageSize, aspectRatio, referencePathsStr;
+    QString modelVariant, serverUrl, imageSize, aspectRatio, referencePathsStr;
+    int apiKeyId = 0;
     QJsonParseError parseError;
     QJsonDocument paramsDoc = QJsonDocument::fromJson(history.parameters.toUtf8(), &parseError);
     if (parseError.error == QJsonParseError::NoError && paramsDoc.isObject()) {
         QJsonObject obj = paramsDoc.object();
-        modelVariant = obj.value("generationMode").toString();
-        apiKeyName = obj.value("apiKeyName").toString();
+        modelVariant = obj.value("model").toString();
+        apiKeyId = obj.value("apiKeyId").toString().toInt();
         serverUrl = obj.value("serverUrl").toString();
         imageSize = obj.value("imageSize").toString();
         aspectRatio = obj.value("aspectRatio").toString();
@@ -630,7 +631,7 @@ void ImageSingleHistoryTab::onRegenerate(const QString& taskId)
         history.prompt,
         modelVariant,
         referencePaths,
-        apiKeyName,
+        apiKeyId,
         serverUrl,
         imageSize,
         aspectRatio

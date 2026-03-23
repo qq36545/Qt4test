@@ -98,9 +98,19 @@ void ImageGenWidget::setupUI()
     connect(singleTab, &ImageSingleTab::imageGeneratedSuccessfully,
             historyTab, &ImageHistoryTab::refreshHistory);
 
-    // 连接历史页重新生成信号
+    // 连接历史页重新生成信号（回填后切到“单个”页）
     connect(historyTab, &ImageHistoryTab::regenerateRequested,
-            singleTab, &ImageSingleTab::onRegenerateRequest);
+            this, [this](const QString& prompt,
+                         const QString& modelVariant,
+                         const QStringList& referencePaths,
+                         int apiKeyId,
+                         const QString& serverUrl,
+                         const QString& imageSize,
+                         const QString& aspectRatio) {
+                singleTab->onRegenerateRequest(prompt, modelVariant, referencePaths,
+                                               apiKeyId, serverUrl, imageSize, aspectRatio);
+                tabWidget->setCurrentWidget(singleTab);
+            });
 
     mainLayout->addWidget(tabWidget);
 
@@ -347,12 +357,14 @@ void GeminiImagePage::setupUI()
 
 void GeminiImagePage::loadApiKeys()
 {
+    const int previousKeyId = apiKeyCombo->currentData().toInt();
+
     apiKeyCombo->clear();
     QList<ApiKey> keys = DBManager::instance()->getAllApiKeys();
 
     if (keys.isEmpty()) {
-        // 密钥为空时不显示警告，静默处理
-        // 让 generateImage() 统一处理提示
+        apiKeyCombo->setEnabled(false);
+        addKeyButton->setVisible(true);
         return;
     }
 
@@ -362,9 +374,19 @@ void GeminiImagePage::loadApiKeys()
         apiKeyCombo->addItem(key.name, key.id);
     }
 
-    // 自动选择第一个
-    apiKeyCombo->setCurrentIndex(0);
-    emit apiKeySelectionChanged(keys.first().apiKey);
+    int keyIndex = previousKeyId > 0 ? apiKeyCombo->findData(previousKeyId) : -1;
+    if (keyIndex < 0) {
+        keyIndex = 0;
+    }
+
+    apiKeyCombo->setCurrentIndex(keyIndex);
+    const int currentKeyId = apiKeyCombo->currentData().toInt();
+    if (currentKeyId > 0) {
+        const ApiKey selectedKey = DBManager::instance()->getApiKey(currentKeyId);
+        if (!selectedKey.apiKey.isEmpty()) {
+            emit apiKeySelectionChanged(selectedKey.apiKey);
+        }
+    }
 }
 
 void GeminiImagePage::refreshApiKeys()
@@ -735,8 +757,6 @@ void GeminiImagePage::restorePreferences()
 {
     const QString model = currentModelValue();
     ImagePreferences prefs = DBManager::instance()->loadImagePreferences(model);
-    FILE *f = fopen("/tmp/chickenai_debug.txt", "a");
-    if (f) { fprintf(f, "restorePreferences: model=%s imageSize=%s m_imageSizeVisible=%d\n", model.toUtf8().constData(), prefs.imageSize.toUtf8().constData(), m_imageSizeVisible); fclose(f); }
 
     // 恢复 aspectRatio
     int aspectIndex = aspectRatioCombo->findData(prefs.aspectRatio);
@@ -984,6 +1004,69 @@ void GeminiImagePage::restoreLastModelVariant()
     restoreDraft();
 }
 
+void GeminiImagePage::applyRegenerateDraft(const QString& prompt,
+                                          const QString& modelVariant,
+                                          const QStringList& referencePaths,
+                                          int apiKeyId,
+                                          const QString& serverUrl,
+                                          const QString& imageSize,
+                                          const QString& aspectRatio)
+{
+    m_promptSaveTimer->stop();
+    m_comboSaveTimer->stop();
+
+    if (!modelVariant.isEmpty()) {
+        int variantIndex = variantCombo->findData(modelVariant);
+        if (variantIndex >= 0) {
+            variantCombo->setCurrentIndex(variantIndex);
+        }
+    }
+
+    if (!serverUrl.isEmpty()) {
+        int serverIndex = serverCombo->findData(serverUrl);
+        if (serverIndex >= 0) {
+            serverCombo->setCurrentIndex(serverIndex);
+        }
+    }
+
+    if (apiKeyId > 0) {
+        int keyIndex = apiKeyCombo->findData(apiKeyId);
+        if (keyIndex >= 0) {
+            apiKeyCombo->setCurrentIndex(keyIndex);
+        }
+    }
+
+    if (!aspectRatio.isEmpty()) {
+        int aspectIndex = aspectRatioCombo->findData(aspectRatio);
+        if (aspectIndex >= 0) {
+            aspectRatioCombo->setCurrentIndex(aspectIndex);
+        }
+    }
+
+    if (m_imageSizeVisible && !imageSize.isEmpty()) {
+        int sizeIndex = imageSizeCombo->findData(imageSize);
+        if (sizeIndex >= 0) {
+            imageSizeCombo->setCurrentIndex(sizeIndex);
+        }
+    }
+
+    promptInput->setPlainText(prompt);
+
+    referenceImagePaths.clear();
+    for (const QString &path : referencePaths) {
+        if (!QFile::exists(path)) {
+            continue;
+        }
+        if (referenceImagePaths.size() >= maxReferenceImages()) {
+            break;
+        }
+        referenceImagePaths.append(path);
+    }
+    updateThumbnailGrid();
+
+    saveDraft();
+}
+
 void GeminiImagePage::resetForm()
 {
     variantCombo->setCurrentIndex(0);
@@ -1047,6 +1130,7 @@ void GeminiImagePage::generateImage()
     params["imageSize"] = imageSize;
     params["serverUrl"] = serverUrl;
     params["generationMode"] = generationMode;
+    params["apiKeyId"] = QString::number(keyId);
     params["apiKeyName"] = keyData.name;
     params["referenceCount"] = QString::number(referenceImagePaths.size());
     params["referencePaths"] = referenceImagePaths.join("|");
@@ -1213,15 +1297,15 @@ void ImageSingleTab::setupUI()
 void ImageSingleTab::onRegenerateRequest(const QString& prompt,
                                         const QString& modelVariant,
                                         const QStringList& referencePaths,
-                                        const QString& apiKeyName,
+                                        int apiKeyId,
                                         const QString& serverUrl,
                                         const QString& imageSize,
                                         const QString& aspectRatio)
 {
-    // 直接转发信号给 GeminiImagePage
-    // 注意：这里需要 GeminiImagePage 有对应的 public slot 来接收这些参数
-    // 暂时只打印日志，实际回填需要 GeminiImagePage 支持
-    qDebug() << "Regenerate request received:" << prompt << modelVariant;
+    modelCombo->setCurrentIndex(0);
+    stack->setCurrentWidget(geminiPage);
+    geminiPage->applyRegenerateDraft(prompt, modelVariant, referencePaths,
+                                     apiKeyId, serverUrl, imageSize, aspectRatio);
 }
 
 void ImageSingleTab::onModelChanged(int index)

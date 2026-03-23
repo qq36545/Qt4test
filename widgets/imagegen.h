@@ -37,6 +37,13 @@ public slots:
 
 public:
     void restoreDraft();                // 恢复草稿
+    void applyRegenerateDraft(const QString& prompt,
+                              const QString& modelVariant,
+                              const QStringList& referencePaths,
+                              int apiKeyId,
+                              const QString& serverUrl,
+                              const QString& imageSize,
+                              const QString& aspectRatio);
 
 private slots:
     void onVariantChanged(int index);
@@ -118,7 +125,7 @@ signals:
     void regenerateRequested(const QString& prompt,
                          const QString& modelVariant,
                          const QStringList& referencePaths,
-                         const QString& apiKeyName,
+                         int apiKeyId,
                          const QString& serverUrl,
                          const QString& imageSize,
                          const QString& aspectRatio);
@@ -130,7 +137,7 @@ public slots:
     void onRegenerateRequest(const QString& prompt,
                             const QString& modelVariant,
                             const QStringList& referencePaths,
-                            const QString& apiKeyName,
+                            int apiKeyId,
                             const QString& serverUrl,
                             const QString& imageSize,
                             const QString& aspectRatio);
@@ -189,7 +196,7 @@ signals:
     void regenerateRequested(const QString& prompt,
                            const QString& modelVariant,
                            const QStringList& referencePaths,
-                           const QString& apiKeyName,
+                           int apiKeyId,
                            const QString& serverUrl,
                            const QString& imageSize,
                            const QString& aspectRatio);

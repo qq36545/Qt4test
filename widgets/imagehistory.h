@@ -45,7 +45,7 @@ signals:
     void regenerateRequested(const QString& prompt,
                            const QString& modelVariant,
                            const QStringList& referencePaths,
-                           const QString& apiKeyName,
+                           int apiKeyId,
                            const QString& serverUrl,
                            const QString& imageSize,
                            const QString& aspectRatio);
