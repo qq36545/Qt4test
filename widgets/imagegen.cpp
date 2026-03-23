@@ -1,4 +1,5 @@
 #include "imagegen.h"
+#include "imagehistory.h"
 #include "../database/dbmanager.h"
 #include "../network/imageapi.h"
 
@@ -99,6 +100,10 @@ void ImageGenWidget::setupUI()
     // 连接 API 密钥选择变化信号，用于同步历史页密钥（如需扩展）
     connect(singleTab, &ImageSingleTab::apiKeySelectionChanged,
             historyTab, &ImageHistoryTab::refreshApiKeys);
+
+    // 连接历史页重新生成信号
+    connect(historyTab, &ImageHistoryTab::regenerateRequested,
+            singleTab, &ImageSingleTab::onRegenerateRequest);
 
     mainLayout->addWidget(tabWidget);
 
@@ -1045,6 +1050,9 @@ void GeminiImagePage::generateImage()
     params["imageSize"] = imageSize;
     params["serverUrl"] = serverUrl;
     params["generationMode"] = generationMode;
+    params["apiKeyName"] = keyData.name;
+    params["referenceCount"] = QString::number(referenceImagePaths.size());
+    params["referencePaths"] = referenceImagePaths.join("|");
 
     GenerationHistory history;
     history.date = QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss");
@@ -1205,6 +1213,20 @@ void ImageSingleTab::setupUI()
     mainLayout->addWidget(stack);
 }
 
+void ImageSingleTab::onRegenerateRequest(const QString& prompt,
+                                        const QString& modelVariant,
+                                        const QStringList& referencePaths,
+                                        const QString& apiKeyName,
+                                        const QString& serverUrl,
+                                        const QString& imageSize,
+                                        const QString& aspectRatio)
+{
+    // 直接转发信号给 GeminiImagePage
+    // 注意：这里需要 GeminiImagePage 有对应的 public slot 来接收这些参数
+    // 暂时只打印日志，实际回填需要 GeminiImagePage 支持
+    qDebug() << "Regenerate request received:" << prompt << modelVariant;
+}
+
 void ImageSingleTab::onModelChanged(int index)
 {
     stack->setCurrentIndex(index);
@@ -1247,158 +1269,47 @@ void ImageBatchTab::generateBatch() {}
 void ImageBatchTab::importCSV() {}
 void ImageBatchTab::deleteAll() {}
 
-// ImageHistoryTab 实现
+// ImageHistoryTab 实现 (新版 - 双Tab容器)
 ImageHistoryTab::ImageHistoryTab(QWidget *parent)
     : QWidget(parent)
 {
     setupUI();
-    loadHistory();
 }
 
 void ImageHistoryTab::setupUI()
 {
     QVBoxLayout *mainLayout = new QVBoxLayout(this);
-    mainLayout->setContentsMargins(20, 20, 20, 20);
-    mainLayout->setSpacing(12);
+    mainLayout->setContentsMargins(0, 0, 0, 0);
+    mainLayout->setSpacing(0);
 
-    QHBoxLayout *toolbarLayout = new QHBoxLayout();
-    refreshButton = new QPushButton(kRefreshButtonText);
-    openFolderButton = new QPushButton(kOpenFolderButtonText);
+    historyTabWidget = new QTabWidget();
 
-    connect(refreshButton, &QPushButton::clicked, this, &ImageHistoryTab::refreshHistory);
-    connect(openFolderButton, &QPushButton::clicked, this, &ImageHistoryTab::openSelectedFolder);
+    // Tab 1: 图片单个记录
+    imageSingleTab = new ImageSingleHistoryTab();
+    historyTabWidget->addTab(imageSingleTab, "AI图片生成-单个记录");
 
-    toolbarLayout->addStretch();
-    toolbarLayout->addWidget(refreshButton);
-    toolbarLayout->addWidget(openFolderButton);
-    mainLayout->addLayout(toolbarLayout);
+    // 连接重新生成信号
+    connect(imageSingleTab, &ImageSingleHistoryTab::regenerateRequested,
+            this, &ImageHistoryTab::regenerateRequested);
 
-    historyTable = new QTableWidget();
-    historyTable->setColumnCount(7);
-    historyTable->setHorizontalHeaderLabels({"序号", "时间", "模型", "模式", "提示词摘要", "状态", "结果路径"});
-    historyTable->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Fixed);
-    historyTable->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Fixed);
-    historyTable->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Fixed);
-    historyTable->horizontalHeader()->setSectionResizeMode(3, QHeaderView::Fixed);
-    historyTable->horizontalHeader()->setSectionResizeMode(4, QHeaderView::Stretch);
-    historyTable->horizontalHeader()->setSectionResizeMode(5, QHeaderView::Fixed);
-    historyTable->horizontalHeader()->setSectionResizeMode(6, QHeaderView::Stretch);
-    historyTable->setColumnWidth(0, 80);
-    historyTable->setColumnWidth(1, 160);
-    historyTable->setColumnWidth(2, 180);
-    historyTable->setColumnWidth(3, 90);
-    historyTable->setColumnWidth(5, 100);
-    historyTable->setSelectionBehavior(QAbstractItemView::SelectRows);
-    historyTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
-    historyTable->verticalHeader()->setVisible(false);
+    // Tab 2: 图片批量记录 (占位符)
+    imageBatchPlaceholder = new QWidget();
+    QVBoxLayout *placeholderLayout = new QVBoxLayout(imageBatchPlaceholder);
+    placeholderLayout->setAlignment(Qt::AlignCenter);
+    QLabel *placeholderLabel = new QLabel("图片批量记录功能待开发");
+    placeholderLabel->setStyleSheet("color: #888; font-size: 16px;");
+    placeholderLayout->addWidget(placeholderLabel);
+    historyTabWidget->addTab(imageBatchPlaceholder, "AI图片生成-批量记录");
 
-    connect(historyTable, &QTableWidget::cellDoubleClicked,
-            this, &ImageHistoryTab::onRowDoubleClicked);
-
-    mainLayout->addWidget(historyTable);
-}
-
-void ImageHistoryTab::loadHistory()
-{
-    historyTable->setRowCount(0);
-    QList<GenerationHistory> histories = DBManager::instance()->getGenerationHistoryByModelAndType("image", "single");
-
-    int row = 0;
-    for (const GenerationHistory &history : histories) {
-
-        QString generationMode = "text_to_image";
-        QJsonParseError parseError;
-        QJsonDocument paramsDoc = QJsonDocument::fromJson(history.parameters.toUtf8(), &parseError);
-        if (parseError.error == QJsonParseError::NoError && paramsDoc.isObject()) {
-            generationMode = paramsDoc.object().value("generationMode").toString("text_to_image");
-        }
-
-        historyTable->insertRow(row);
-        historyTable->setItem(row, 0, new QTableWidgetItem(QString::number(history.id)));
-        historyTable->setItem(row, 1, new QTableWidgetItem(history.date));
-        historyTable->setItem(row, 2, new QTableWidgetItem(history.modelName));
-        historyTable->setItem(row, 3, new QTableWidgetItem(modeLabel(generationMode)));
-
-        QString promptSummary = history.prompt;
-        if (promptSummary.length() > 60) {
-            promptSummary = promptSummary.left(60) + "...";
-        }
-        QTableWidgetItem *promptItem = new QTableWidgetItem(promptSummary);
-        promptItem->setToolTip(history.prompt);
-        historyTable->setItem(row, 4, promptItem);
-
-        historyTable->setItem(row, 5, new QTableWidgetItem(history.status));
-
-        QTableWidgetItem *pathItem = new QTableWidgetItem(history.resultPath);
-        pathItem->setToolTip(history.resultPath);
-        historyTable->setItem(row, 6, pathItem);
-
-        historyTable->item(row, 0)->setData(Qt::UserRole, history.id);
-        row++;
-    }
+    mainLayout->addWidget(historyTabWidget);
 }
 
 void ImageHistoryTab::refreshHistory()
 {
-    loadHistory();
+    imageSingleTab->refreshHistory();
 }
 
 void ImageHistoryTab::refreshApiKeys()
 {
-    // 图片历史页暂无 API 密钥选择功能，暂留空实现
-    // 后续如需添加密钥过滤功能，可在此扩展
-}
-
-void ImageHistoryTab::onRowDoubleClicked(int row, int)
-{
-    if (row < 0 || row >= historyTable->rowCount()) {
-        return;
-    }
-
-    const int historyId = historyTable->item(row, 0)->data(Qt::UserRole).toInt();
-    GenerationHistory history = DBManager::instance()->getGenerationHistory(historyId);
-
-    if (history.resultPath.isEmpty()) {
-        QMessageBox::warning(this, "提示", "该记录暂无生成图片路径");
-        return;
-    }
-
-    QFileInfo fileInfo(history.resultPath);
-    if (fileInfo.exists()) {
-        QDesktopServices::openUrl(QUrl::fromLocalFile(history.resultPath));
-        return;
-    }
-
-    const QString folderPath = openFolderPathByFile(history.resultPath);
-    if (!folderPath.isEmpty()) {
-        openFolderInSystem(folderPath);
-        return;
-    }
-
-    QMessageBox::warning(this, "提示", "图片文件不存在，且无法打开所在目录");
-}
-
-void ImageHistoryTab::openSelectedFolder()
-{
-    const int row = historyTable->currentRow();
-    if (row < 0 || row >= historyTable->rowCount()) {
-        QMessageBox::information(this, "提示", "请先选择一条记录");
-        return;
-    }
-
-    const int historyId = historyTable->item(row, 0)->data(Qt::UserRole).toInt();
-    GenerationHistory history = DBManager::instance()->getGenerationHistory(historyId);
-
-    if (history.resultPath.isEmpty()) {
-        QMessageBox::warning(this, "提示", "该记录暂无结果路径");
-        return;
-    }
-
-    QString folderPath = openFolderPathByFile(history.resultPath);
-    if (folderPath.isEmpty()) {
-        QMessageBox::warning(this, "提示", "目录不存在");
-        return;
-    }
-
-    openFolderInSystem(folderPath);
+    imageSingleTab->refreshApiKeys();
 }

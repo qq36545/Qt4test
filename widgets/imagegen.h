@@ -115,11 +115,25 @@ public:
 signals:
     void imageGeneratedSuccessfully();
     void apiKeySelectionChanged(const QString &apiKeyValue);
+    void regenerateRequested(const QString& prompt,
+                         const QString& modelVariant,
+                         const QStringList& referencePaths,
+                         const QString& apiKeyName,
+                         const QString& serverUrl,
+                         const QString& imageSize,
+                         const QString& aspectRatio);
 
 public slots:
     void refreshApiKeys();
     void saveCurrentModelPreferences();
     void saveDraftOnClose();  // 关闭时保存草稿
+    void onRegenerateRequest(const QString& prompt,
+                            const QString& modelVariant,
+                            const QStringList& referencePaths,
+                            const QString& apiKeyName,
+                            const QString& serverUrl,
+                            const QString& imageSize,
+                            const QString& aspectRatio);
 
 private slots:
     void onModelChanged(int index);
@@ -157,7 +171,10 @@ private:
     QPushButton *generateButton;
 };
 
-// 历史记录 Tab
+// 前向声明
+class ImageSingleHistoryTab;
+
+// 历史记录 Tab (容器，支持双Tab)
 class ImageHistoryTab : public QWidget
 {
     Q_OBJECT
@@ -169,17 +186,21 @@ public slots:
     void refreshHistory();
     void refreshApiKeys();
 
-private slots:
-    void onRowDoubleClicked(int row, int column);
-    void openSelectedFolder();
+signals:
+    void regenerateRequested(const QString& prompt,
+                           const QString& modelVariant,
+                           const QStringList& referencePaths,
+                           const QString& apiKeyName,
+                           const QString& serverUrl,
+                           const QString& imageSize,
+                           const QString& aspectRatio);
 
 private:
     void setupUI();
-    void loadHistory();
 
-    QTableWidget *historyTable;
-    QPushButton *refreshButton;
-    QPushButton *openFolderButton;
+    QTabWidget* historyTabWidget;
+    ImageSingleHistoryTab* imageSingleTab;
+    QWidget* imageBatchPlaceholder;  // "待开发"占位符
 };
 
 // 主图片生成 Widget

@@ -25,6 +25,7 @@ set(SOURCES
     widgets/grokgen.cpp
     widgets/wangen.cpp
     widgets/imagegen.cpp
+    widgets/imagehistory.cpp
     widgets/configwidget.cpp
     widgets/aboutwidget.cpp
     widgets/helpwidget.cpp
@@ -44,6 +45,7 @@ set(HEADERS
     widgets/grokgen.h
     widgets/wangen.h
     widgets/imagegen.h
+    widgets/imagehistory.h
     widgets/configwidget.h
     widgets/aboutwidget.h
     widgets/helpwidget.h
