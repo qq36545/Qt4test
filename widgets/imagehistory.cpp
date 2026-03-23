@@ -39,6 +39,13 @@ void ImageSingleHistoryTab::setupUI()
     QHBoxLayout *toolbarLayout = new QHBoxLayout();
     toolbarLayout->setSpacing(10);
 
+    // 全选复选框
+    headerCheckBox = new QCheckBox();
+    headerCheckBox->setText("全选");
+    headerCheckBox->setToolTip("全选所有记录");
+    connect(headerCheckBox, &QCheckBox::checkStateChanged, this, &ImageSingleHistoryTab::onSelectAllChanged);
+    toolbarLayout->addWidget(headerCheckBox);
+
     // 视图切换按钮
     switchViewButton = new QPushButton("🖼️ 缩略图视图");
     switchViewButton->setFixedWidth(130);
@@ -156,7 +163,13 @@ void ImageSingleHistoryTab::setupListView()
     historyTable->verticalHeader()->setMinimumSectionSize(40);
     historyTable->setContextMenuPolicy(Qt::CustomContextMenu);
 
-    // 注意：表头全选勾选框功能简化处理
+    // 表头全选复选框
+    headerCheckBox = new QCheckBox();
+    headerCheckBox->setText("");
+    headerCheckBox->setToolTip("全选");
+    headerCheckBox->setFixedHeight(25);
+    headerCheckBox->setStyleSheet("QCheckBox { margin: 0 auto; }");
+    connect(headerCheckBox, &QCheckBox::checkStateChanged, this, &ImageSingleHistoryTab::onSelectAllChanged);
 }
 
 void ImageSingleHistoryTab::setupThumbnailView()
@@ -652,6 +665,8 @@ void ImageSingleHistoryTab::onDeleteSelected()
 void ImageSingleHistoryTab::onSelectAllChanged(int state)
 {
     bool checked = (state == Qt::Checked);
+    // 阻止行复选框的信号，避免触发 onCheckBoxStateChanged
+    headerCheckBox->blockSignals(true);
     for (int row = 0; row < historyTable->rowCount(); ++row) {
         QWidget *cellWidget = historyTable->cellWidget(row, 0);
         if (cellWidget) {
@@ -661,11 +676,29 @@ void ImageSingleHistoryTab::onSelectAllChanged(int state)
             }
         }
     }
+    // 更新选中状态
+    selectedIds.clear();
+    if (checked) {
+        for (int row = 0; row < historyTable->rowCount(); ++row) {
+            QWidget *cellWidget = historyTable->cellWidget(row, 0);
+            if (cellWidget) {
+                QCheckBox *checkBox = cellWidget->findChild<QCheckBox*>();
+                if (checkBox && checkBox->isEnabled()) {
+                    int id = checkBox->property("historyId").toInt();
+                    if (id > 0) {
+                        selectedIds.insert(id);
+                    }
+                }
+            }
+        }
+    }
+    headerCheckBox->blockSignals(false);
 }
 
 void ImageSingleHistoryTab::onCheckBoxStateChanged()
 {
     selectedIds.clear();
+    int checkedCount = 0;
     for (int row = 0; row < historyTable->rowCount(); ++row) {
         QWidget *cellWidget = historyTable->cellWidget(row, 0);
         if (cellWidget) {
@@ -674,9 +707,22 @@ void ImageSingleHistoryTab::onCheckBoxStateChanged()
                 int id = checkBox->property("historyId").toInt();
                 if (id > 0) {
                     selectedIds.insert(id);
+                    checkedCount++;
                 }
             }
         }
+    }
+    // 同步全选按钮状态（阻止信号避免触发 onSelectAllChanged）
+    if (headerCheckBox) {
+        headerCheckBox->blockSignals(true);
+        if (checkedCount == 0) {
+            headerCheckBox->setCheckState(Qt::Unchecked);
+        } else if (checkedCount == historyTable->rowCount()) {
+            headerCheckBox->setCheckState(Qt::Checked);
+        } else {
+            headerCheckBox->setCheckState(Qt::PartiallyChecked);
+        }
+        headerCheckBox->blockSignals(false);
     }
 }
 
