@@ -51,7 +51,6 @@ signals:
                            const QString& aspectRatio);
 
 public slots:
-    void refreshApiKeys();
     void refreshHistory();
 
 protected:
@@ -96,9 +95,7 @@ private:
 
     // 工具栏组件
     QPushButton* switchViewButton;
-    QPushButton* refreshButton;
     QPushButton* deleteButton;
-    QComboBox* apiKeyCombo;
     QComboBox* statusCombo;
     QComboBox* timeFilterCombo;
 

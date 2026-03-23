@@ -27,7 +27,6 @@ ImageSingleHistoryTab::ImageSingleHistoryTab(QWidget *parent)
 {
     setupUI();
     loadHistory();
-    loadApiKeys();
 }
 
 void ImageSingleHistoryTab::setupUI()
@@ -45,16 +44,6 @@ void ImageSingleHistoryTab::setupUI()
     switchViewButton->setFixedWidth(130);
     connect(switchViewButton, &QPushButton::clicked, this, &ImageSingleHistoryTab::switchView);
     toolbarLayout->addWidget(switchViewButton);
-
-    // API密钥筛选
-    apiKeyCombo = new QComboBox();
-    apiKeyCombo->setFixedWidth(150);
-    apiKeyCombo->setMinimumWidth(120);
-    apiKeyCombo->setMaxCount(20);
-    apiKeyCombo->setEditable(true);
-    apiKeyCombo->lineEdit()->setPlaceholderText("全部密钥");
-    toolbarLayout->addWidget(new QLabel("密钥:"));
-    toolbarLayout->addWidget(apiKeyCombo);
 
     // 状态筛选
     statusCombo = new QComboBox();
@@ -79,12 +68,6 @@ void ImageSingleHistoryTab::setupUI()
     toolbarLayout->addWidget(timeFilterCombo);
 
     toolbarLayout->addStretch();
-
-    // 刷新按钮
-    refreshButton = new QPushButton("🔄 刷新");
-    refreshButton->setFixedWidth(80);
-    connect(refreshButton, &QPushButton::clicked, this, &ImageSingleHistoryTab::refreshHistory);
-    toolbarLayout->addWidget(refreshButton);
 
     // 删除按钮
     deleteButton = new QPushButton("🗑️ 删除");
@@ -709,31 +692,7 @@ void ImageSingleHistoryTab::updateHeaderCheckBoxPosition()
     // 勾选框位置由 Qt 自动管理
 }
 
-void ImageSingleHistoryTab::refreshApiKeys()
-{
-    loadApiKeys();
-}
-
 void ImageSingleHistoryTab::refreshHistory()
 {
     loadHistory();
-}
-
-void ImageSingleHistoryTab::loadApiKeys()
-{
-    QString currentText = apiKeyCombo->currentText();
-    apiKeyCombo->clear();
-    apiKeyCombo->addItem("全部密钥", "");
-
-    QList<ApiKey> keys = DBManager::instance()->getAllApiKeys();
-    for (const ApiKey &key : keys) {
-        apiKeyCombo->addItem(key.name, key.name);
-    }
-
-    if (!currentText.isEmpty()) {
-        int index = apiKeyCombo->findText(currentText);
-        if (index >= 0) {
-            apiKeyCombo->setCurrentIndex(index);
-        }
-    }
 }

@@ -184,7 +184,6 @@ public:
 
 public slots:
     void refreshHistory();
-    void refreshApiKeys();
 
 signals:
     void regenerateRequested(const QString& prompt,

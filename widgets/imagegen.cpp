@@ -97,9 +97,6 @@ void ImageGenWidget::setupUI()
 
     connect(singleTab, &ImageSingleTab::imageGeneratedSuccessfully,
             historyTab, &ImageHistoryTab::refreshHistory);
-    // 连接 API 密钥选择变化信号，用于同步历史页密钥（如需扩展）
-    connect(singleTab, &ImageSingleTab::apiKeySelectionChanged,
-            historyTab, &ImageHistoryTab::refreshApiKeys);
 
     // 连接历史页重新生成信号
     connect(historyTab, &ImageHistoryTab::regenerateRequested,
@@ -1307,9 +1304,4 @@ void ImageHistoryTab::setupUI()
 void ImageHistoryTab::refreshHistory()
 {
     imageSingleTab->refreshHistory();
-}
-
-void ImageHistoryTab::refreshApiKeys()
-{
-    imageSingleTab->refreshApiKeys();
 }

@@ -128,6 +128,7 @@ void HelpWidget::updateThemeStyles()
     const QString textColor = isDarkTheme ? "#FFFFFF" : "#000000";
     const QString titleColor = textColor;
     const QString linkColor = isDarkTheme ? "#FF9F1A" : "#0369A1";
+    const QString linkHoverColor = linkColor;
     const QString dividerColor = isDarkTheme ? "rgba(255,255,255,0.28)" : "rgba(0,0,0,0.24)";
 
     titleLabel->setStyleSheet(QString("font-size: 30px; font-weight: 700; color: %1;").arg(titleColor));
@@ -140,7 +141,7 @@ void HelpWidget::updateThemeStyles()
             <hr style="border:none; border-top:1px solid %5; margin:16px 0;"/>
 
             <h3 style="font-size:20px; color:%2; margin:8px 0 10px 0;">✅ 必做两步</h3>
-            <ol style="margin-left:20px; color:%1; font-size:20px;">
+            <ol style="margin-left:20px; list-style-position: inside; color:%1; font-size:20px;">
                 <li style="margin-bottom:12px; color:%1; font-size:20px;">
                     配置 AI 模型密钥：点击<a href="https://g1hzbw0p4dd.feishu.cn/docx/E9YedBOaGoaqS0xvx3qcTrG3n4e?from=from_copylink" style="color:%3; font-size:22px; font-weight:700; text-decoration:none;">这里</a>
                 </li>
