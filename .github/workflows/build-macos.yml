@@ -52,7 +52,13 @@ jobs:
     - name: Rename DMG
       run: |
         cd build
-        mv ChickenAI.dmg ChickenAI-${APP_VERSION}-macos-arm64.dmg
+        dmg_file=$(ls -t *.dmg 2>/dev/null | head -n 1)
+        if [ -z "$dmg_file" ]; then
+          echo "No DMG file found in build directory"
+          ls -la
+          exit 1
+        fi
+        mv "$dmg_file" "ChickenAI-${APP_VERSION}-macos-arm64.dmg"
 
     - name: Upload DMG
       uses: actions/upload-artifact@v4
@@ -108,7 +114,13 @@ jobs:
     - name: Rename DMG
       run: |
         cd build
-        mv ChickenAI.dmg ChickenAI-${APP_VERSION}-macos-x86_64.dmg
+        dmg_file=$(ls -t *.dmg 2>/dev/null | head -n 1)
+        if [ -z "$dmg_file" ]; then
+          echo "No DMG file found in build directory"
+          ls -la
+          exit 1
+        fi
+        mv "$dmg_file" "ChickenAI-${APP_VERSION}-macos-x86_64.dmg"
 
     - name: Upload DMG
       uses: actions/upload-artifact@v4
