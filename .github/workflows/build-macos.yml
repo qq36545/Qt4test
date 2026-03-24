@@ -76,7 +76,7 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   build-macos-intel:
-    runs-on: macos-13  # Intel runner
+    runs-on: macos-14  # Apple Silicon runner (cross-build x86_64)
 
     steps:
     - name: Checkout code
