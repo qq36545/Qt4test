@@ -4,16 +4,17 @@
 #include <QWidget>
 #include <QVariantMap>
 #include <QEvent>
+#include <QList>
 
 class QComboBox;
 class QTextEdit;
-class QListWidget;
 class QLabel;
 class QCheckBox;
 class QPushButton;
 class QStackedWidget;
 class QRadioButton;
 class QButtonGroup;
+class QGridLayout;
 class QShowEvent;
 struct VideoTask;
 
@@ -28,9 +29,15 @@ public:
 protected:
     void changeEvent(QEvent *event) override;
     void showEvent(QShowEvent *event) override;
+    bool eventFilter(QObject *watched, QEvent *event) override;
 
 signals:
     void createTaskRequested(const QVariantMap &payload);
+    void apiKeySelectionChanged(const QString &apiKeyValue);
+
+public slots:
+    void refreshApiKeys();
+    void restoreDraftSettings();
 
 private slots:
     void onSubmitClicked();
@@ -39,7 +46,7 @@ private slots:
 
 private:
     void setupUI();
-    void refreshImageList();
+    void updateThumbnailGrid();
     void applyApiFormatRadioStyle();
     QString resolveAppTheme() const;
 
@@ -50,16 +57,37 @@ private:
     QVariantMap buildUnifiedPayload() const;
     QVariantMap buildOpenAIPayload() const;
 
+    void loadApiKeys();
+    int maxReferenceImages() const;
+    void removeReferenceImage(int index);
+    void replaceReferenceImage(int index);
+
+    QList<int> durationsForVariant(const QString &variant) const;
+    void refreshDurationOptionsByVariant();
+    void setDurationComboItems(QComboBox *combo, const QList<int> &values, int preferValue);
+    int currentDurationValue(QComboBox *combo, bool *ok = nullptr) const;
+    bool validateDurationEditor(QComboBox *combo);
+    void syncDurationValueToBoth(int value, QComboBox *source = nullptr);
+
+    void queueSaveSettings();
+    void saveSettings();
+    void loadSettings();
+    QString buildSettingsSnapshot() const;
+
 private:
     QRadioButton *unifiedFormatRadio;
     QRadioButton *openaiFormatRadio;
     QButtonGroup *apiFormatGroup;
     QLabel *apiFormatLabel;
     QComboBox *variantCombo;
+    QComboBox *apiKeyCombo;
+    QPushButton *addKeyButton;
+    QComboBox *serverCombo;
     QTextEdit *promptInput;
-    QPushButton *uploadImagesButton;
-    QListWidget *imageList;
-
+    QPushButton *clearImagesButton;
+    QLabel *referenceCountLabel;
+    QWidget *thumbnailContainer;
+    QGridLayout *thumbnailLayout;
     QStackedWidget *paramsStack;
 
     // unified
@@ -78,6 +106,11 @@ private:
     QPushButton *submitButton;
 
     QStringList uploadedImagePaths;
+    int lastValidDuration = 10;
+    bool syncingDuration = false;
+    bool suppressAutoSave = false;
+    bool pendingSaveSettings = false;
+    QString lastSavedSettingsSnapshot;
 };
 
 #endif // SORA2GENPAGE_H

@@ -281,6 +281,7 @@ VideoSingleTab::VideoSingleTab(QWidget *parent)
     connect(veoPage, &VeoGenPage::apiKeySelectionChanged, this, &VideoSingleTab::apiKeySelectionChanged);
     connect(grokPage, &GrokGenPage::apiKeySelectionChanged, this, &VideoSingleTab::apiKeySelectionChanged);
     connect(wanPage, &WanGenPage::apiKeySelectionChanged, this, &VideoSingleTab::apiKeySelectionChanged);
+    connect(sora2Page, &Sora2GenPage::apiKeySelectionChanged, this, &VideoSingleTab::apiKeySelectionChanged);
 
     connect(sora2Page, &Sora2GenPage::createTaskRequested,
             this, &VideoSingleTab::onSora2CreateTaskRequested);
@@ -339,6 +340,8 @@ void VideoSingleTab::onModelChanged(int index)
         wanPage->refreshApiKeys();
         break;
     case 3:
+        sora2Page->refreshApiKeys();
+        sora2Page->restoreDraftSettings();
         break;
     }
 }
@@ -348,6 +351,7 @@ void VideoSingleTab::refreshApiKeys()
     veoPage->refreshApiKeys();
     grokPage->refreshApiKeys();
     wanPage->refreshApiKeys();
+    sora2Page->refreshApiKeys();
 }
 
 void VideoSingleTab::onSora2CreateTaskRequested(const QVariantMap& payload)
@@ -392,14 +396,24 @@ void VideoSingleTab::onSora2CreateTaskRequested(const QVariantMap& payload)
     const int serverIndex = settings.value("server", 0).toInt();
     settings.endGroup();
 
+    const QString payloadApiKeyValue = payload.value("api_key_value").toString().trimmed();
+    const QString effectiveApiKeyValue = !payloadApiKeyValue.isEmpty() ? payloadApiKeyValue : selectedApiKeyValue;
+
     ApiKey selectedKey = keys.first();
-    if (!selectedApiKeyValue.isEmpty()) {
+    bool foundSelectedKey = false;
+    if (!effectiveApiKeyValue.isEmpty()) {
         for (const ApiKey &key : keys) {
-            if (key.apiKey == selectedApiKeyValue) {
+            if (key.apiKey == effectiveApiKeyValue) {
                 selectedKey = key;
+                foundSelectedKey = true;
                 break;
             }
         }
+    }
+
+    if (!foundSelectedKey && !effectiveApiKeyValue.isEmpty()) {
+        QMessageBox::warning(this, "提示", "所选 API 密钥无效，请重新选择");
+        return;
     }
 
     const QStringList serverUrls = {
@@ -407,9 +421,13 @@ void VideoSingleTab::onSora2CreateTaskRequested(const QVariantMap& payload)
         "https://api.kuai.host",
         "https://api.kegeai.top"
     };
-    const QString baseUrl = (serverIndex >= 0 && serverIndex < serverUrls.size())
-                            ? serverUrls.at(serverIndex)
-                            : serverUrls.first();
+    const QString payloadServerUrl = payload.value("server_url").toString().trimmed();
+    QString baseUrl = payloadServerUrl;
+    if (baseUrl.isEmpty()) {
+        baseUrl = (serverIndex >= 0 && serverIndex < serverUrls.size())
+                ? serverUrls.at(serverIndex)
+                : serverUrls.first();
+    }
 
     ImgbbKey activeImgbbKey = DBManager::instance()->getActiveImgbbKey();
     const bool needImgbb = isImageToVideo && apiFormat == "unified";
