@@ -11,7 +11,7 @@
 ## Build, Test, and Development Commands
 - Configure: `cmake -S . -B build` — generate build files from `CMakeLists.txt`.
 - Build: `cmake --build build -j4` — compile the Qt app.
-- Run (macOS): `open build/Qt4test.app`.
+- Run (macOS): `open build/ChickenAI.app`.
 - Quick local run script: `bash run.sh` (if environment is already prepared).
 - Release preflight: `bash scripts/release_preflight_check.sh` — checks versioning and release readiness.
 

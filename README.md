@@ -52,7 +52,7 @@ Qt4test/
 │   └── imagegen.h/cpp      # 图片生成组件
 ├── resources.qrc           # Qt 资源文件
 └── build/                  # 构建目录
-    └── Qt4test.app         # macOS 应用包
+    └── ChickenAI.app         # macOS 应用包
 ```
 
 ## 构建说明
@@ -88,12 +88,12 @@ cmake ..
 make -j4
 
 # 运行
-open Qt4test.app
+open ChickenAI.app
 ```
 
 ## 使用说明
 
-1. **启动应用**：双击 `Qt4test.app` 或通过命令行 `open Qt4test.app`
+1. **启动应用**：双击 `ChickenAI.app` 或通过命令行 `open ChickenAI.app`
 2. **切换功能**：点击左侧边栏的图标切换视频生成/图片生成/历史记录
 3. **生成内容**：
    - 输入提示词

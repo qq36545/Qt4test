@@ -19,9 +19,9 @@ int main(int argc, char *argv[])
     }
 
     // 设置应用信息
-    app.setApplicationName("Qt4test");
+    app.setApplicationName("ChickenAI");
     app.setApplicationVersion(APP_VERSION_STR);
-    app.setOrganizationName("Qt4test");
+    app.setOrganizationName("ChickenAI");
 #ifndef NDEBUG
     qDebug() << "App version:" << QApplication::applicationVersion();
 #endif
