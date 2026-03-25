@@ -8,6 +8,7 @@
 #include <QLabel>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
+#include <QGridLayout>
 #include <QCheckBox>
 #include <QScrollArea>
 #include <QTimer>
@@ -35,10 +36,6 @@ private slots:
     void generateVideo();
     void resetForm();
     void onModelVariantChanged(int index);
-    void uploadImage1();
-    void uploadImage2();
-    void uploadImage3();
-    void clearImage(int index);
     void onVideoCreated(const QString &taskId, const QString &status);
     void onTaskStatusUpdated(const QString &taskId, const QString &status, const QString &videoUrl, int progress);
     void onApiError(const QString &error);
@@ -48,14 +45,17 @@ private:
     void setupUI();
     void connectSignals();
     void loadApiKeys();
-    void updateImagePreview();
+    void onUploadImagesClicked();
+    void updateThumbnailGrid();
+    void removeReferenceImage(int index);
+    void replaceReferenceImage(int index);
+    int maxReferenceImages() const;
     void queueSaveSettings();
     void saveSettings();
     void loadSettings();
     QString buildSettingsSnapshot() const;
     QString calculateParamsHash() const;
     bool checkDuplicateSubmission();
-    QString selectAndValidateImageFile(const QString &dialogTitle);
     bool validateImageFile(const QString &filePath, QString &errorMsg) const;
 
 protected:
@@ -75,22 +75,11 @@ protected:
     QPushButton *generateButton;
     QPushButton *resetButton;
 
-    // 图片上传（3张）
     QLabel *imageLabel;
-    QLabel *imagePreviewLabel;
-    QPushButton *uploadImage1Button;
-    QPushButton *clearImage1Button;
-
-    QWidget *image2Widget;
-    QLabel *image2PreviewLabel;
-    QPushButton *uploadImage2Button;
-    QPushButton *clearImage2Button;
-
-    QWidget *image3Widget;
-    QLabel *image3PreviewLabel;
-    QPushButton *uploadImage3Button;
-    QPushButton *clearImage3Button;
-
+    QLabel *referenceCountLabel;
+    QPushButton *clearImagesButton;
+    QWidget *thumbnailContainer;
+    QGridLayout *thumbnailLayout;
     QStringList uploadedImagePaths;
     QLabel *imageUploadHintLabel;
 

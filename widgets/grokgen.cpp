@@ -15,8 +15,9 @@
 #include <QDateTime>
 #include <QRandomGenerator>
 #include <QRegularExpression>
+#include <QDir>
+#include <QMouseEvent>
 
-// GrokGenPage 实现
 GrokGenPage::GrokGenPage(QWidget *parent)
     : QWidget(parent),
       suppressDuplicateWarning(false),
@@ -52,7 +53,6 @@ void GrokGenPage::setupUI()
     contentLayout->setContentsMargins(20, 20, 20, 20);
     contentLayout->setSpacing(15);
 
-    // ========== 模型变体选择 ==========
     QHBoxLayout *variantLayout = new QHBoxLayout();
     QLabel *variantLabel = new QLabel("模型变体:");
     variantLabel->setStyleSheet("font-size: 14px;");
@@ -65,7 +65,6 @@ void GrokGenPage::setupUI()
     variantLayout->addWidget(modelVariantCombo, 1);
     contentLayout->addLayout(variantLayout);
 
-    // ========== API Key 选择 ==========
     QHBoxLayout *keyLayout = new QHBoxLayout();
     QLabel *keyLabel = new QLabel("API 密钥:");
     keyLabel->setStyleSheet("font-size: 14px;");
@@ -79,7 +78,6 @@ void GrokGenPage::setupUI()
     keyLayout->addWidget(addKeyButton);
     contentLayout->addLayout(keyLayout);
 
-    // ========== 服务器选择 ==========
     QHBoxLayout *serverLayout = new QHBoxLayout();
     QLabel *serverLabel = new QLabel("请求服务器:");
     serverLabel->setStyleSheet("font-size: 14px;");
@@ -92,7 +90,6 @@ void GrokGenPage::setupUI()
     serverLayout->addWidget(serverCombo, 1);
     contentLayout->addLayout(serverLayout);
 
-    // ========== 提示词输入 ==========
     QHBoxLayout *promptHeaderLayout = new QHBoxLayout();
     promptLabel = new QLabel("提示词:");
     promptLabel->setStyleSheet("font-size: 14px;");
@@ -112,104 +109,47 @@ void GrokGenPage::setupUI()
     promptInput->setStyleSheet("font-size: 15px;");
     contentLayout->addWidget(promptInput);
 
-    // ========== 图片上传区域 ==========
-    QHBoxLayout *imageLabelLayout = new QHBoxLayout();
-    imageLabel = new QLabel("图片1（可选）:");
+    QHBoxLayout *imageHeaderLayout = new QHBoxLayout();
+    imageLabel = new QLabel("参考图（可选）:");
     imageLabel->setStyleSheet("font-size: 14px;");
     imageUploadHintLabel = new QLabel("💡提示：垫图后，视频尺寸跟垫图的图片尺寸保持一致");
     imageUploadHintLabel->setStyleSheet("font-size: 12px; color: #888888;");
     imageUploadHintLabel->setWordWrap(false);
-    imageLabelLayout->setContentsMargins(0, 0, 0, 0);
-    imageLabelLayout->setSpacing(8);
-    imageLabelLayout->addWidget(imageLabel);
-    imageLabelLayout->addWidget(imageUploadHintLabel);
-    imageLabelLayout->addStretch();
-    contentLayout->addLayout(imageLabelLayout);
+    referenceCountLabel = new QLabel(QString("已选 0/%1 张").arg(maxReferenceImages()));
+    referenceCountLabel->setStyleSheet("font-size: 12px; color: #64748b;");
+    clearImagesButton = new QPushButton("🗑️ 清除");
+    clearImagesButton->setCursor(Qt::PointingHandCursor);
+    connect(clearImagesButton, &QPushButton::clicked, this, [this]() {
+        if (uploadedImagePaths.isEmpty()) {
+            return;
+        }
+        uploadedImagePaths.clear();
+        updateThumbnailGrid();
+        queueSaveSettings();
+    });
 
-    QHBoxLayout *imageLayout1 = new QHBoxLayout();
-    imagePreviewLabel = new QLabel("未选择图片\n点击此处上传");
-    imagePreviewLabel->setObjectName("imagePreviewLabel");
-    imagePreviewLabel->setAlignment(Qt::AlignCenter);
-    imagePreviewLabel->setCursor(Qt::PointingHandCursor);
-    imagePreviewLabel->setScaledContents(false);
-    imagePreviewLabel->installEventFilter(this);
+    imageHeaderLayout->setContentsMargins(0, 0, 0, 0);
+    imageHeaderLayout->setSpacing(8);
+    imageHeaderLayout->addWidget(imageLabel);
+    imageHeaderLayout->addWidget(imageUploadHintLabel);
+    imageHeaderLayout->addStretch();
+    imageHeaderLayout->addWidget(referenceCountLabel);
+    imageHeaderLayout->addWidget(clearImagesButton);
+    contentLayout->addLayout(imageHeaderLayout);
 
-    uploadImage1Button = new QPushButton("📁 选择图片1");
-    uploadImage1Button->setFixedWidth(150);
-    connect(uploadImage1Button, &QPushButton::clicked, this, &GrokGenPage::uploadImage1);
+    thumbnailContainer = new QWidget();
+    thumbnailContainer->setObjectName("grokThumbnailContainer");
+    thumbnailContainer->setStyleSheet("background-color: transparent;");
+    thumbnailContainer->setMinimumHeight(90);
+    thumbnailContainer->setCursor(Qt::PointingHandCursor);
+    thumbnailContainer->installEventFilter(this);
 
-    clearImage1Button = new QPushButton("🗑️ 清空");
-    clearImage1Button->setFixedWidth(80);
-    connect(clearImage1Button, &QPushButton::clicked, [this]() { clearImage(0); });
+    thumbnailLayout = new QGridLayout(thumbnailContainer);
+    thumbnailLayout->setContentsMargins(8, 8, 8, 8);
+    thumbnailLayout->setHorizontalSpacing(8);
+    thumbnailLayout->setVerticalSpacing(8);
+    contentLayout->addWidget(thumbnailContainer);
 
-    imageLayout1->addWidget(imagePreviewLabel, 1);
-    imageLayout1->addWidget(uploadImage1Button);
-    imageLayout1->addWidget(clearImage1Button);
-    contentLayout->addLayout(imageLayout1);
-
-    // ========== 图片2 ==========
-    image2Widget = new QWidget();
-    QVBoxLayout *image2Layout = new QVBoxLayout(image2Widget);
-    image2Layout->setContentsMargins(0, 0, 0, 0);
-    image2Layout->setSpacing(10);
-    QLabel *image2Label = new QLabel("图片2（可选）:");
-    image2Label->setStyleSheet("font-size: 14px;");
-    image2Layout->addWidget(image2Label);
-
-    QHBoxLayout *imageLayout2 = new QHBoxLayout();
-    image2PreviewLabel = new QLabel("未选择图片\n点击此处上传");
-    image2PreviewLabel->setObjectName("imagePreviewLabel");
-    image2PreviewLabel->setAlignment(Qt::AlignCenter);
-    image2PreviewLabel->setCursor(Qt::PointingHandCursor);
-    image2PreviewLabel->setScaledContents(false);
-    image2PreviewLabel->installEventFilter(this);
-
-    uploadImage2Button = new QPushButton("📁 选择图片2");
-    uploadImage2Button->setFixedWidth(150);
-    connect(uploadImage2Button, &QPushButton::clicked, this, &GrokGenPage::uploadImage2);
-
-    clearImage2Button = new QPushButton("🗑️ 清空");
-    clearImage2Button->setFixedWidth(80);
-    connect(clearImage2Button, &QPushButton::clicked, [this]() { clearImage(1); });
-
-    imageLayout2->addWidget(image2PreviewLabel, 1);
-    imageLayout2->addWidget(uploadImage2Button);
-    imageLayout2->addWidget(clearImage2Button);
-    image2Layout->addLayout(imageLayout2);
-    contentLayout->addWidget(image2Widget);
-
-    // ========== 图片3 ==========
-    image3Widget = new QWidget();
-    QVBoxLayout *image3Layout = new QVBoxLayout(image3Widget);
-    image3Layout->setContentsMargins(0, 0, 0, 0);
-    image3Layout->setSpacing(10);
-    QLabel *image3Label = new QLabel("图片3（可选）:");
-    image3Label->setStyleSheet("font-size: 14px;");
-    image3Layout->addWidget(image3Label);
-
-    QHBoxLayout *imageLayout3 = new QHBoxLayout();
-    image3PreviewLabel = new QLabel("未选择图片\n点击此处上传");
-    image3PreviewLabel->setObjectName("imagePreviewLabel");
-    image3PreviewLabel->setAlignment(Qt::AlignCenter);
-    image3PreviewLabel->setCursor(Qt::PointingHandCursor);
-    image3PreviewLabel->setScaledContents(false);
-    image3PreviewLabel->installEventFilter(this);
-
-    uploadImage3Button = new QPushButton("📁 选择图片3");
-    uploadImage3Button->setFixedWidth(150);
-    connect(uploadImage3Button, &QPushButton::clicked, this, &GrokGenPage::uploadImage3);
-
-    clearImage3Button = new QPushButton("🗑️ 清空");
-    clearImage3Button->setFixedWidth(80);
-    connect(clearImage3Button, &QPushButton::clicked, [this]() { clearImage(2); });
-
-    imageLayout3->addWidget(image3PreviewLabel, 1);
-    imageLayout3->addWidget(uploadImage3Button);
-    imageLayout3->addWidget(clearImage3Button);
-    image3Layout->addLayout(imageLayout3);
-    contentLayout->addWidget(image3Widget);
-
-    // ========== 参数设置 ==========
     QHBoxLayout *paramsLayout = new QHBoxLayout();
 
     QVBoxLayout *resLayout = new QVBoxLayout();
@@ -236,7 +176,6 @@ void GrokGenPage::setupUI()
     paramsLayout->addStretch();
     contentLayout->addLayout(paramsLayout);
 
-    // ========== 预览区域 ==========
     previewLabel = new QLabel();
     previewLabel->setObjectName("videoPreviewLabel");
     previewLabel->setAlignment(Qt::AlignCenter);
@@ -244,7 +183,6 @@ void GrokGenPage::setupUI()
     previewLabel->setMinimumHeight(150);
     contentLayout->addWidget(previewLabel);
 
-    // ========== 按钮 ==========
     QHBoxLayout *buttonLayout = new QHBoxLayout();
     buttonLayout->setSpacing(10);
     generateButton = new QPushButton("🚀 生成视频");
@@ -259,6 +197,8 @@ void GrokGenPage::setupUI()
 
     scrollArea->setWidget(contentWidget);
     mainLayout->addWidget(scrollArea);
+
+    updateThumbnailGrid();
 }
 
 void GrokGenPage::connectSignals()
@@ -289,14 +229,29 @@ void GrokGenPage::connectSignals()
 bool GrokGenPage::eventFilter(QObject *obj, QEvent *event)
 {
     if (event->type() == QEvent::MouseButtonPress) {
-        if (obj == imagePreviewLabel) {
-            uploadImage1();
+        if (obj == thumbnailContainer) {
+            QMouseEvent *mouseEvent = static_cast<QMouseEvent *>(event);
+            const QPoint pos = mouseEvent->pos();
+            for (int i = 0; i < thumbnailLayout->count(); ++i) {
+                QWidget *widget = thumbnailLayout->itemAt(i)->widget();
+                if (widget && widget->geometry().contains(pos)) {
+                    return QWidget::eventFilter(obj, event);
+                }
+            }
+            onUploadImagesClicked();
             return true;
-        } else if (obj == image2PreviewLabel) {
-            uploadImage2();
+        }
+
+        const QWidget *clickedWidget = qobject_cast<QWidget *>(obj);
+        if (clickedWidget && clickedWidget->property("uploadSlot").toBool()) {
+            onUploadImagesClicked();
             return true;
-        } else if (obj == image3PreviewLabel) {
-            uploadImage3();
+        }
+
+        bool ok = false;
+        const int imageIndex = clickedWidget ? clickedWidget->property("imageIndex").toInt(&ok) : -1;
+        if (ok) {
+            removeReferenceImage(imageIndex);
             return true;
         }
     }
@@ -330,118 +285,65 @@ void GrokGenPage::onModelVariantChanged(int index)
     Q_UNUSED(index);
 }
 
-void GrokGenPage::uploadImage1()
+int GrokGenPage::maxReferenceImages() const
 {
-    QString fileName = selectAndValidateImageFile("选择图片1");
-    if (fileName.isEmpty()) return;
-
-    while (uploadedImagePaths.size() < 3) {
-        uploadedImagePaths.append(QString());
-    }
-    uploadedImagePaths[0] = fileName;
-
-    QPixmap pixmap(fileName);
-    QPixmap scaledPixmap = pixmap.scaled(200, 120, Qt::KeepAspectRatio, Qt::SmoothTransformation);
-    imagePreviewLabel->setPixmap(scaledPixmap);
-    imagePreviewLabel->setText("");
-    imagePreviewLabel->setProperty("hasImage", true);
-    imagePreviewLabel->style()->unpolish(imagePreviewLabel);
-    imagePreviewLabel->style()->polish(imagePreviewLabel);
-    queueSaveSettings();
+    return 10;
 }
 
-void GrokGenPage::uploadImage2()
+void GrokGenPage::updateThumbnailGrid()
 {
-    QString fileName = selectAndValidateImageFile("选择图片2");
-    if (fileName.isEmpty()) return;
-
-    while (uploadedImagePaths.size() < 3) {
-        uploadedImagePaths.append(QString());
+    QLayoutItem *item = nullptr;
+    while ((item = thumbnailLayout->takeAt(0)) != nullptr) {
+        delete item->widget();
+        delete item;
     }
-    uploadedImagePaths[1] = fileName;
 
-    QPixmap pixmap(fileName);
-    QPixmap scaledPixmap = pixmap.scaled(200, 120, Qt::KeepAspectRatio, Qt::SmoothTransformation);
-    image2PreviewLabel->setPixmap(scaledPixmap);
-    image2PreviewLabel->setText("");
-    image2PreviewLabel->setProperty("hasImage", true);
-    image2PreviewLabel->style()->unpolish(image2PreviewLabel);
-    image2PreviewLabel->style()->polish(image2PreviewLabel);
-    queueSaveSettings();
-}
+    const int count = uploadedImagePaths.size();
+    const int maxImages = maxReferenceImages();
+    referenceCountLabel->setText(QString("已选 %1/%2 张").arg(count).arg(maxImages));
 
-void GrokGenPage::uploadImage3()
-{
-    QString fileName = selectAndValidateImageFile("选择图片3");
-    if (fileName.isEmpty()) return;
+    const int slotCount = count < maxImages ? (count + 1) : count;
+    const int rows = qMax(1, (slotCount + 4) / 5);
+    thumbnailContainer->setMinimumHeight(rows * 74 + 16);
 
-    while (uploadedImagePaths.size() < 3) {
-        uploadedImagePaths.append(QString());
-    }
-    uploadedImagePaths[2] = fileName;
+    for (int i = 0; i < count; ++i) {
+        auto *thumb = new QLabel();
+        thumb->setAlignment(Qt::AlignCenter);
+        thumb->setCursor(Qt::PointingHandCursor);
+        thumb->setProperty("imageIndex", i);
+        thumb->setToolTip(QString("第%1张，点击替换/删除").arg(i + 1));
+        thumb->setStyleSheet("border: 1px solid #475569; border-radius: 4px; background-color: #0f172a;");
 
-    QPixmap pixmap(fileName);
-    QPixmap scaledPixmap = pixmap.scaled(200, 120, Qt::KeepAspectRatio, Qt::SmoothTransformation);
-    image3PreviewLabel->setPixmap(scaledPixmap);
-    image3PreviewLabel->setText("");
-    image3PreviewLabel->setProperty("hasImage", true);
-    image3PreviewLabel->style()->unpolish(image3PreviewLabel);
-    image3PreviewLabel->style()->polish(image3PreviewLabel);
-    queueSaveSettings();
-}
-
-void GrokGenPage::clearImage(int index)
-{
-    if (index < 0 || index >= uploadedImagePaths.size()) return;
-    uploadedImagePaths[index] = QString();
-
-    QLabel *previewLabel = nullptr;
-    if (index == 0) previewLabel = imagePreviewLabel;
-    else if (index == 1) previewLabel = image2PreviewLabel;
-    else if (index == 2) previewLabel = image3PreviewLabel;
-
-    if (previewLabel) {
-        previewLabel->setText("未选择图片\n点击此处上传");
-        previewLabel->setPixmap(QPixmap());
-        previewLabel->setProperty("hasImage", false);
-        previewLabel->style()->unpolish(previewLabel);
-        previewLabel->style()->polish(previewLabel);
-    }
-    queueSaveSettings();
-}
-
-void GrokGenPage::updateImagePreview()
-{
-    for (int i = 0; i < 3; ++i) {
-        QLabel *preview = nullptr;
-        if (i == 0) preview = imagePreviewLabel;
-        else if (i == 1) preview = image2PreviewLabel;
-        else if (i == 2) preview = image3PreviewLabel;
-        if (!preview) continue;
-
-        if (i < uploadedImagePaths.size() && !uploadedImagePaths[i].isEmpty()) {
-            QPixmap pixmap(uploadedImagePaths[i]);
-            if (!pixmap.isNull()) {
-                QPixmap scaledPixmap = pixmap.scaled(200, 120, Qt::KeepAspectRatio, Qt::SmoothTransformation);
-                preview->setPixmap(scaledPixmap);
-                preview->setText("");
-            } else {
-                QFileInfo fi(uploadedImagePaths[i]);
-                preview->setText("✓ " + fi.fileName());
-            }
-            preview->setProperty("hasImage", true);
+        const QPixmap pix(uploadedImagePaths.at(i));
+        if (!pix.isNull()) {
+            thumb->setPixmap(pix.scaled(60, 60, Qt::KeepAspectRatio, Qt::SmoothTransformation));
         } else {
-            preview->setText("未选择图片\n点击此处上传");
-            preview->setPixmap(QPixmap());
-            preview->setProperty("hasImage", false);
+            thumb->setText("加载失败");
         }
-        preview->style()->unpolish(preview);
-        preview->style()->polish(preview);
+
+        thumb->installEventFilter(this);
+        thumbnailLayout->addWidget(thumb, i / 5, i % 5);
+    }
+
+    if (count < maxImages) {
+        auto *slot = new QLabel("+\n点击上传");
+        slot->setAlignment(Qt::AlignCenter);
+        slot->setCursor(Qt::PointingHandCursor);
+        slot->setProperty("uploadSlot", true);
+        slot->setStyleSheet("border: 1px dashed #64748b; border-radius: 4px; color: #94a3b8; background-color: #0f172a;");
+        slot->installEventFilter(this);
+        thumbnailLayout->addWidget(slot, count / 5, count % 5);
     }
 }
 
-QString GrokGenPage::selectAndValidateImageFile(const QString &dialogTitle)
+void GrokGenPage::onUploadImagesClicked()
 {
+    const int maxImages = maxReferenceImages();
+    if (uploadedImagePaths.size() >= maxImages) {
+        QMessageBox::information(this, "提示", QString("最多上传 %1 张参考图").arg(maxImages));
+        return;
+    }
+
     QSettings settings("ChickenAI", "VideoGen");
     QString lastDir = settings.value("lastImageUploadDir",
         QStandardPaths::writableLocation(QStandardPaths::PicturesLocation)).toString();
@@ -449,25 +351,101 @@ QString GrokGenPage::selectAndValidateImageFile(const QString &dialogTitle)
         lastDir = QStandardPaths::writableLocation(QStandardPaths::PicturesLocation);
     }
 
-    QString fileName = QFileDialog::getOpenFileName(this, dialogTitle, lastDir,
-        "图片文件 (*.png *.jpg *.jpeg *.gif *.webp)");
-    if (fileName.isEmpty()) return QString();
+    const QStringList selectedFiles = QFileDialog::getOpenFileNames(
+        this,
+        "选择参考图",
+        lastDir,
+        "图片文件 (*.png *.jpg *.jpeg *.webp *.bmp)"
+    );
+
+    if (selectedFiles.isEmpty()) {
+        return;
+    }
+
+    const int remaining = maxImages - uploadedImagePaths.size();
+    if (selectedFiles.size() > remaining) {
+        QMessageBox::warning(this, "提示", QString("最多还能上传 %1 张参考图").arg(remaining));
+        return;
+    }
+
+    bool added = false;
+    for (const QString &filePath : selectedFiles) {
+        QString errorMsg;
+        if (!validateImageFile(filePath, errorMsg)) {
+            QMessageBox::warning(this, "图片校验失败", errorMsg);
+            continue;
+        }
+        if (uploadedImagePaths.contains(filePath)) {
+            continue;
+        }
+        uploadedImagePaths.append(filePath);
+        added = true;
+        if (uploadedImagePaths.size() >= maxImages) {
+            break;
+        }
+    }
+
+    if (!selectedFiles.isEmpty()) {
+        QFileInfo fileInfo(selectedFiles.last());
+        settings.setValue("lastImageUploadDir", fileInfo.absolutePath());
+    }
+
+    if (added) {
+        updateThumbnailGrid();
+        queueSaveSettings();
+    }
+}
+
+void GrokGenPage::removeReferenceImage(int index)
+{
+    if (index < 0 || index >= uploadedImagePaths.size()) {
+        return;
+    }
+
+    QMessageBox msgBox(this);
+    msgBox.setWindowTitle("参考图操作");
+    msgBox.setText(QString("已选 %1 张参考图，请选择操作").arg(uploadedImagePaths.size()));
+    QPushButton *replaceBtn = msgBox.addButton("替换", QMessageBox::AcceptRole);
+    QPushButton *deleteBtn = msgBox.addButton("删除", QMessageBox::DestructiveRole);
+    msgBox.addButton("取消", QMessageBox::RejectRole);
+
+    msgBox.exec();
+
+    if (msgBox.clickedButton() == replaceBtn) {
+        replaceReferenceImage(index);
+    } else if (msgBox.clickedButton() == deleteBtn) {
+        uploadedImagePaths.removeAt(index);
+        updateThumbnailGrid();
+        queueSaveSettings();
+    }
+}
+
+void GrokGenPage::replaceReferenceImage(int index)
+{
+    if (index < 0 || index >= uploadedImagePaths.size()) {
+        return;
+    }
+
+    const QString filePath = QFileDialog::getOpenFileName(
+        this,
+        "选择替换图片",
+        QString(),
+        "图片文件 (*.png *.jpg *.jpeg *.webp *.bmp)"
+    );
+
+    if (filePath.isEmpty()) {
+        return;
+    }
 
     QString errorMsg;
-    if (!validateImageFile(fileName, errorMsg)) {
+    if (!validateImageFile(filePath, errorMsg)) {
         QMessageBox::warning(this, "图片校验失败", errorMsg);
-        return QString();
+        return;
     }
 
-    QPixmap pixmap(fileName);
-    if (pixmap.isNull()) {
-        QMessageBox::warning(this, "提示", "选择的文件不是图片格式");
-        return QString();
-    }
-
-    QFileInfo fileInfo(fileName);
-    settings.setValue("lastImageUploadDir", fileInfo.absolutePath());
-    return fileName;
+    uploadedImagePaths[index] = filePath;
+    updateThumbnailGrid();
+    queueSaveSettings();
 }
 
 bool GrokGenPage::validateImageFile(const QString &filePath, QString &errorMsg) const
@@ -480,8 +458,8 @@ bool GrokGenPage::validateImageFile(const QString &filePath, QString &errorMsg) 
     }
     QImageReader reader(filePath);
     QString format = reader.format().toLower();
-    if (format != "jpg" && format != "jpeg" && format != "png" && format != "gif" && format != "webp") {
-        errorMsg = QString("不支持的格式（%1），仅支持 JPG/PNG/GIF/WEBP").arg(format);
+    if (format != "jpg" && format != "jpeg" && format != "png" && format != "webp" && format != "bmp") {
+        errorMsg = QString("不支持的格式（%1），仅支持 JPG/PNG/WEBP/BMP").arg(format);
         return false;
     }
     return true;
@@ -491,8 +469,7 @@ void GrokGenPage::resetForm()
 {
     promptInput->clear();
     uploadedImagePaths.clear();
-    uploadedImagePaths.resize(3);
-    updateImagePreview();
+    updateThumbnailGrid();
     previewLabel->setText("💡 生成结果将在【生成历史记录】");
     parametersModified = true;
 }
@@ -505,13 +482,11 @@ void GrokGenPage::generateVideo()
         return;
     }
 
-    // 过滤有效图片
     QStringList validImagePaths;
     for (const QString& path : uploadedImagePaths) {
         if (!path.isEmpty()) validImagePaths.append(path);
     }
 
-    // 无图片时确认
     if (validImagePaths.isEmpty()) {
         int ret = QMessageBox::question(this, "提示", "未选择图片，将为你进行文生视频",
             QMessageBox::Yes | QMessageBox::No);
@@ -544,7 +519,6 @@ void GrokGenPage::generateVideo()
         return;
     }
 
-    // 从variant名提取duration
     int grokDuration = 6;
     if (modelVariant.contains("15s")) grokDuration = 15;
     else if (modelVariant.contains("10s")) grokDuration = 10;
@@ -719,12 +693,10 @@ void GrokGenPage::loadSettings()
         }
     }
 
-    // 恢复 API 密钥：优先使用索引，备选使用密钥值匹配
     int apiKeyIndex = settings.value("grok_apiKey", 0).toInt();
     if (apiKeyIndex >= 0 && apiKeyIndex < apiKeyCombo->count()) {
         apiKeyCombo->setCurrentIndex(apiKeyIndex);
     } else {
-        // 索引无效时，通过保存的密钥值匹配
         QString savedApiKeyValue = settings.value("selectedApiKeyValue", "").toString();
         if (!savedApiKeyValue.isEmpty()) {
             for (int i = 0; i < apiKeyCombo->count(); ++i) {
@@ -763,11 +735,16 @@ void GrokGenPage::loadSettings()
 
     QStringList imagePaths = settings.value("grok_imagePaths").toStringList();
     uploadedImagePaths.clear();
-    uploadedImagePaths.resize(3);
-    for (int i = 0; i < imagePaths.size() && i < 3; ++i) {
-        if (QFile::exists(imagePaths[i])) uploadedImagePaths[i] = imagePaths[i];
+    for (const QString &path : imagePaths) {
+        if (path.isEmpty() || !QFile::exists(path) || uploadedImagePaths.contains(path)) {
+            continue;
+        }
+        uploadedImagePaths.append(path);
+        if (uploadedImagePaths.size() >= maxReferenceImages()) {
+            break;
+        }
     }
-    if (!uploadedImagePaths.isEmpty()) updateImagePreview();
+    updateThumbnailGrid();
 
     lastSubmittedParamsHash = settings.value("grok_lastSubmittedHash", "").toString();
 
@@ -869,18 +846,23 @@ void GrokGenPage::loadFromTask(const VideoTask& task)
     }
 
     uploadedImagePaths.clear();
-    uploadedImagePaths.resize(3);
     if (!task.imagePaths.isEmpty()) {
         QJsonDocument doc = QJsonDocument::fromJson(task.imagePaths.toUtf8());
         if (doc.isArray()) {
             QJsonArray imageArray = doc.array();
-            for (int i = 0; i < imageArray.size() && i < 3; ++i) {
+            for (int i = 0; i < imageArray.size(); ++i) {
                 QString path = imageArray[i].toString();
-                if (QFile::exists(path)) uploadedImagePaths[i] = path;
+                if (path.isEmpty() || !QFile::exists(path) || uploadedImagePaths.contains(path)) {
+                    continue;
+                }
+                uploadedImagePaths.append(path);
+                if (uploadedImagePaths.size() >= maxReferenceImages()) {
+                    break;
+                }
             }
         }
     }
-    updateImagePreview();
+    updateThumbnailGrid();
 
     parametersModified = false;
     lastSubmittedParamsHash.clear();

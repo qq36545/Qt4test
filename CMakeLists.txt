@@ -96,20 +96,25 @@ if(APPLE)
     target_sources(${PROJECT_NAME} PRIVATE resources/app.icns)
 
     # 修正 macOS bundle 运行时库路径，避免同时加载 Homebrew Qt 与包内 Qt
+    # 仅在 Release 构建执行打包步骤，避免本地开发构建产生 macdeployqt rpath 噪声。
     find_program(MACDEPLOYQT_EXECUTABLE macdeployqt)
     if(MACDEPLOYQT_EXECUTABLE)
-        add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-            COMMAND /bin/sh -c "rm -rf '$<TARGET_BUNDLE_DIR:${PROJECT_NAME}>/Contents/Frameworks' '$<TARGET_BUNDLE_DIR:${PROJECT_NAME}>/Contents/PlugIns' '$<TARGET_BUNDLE_DIR:${PROJECT_NAME}>/Contents/Resources/qml'"
-            COMMAND "${MACDEPLOYQT_EXECUTABLE}" "$<TARGET_BUNDLE_DIR:${PROJECT_NAME}>" -always-overwrite -verbose=0
-            COMMAND /usr/bin/install_name_tool -change /usr/local/opt/qtbase/lib/QtWidgets.framework/Versions/A/QtWidgets @executable_path/../Frameworks/QtWidgets.framework/Versions/A/QtWidgets "$<TARGET_FILE:${PROJECT_NAME}>"
-            COMMAND /usr/bin/install_name_tool -change /usr/local/opt/qtbase/lib/QtSql.framework/Versions/A/QtSql @executable_path/../Frameworks/QtSql.framework/Versions/A/QtSql "$<TARGET_FILE:${PROJECT_NAME}>"
-            COMMAND /usr/bin/install_name_tool -change /usr/local/opt/qtmultimedia/lib/QtMultimedia.framework/Versions/A/QtMultimedia @executable_path/../Frameworks/QtMultimedia.framework/Versions/A/QtMultimedia "$<TARGET_FILE:${PROJECT_NAME}>"
-            COMMAND /usr/bin/install_name_tool -change /usr/local/opt/qtbase/lib/QtGui.framework/Versions/A/QtGui @executable_path/../Frameworks/QtGui.framework/Versions/A/QtGui "$<TARGET_FILE:${PROJECT_NAME}>"
-            COMMAND /usr/bin/install_name_tool -change /usr/local/opt/qtbase/lib/QtNetwork.framework/Versions/A/QtNetwork @executable_path/../Frameworks/QtNetwork.framework/Versions/A/QtNetwork "$<TARGET_FILE:${PROJECT_NAME}>"
-            COMMAND /usr/bin/install_name_tool -change /usr/local/opt/qtbase/lib/QtCore.framework/Versions/A/QtCore @executable_path/../Frameworks/QtCore.framework/Versions/A/QtCore "$<TARGET_FILE:${PROJECT_NAME}>"
-            COMMAND /bin/sh -c "/usr/bin/install_name_tool -delete_rpath /usr/local/opt/qt@6/lib '$<TARGET_FILE:${PROJECT_NAME}>' || true"
-            VERBATIM
-        )
+        if(CMAKE_BUILD_TYPE STREQUAL "Release")
+            add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+                COMMAND /bin/sh -c "rm -rf '$<TARGET_BUNDLE_DIR:${PROJECT_NAME}>/Contents/Frameworks' '$<TARGET_BUNDLE_DIR:${PROJECT_NAME}>/Contents/PlugIns' '$<TARGET_BUNDLE_DIR:${PROJECT_NAME}>/Contents/Resources/qml'"
+                COMMAND "${MACDEPLOYQT_EXECUTABLE}" "$<TARGET_BUNDLE_DIR:${PROJECT_NAME}>" -always-overwrite -verbose=0
+                COMMAND /usr/bin/install_name_tool -change /usr/local/opt/qtbase/lib/QtWidgets.framework/Versions/A/QtWidgets @executable_path/../Frameworks/QtWidgets.framework/Versions/A/QtWidgets "$<TARGET_FILE:${PROJECT_NAME}>"
+                COMMAND /usr/bin/install_name_tool -change /usr/local/opt/qtbase/lib/QtSql.framework/Versions/A/QtSql @executable_path/../Frameworks/QtSql.framework/Versions/A/QtSql "$<TARGET_FILE:${PROJECT_NAME}>"
+                COMMAND /usr/bin/install_name_tool -change /usr/local/opt/qtmultimedia/lib/QtMultimedia.framework/Versions/A/QtMultimedia @executable_path/../Frameworks/QtMultimedia.framework/Versions/A/QtMultimedia "$<TARGET_FILE:${PROJECT_NAME}>"
+                COMMAND /usr/bin/install_name_tool -change /usr/local/opt/qtbase/lib/QtGui.framework/Versions/A/QtGui @executable_path/../Frameworks/QtGui.framework/Versions/A/QtGui "$<TARGET_FILE:${PROJECT_NAME}>"
+                COMMAND /usr/bin/install_name_tool -change /usr/local/opt/qtbase/lib/QtNetwork.framework/Versions/A/QtNetwork @executable_path/../Frameworks/QtNetwork.framework/Versions/A/QtNetwork "$<TARGET_FILE:${PROJECT_NAME}>"
+                COMMAND /usr/bin/install_name_tool -change /usr/local/opt/qtbase/lib/QtCore.framework/Versions/A/QtCore @executable_path/../Frameworks/QtCore.framework/Versions/A/QtCore "$<TARGET_FILE:${PROJECT_NAME}>"
+                COMMAND /bin/sh -c "/usr/bin/install_name_tool -delete_rpath /usr/local/opt/qt@6/lib '$<TARGET_FILE:${PROJECT_NAME}>' || true"
+                VERBATIM
+            )
+        else()
+            message(STATUS "Skipping macdeployqt post-build in non-Release build: ${CMAKE_BUILD_TYPE}")
+        endif()
     endif()
 endif()
 
