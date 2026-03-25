@@ -56,6 +56,22 @@ bool isTempTaskId(const QString& taskId)
     return taskId.startsWith("temp_") || taskId.startsWith("temp-");
 }
 
+bool isRecoverableSubmitError(const QString& error)
+{
+    const QString normalized = error.trimmed();
+    return normalized.contains("可能已创建")
+           || normalized.contains("timeout", Qt::CaseInsensitive)
+           || normalized.contains("超时");
+}
+
+void showSora2RecoveryHint(QWidget* parent, const QString& taskId, const QString& reason)
+{
+    QMessageBox::warning(parent, "提示",
+        QString("任务已创建（%1），但%2，未自动启动轮询。\n"
+                "请前往历史记录使用“修复任务ID”进行恢复。")
+            .arg(taskId, reason));
+}
+
 enum class VideoResolvedState {
     CompletedLocal,
     Failed,
@@ -468,9 +484,7 @@ void VideoSingleTab::onSora2CreateTaskRequested(const QVariantMap& payload)
         return;
     }
 
-    sora2CurrentTaskId = tempTaskId;
-    sora2CurrentApiKey = selectedKey.apiKey;
-    sora2CurrentBaseUrl = baseUrl;
+    sora2PendingTasks.append({tempTaskId, selectedKey.apiKey, baseUrl});
 
     sora2Api->createVideo(
         selectedKey.apiKey,
@@ -496,17 +510,31 @@ void VideoSingleTab::onSora2CreateTaskRequested(const QVariantMap& payload)
 
 void VideoSingleTab::onSora2VideoCreated(const QString& taskId, const QString& status)
 {
-    Q_UNUSED(status);
-
-    if (!sora2CurrentTaskId.isEmpty() && sora2CurrentTaskId != taskId) {
-        DBManager::instance()->updateTaskId(sora2CurrentTaskId, taskId);
+    QString resolvedStatus = status.trimmed();
+    if (resolvedStatus.isEmpty()) {
+        resolvedStatus = "pending";
     }
 
-    sora2CurrentTaskId = taskId;
-    DBManager::instance()->updateTaskStatus(taskId, "pending", 0, "");
+    if (sora2PendingTasks.isEmpty()) {
+        qWarning() << "[Sora2] Missing pending context for created task:" << taskId;
+        DBManager::instance()->updateTaskStatus(taskId, resolvedStatus, 0, "");
+        showSora2RecoveryHint(this, taskId, "本地上下文丢失");
+        return;
+    }
 
-    if (!sora2CurrentApiKey.isEmpty() && !sora2CurrentBaseUrl.isEmpty()) {
-        TaskPollManager::getInstance()->startPolling(taskId, "video_single", sora2CurrentApiKey, sora2CurrentBaseUrl, "Sora2视频");
+    const auto context = sora2PendingTasks.takeFirst();
+
+    if (context.tempTaskId != taskId) {
+        DBManager::instance()->updateTaskId(context.tempTaskId, taskId);
+    }
+
+    DBManager::instance()->updateTaskStatus(taskId, resolvedStatus, 0, "");
+
+    if (!context.apiKey.isEmpty() && !context.baseUrl.isEmpty()) {
+        TaskPollManager::getInstance()->startPolling(taskId, "video_single", context.apiKey, context.baseUrl, "Sora2视频");
+    } else {
+        qWarning() << "[Sora2] Missing API context for polling, task:" << taskId;
+        showSora2RecoveryHint(this, taskId, "缺少轮询所需上下文");
     }
 
     QMessageBox::information(this, "任务已提交",
@@ -515,9 +543,15 @@ void VideoSingleTab::onSora2VideoCreated(const QString& taskId, const QString& s
 
 void VideoSingleTab::onSora2ApiError(const QString& error)
 {
-    if (!sora2CurrentTaskId.isEmpty()) {
-        DBManager::instance()->updateTaskStatus(sora2CurrentTaskId, "failed", 0, "");
-        DBManager::instance()->updateTaskErrorMessage(sora2CurrentTaskId, error);
+    if (!sora2PendingTasks.isEmpty()) {
+        const auto context = sora2PendingTasks.takeFirst();
+        if (isRecoverableSubmitError(error)) {
+            DBManager::instance()->updateTaskStatus(context.tempTaskId, "pending", 0, "");
+            DBManager::instance()->updateTaskErrorMessage(context.tempTaskId, error);
+        } else {
+            DBManager::instance()->updateTaskStatus(context.tempTaskId, "failed", 0, "");
+            DBManager::instance()->updateTaskErrorMessage(context.tempTaskId, error);
+        }
     }
 
     QMessageBox::critical(this, "错误", QString("Sora2 API 调用失败:\n%1").arg(error));

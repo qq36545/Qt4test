@@ -19,6 +19,7 @@
 #include <QHBoxLayout>
 #include <QTextEdit>
 #include <QVariantMap>
+#include <QList>
 
 // 前向声明
 struct VideoTask;
@@ -50,6 +51,12 @@ private slots:
     void onSora2ApiError(const QString& error);
 
 private:
+    struct Sora2PendingContext {
+        QString tempTaskId;
+        QString apiKey;
+        QString baseUrl;
+    };
+
     void setupUI();
 
     QStackedWidget *stack;
@@ -59,9 +66,7 @@ private:
     Sora2GenPage *sora2Page;
     QComboBox *modelCombo;
     VideoAPI *sora2Api;
-    QString sora2CurrentTaskId;
-    QString sora2CurrentApiKey;
-    QString sora2CurrentBaseUrl;
+    QList<Sora2PendingContext> sora2PendingTasks;
 };
 
 // 批量视频生成 Tab
