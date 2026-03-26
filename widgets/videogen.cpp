@@ -68,7 +68,7 @@ void showSora2RecoveryHint(QWidget* parent, const QString& taskId, const QString
 {
     QMessageBox::warning(parent, "提示",
         QString("任务已创建（%1），但%2，未自动启动轮询。\n"
-                "请前往历史记录使用“修复任务ID”进行恢复。")
+                "请前往历史记录使用\"修复任务ID\"进行恢复。")
             .arg(taskId, reason));
 }
 
@@ -310,6 +310,8 @@ VideoSingleTab::VideoSingleTab(QWidget *parent)
             this, &VideoSingleTab::onSora2CreateTaskRequested);
     connect(sora2Api, &VideoAPI::videoCreated,
             this, &VideoSingleTab::onSora2VideoCreated);
+    connect(sora2Api, &VideoAPI::imageUploadProgress,
+            this, &VideoSingleTab::onSora2ImageUploadProgress);
     connect(sora2Api, &VideoAPI::errorOccurred,
             this, &VideoSingleTab::onSora2ApiError);
 }
@@ -498,6 +500,9 @@ void VideoSingleTab::onSora2CreateTaskRequested(const QVariantMap& payload)
 
     sora2PendingTasks.append({tempTaskId, selectedKey.apiKey, baseUrl});
     setSora2Submitting(true);
+    if (sora2Page) {
+        sora2Page->setStatusHint("⏳ 正在提交视频生成任务...");
+    }
 
     sora2Api->createVideo(
         selectedKey.apiKey,
@@ -524,6 +529,9 @@ void VideoSingleTab::onSora2CreateTaskRequested(const QVariantMap& payload)
 void VideoSingleTab::onSora2VideoCreated(const QString& taskId, const QString& status)
 {
     setSora2Submitting(false);
+    if (sora2Page) {
+        sora2Page->clearStatusHint();
+    }
 
     QString resolvedStatus = status.trimmed();
     if (resolvedStatus.isEmpty()) {
@@ -545,50 +553,61 @@ void VideoSingleTab::onSora2VideoCreated(const QString& taskId, const QString& s
 
     DBManager::instance()->updateTaskStatus(taskId, resolvedStatus, 0, "");
 
+    if (sora2Page) {
+        sora2Page->onSubmitSuccess(taskId);
+    }
+
     if (!context.apiKey.isEmpty() && !context.baseUrl.isEmpty()) {
         TaskPollManager::getInstance()->startPolling(taskId, "video_single", context.apiKey, context.baseUrl, "Sora2视频");
     } else {
         qWarning() << "[Sora2] Missing API context for polling, task:" << taskId;
         showSora2RecoveryHint(this, taskId, "缺少轮询所需上下文");
     }
+}
 
-    QLabel *toast = new QLabel("✅已提交任务，请到生成历史记录查询任务", this);
-    toast->setStyleSheet(
-        "QLabel {"
-        "    background-color: #4CAF50;"
-        "    color: white;"
-        "    padding: 10px 20px;"
-        "    border-radius: 5px;"
-        "    font-size: 14px;"
-        "}"
-    );
-    toast->setAlignment(Qt::AlignCenter);
-    toast->setWindowFlags(Qt::ToolTip | Qt::FramelessWindowHint);
-    toast->setAttribute(Qt::WA_TranslucentBackground);
-
-    QPoint globalPos = mapToGlobal(rect().center());
-    toast->move(globalPos.x() - 140, globalPos.y() - 100);
-    toast->show();
-
-    QTimer::singleShot(3000, toast, &QLabel::deleteLater);
+void VideoSingleTab::onSora2ImageUploadProgress(int current, int total)
+{
+    if (sora2Page) {
+        sora2Page->setStatusHint(QString("⏳ 正在上传第%1张/共%2张").arg(current).arg(total));
+        sora2Page->updateProgress(current, total,
+            QString("正在上传图片 %1/%2").arg(current).arg(total));
+    }
+    if (!sora2PendingTasks.isEmpty()) {
+        const auto &context = sora2PendingTasks.first();
+        if (!context.tempTaskId.isEmpty()) {
+            DBManager::instance()->updateTaskStatus(
+                context.tempTaskId,
+                QString("uploading_images:%1/%2").arg(current).arg(total),
+                0,
+                "");
+        }
+    }
 }
 
 void VideoSingleTab::onSora2ApiError(const QString& error)
 {
+    const QString userFacingError = VideoAPI::normalizeUserFacingError(error);
     setSora2Submitting(false);
+    if (sora2Page) {
+        sora2Page->clearStatusHint();
+    }
 
     if (!sora2PendingTasks.isEmpty()) {
         const auto context = sora2PendingTasks.takeFirst();
         if (isRecoverableSubmitError(error)) {
             DBManager::instance()->updateTaskStatus(context.tempTaskId, "pending", 0, "");
-            DBManager::instance()->updateTaskErrorMessage(context.tempTaskId, error);
+            DBManager::instance()->updateTaskErrorMessage(context.tempTaskId, userFacingError);
         } else {
             DBManager::instance()->updateTaskStatus(context.tempTaskId, "failed", 0, "");
-            DBManager::instance()->updateTaskErrorMessage(context.tempTaskId, error);
+            DBManager::instance()->updateTaskErrorMessage(context.tempTaskId, userFacingError);
         }
     }
 
-    QMessageBox::critical(this, "错误", QString("Sora2 API 调用失败:\n%1").arg(error));
+    if (sora2Page) {
+        sora2Page->onSubmitError(userFacingError);
+    }
+
+    QMessageBox::critical(this, "错误", QString("Sora2 API 调用失败:\n%1").arg(userFacingError));
 }
 
 void VideoSingleTab::loadFromTask(const VideoTask& task)

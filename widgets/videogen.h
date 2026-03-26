@@ -48,6 +48,7 @@ private slots:
     void onModelChanged(int index);
     void onSora2CreateTaskRequested(const QVariantMap& payload);
     void onSora2VideoCreated(const QString& taskId, const QString& status);
+    void onSora2ImageUploadProgress(int current, int total);
     void onSora2ApiError(const QString& error);
 
 private:

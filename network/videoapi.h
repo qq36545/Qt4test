@@ -45,6 +45,9 @@ public:
                    const QString &modelName,
                    const QString &taskId);
 
+    static bool isQuotaInsufficientError(const QString &error);
+    static QString normalizeUserFacingError(const QString &error);
+
     // 下载视频
     void downloadVideo(const QString &apiKey,
                        const QString &baseUrl,
@@ -55,6 +58,7 @@ signals:
     void videoCreated(const QString &taskId, const QString &status);
     void taskStatusUpdated(const QString &taskId, const QString &status, const QString &videoUrl, int progress);
     void videoDownloaded(const QString &savePath);
+    void imageUploadProgress(int current, int total);
     void errorOccurred(const QString &error);
 
 private slots:

@@ -28,6 +28,7 @@ GrokGenPage::GrokGenPage(QWidget *parent)
     api = new VideoAPI(this);
     connect(api, &VideoAPI::videoCreated, this, &GrokGenPage::onVideoCreated);
     connect(api, &VideoAPI::taskStatusUpdated, this, &GrokGenPage::onTaskStatusUpdated);
+    connect(api, &VideoAPI::imageUploadProgress, this, &GrokGenPage::onImageUploadProgress);
     connect(api, &VideoAPI::errorOccurred, this, &GrokGenPage::onApiError);
 
     setupUI();
@@ -627,14 +628,26 @@ void GrokGenPage::onTaskStatusUpdated(const QString &taskId, const QString &stat
     Q_UNUSED(progress);
 }
 
+void GrokGenPage::onImageUploadProgress(int current, int total)
+{
+    previewLabel->setText(QString("⏳ 正在上传第%1张/共%2张").arg(current).arg(total));
+    if (!currentTaskId.isEmpty()) {
+        DBManager::instance()->updateTaskStatus(currentTaskId,
+                                                QString("uploading_images:%1/%2").arg(current).arg(total),
+                                                0,
+                                                "");
+    }
+}
+
 void GrokGenPage::onApiError(const QString &error)
 {
+    const QString userFacingError = VideoAPI::normalizeUserFacingError(error);
     setSubmitting(false);
     if (!currentTaskId.isEmpty()) {
         DBManager::instance()->updateTaskStatus(currentTaskId, "failed", 0, "");
-        DBManager::instance()->updateTaskErrorMessage(currentTaskId, error);
+        DBManager::instance()->updateTaskErrorMessage(currentTaskId, userFacingError);
     }
-    QMessageBox::critical(this, "错误", QString("API 调用失败:\n%1").arg(error));
+    QMessageBox::critical(this, "错误", QString("API 调用失败:\n%1").arg(userFacingError));
     previewLabel->setText("💡 生成结果将在【生成历史记录】");
 }
 

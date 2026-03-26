@@ -20,6 +20,7 @@
 #include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QJsonObject>
 #include <QMessageBox>
 #include <QImageReader>
 #include <QScrollArea>
@@ -28,6 +29,9 @@
 #include <QColor>
 #include <QFont>
 #include <QShowEvent>
+#include <QDialog>
+#include <QProgressBar>
+#include <QTimer>
 #include <QMouseEvent>
 #include <QPixmap>
 #include <QObject>
@@ -281,6 +285,7 @@ void Sora2GenPage::setupUI()
         }
         uploadedImagePaths.clear();
         updateThumbnailGrid();
+        onAnyParameterChanged();
         queueSaveSettings();
     });
     imagesTitleLayout->addWidget(clearImagesButton);
@@ -299,14 +304,34 @@ void Sora2GenPage::setupUI()
     thumbnailContainer->installEventFilter(this);
     contentLayout->addWidget(thumbnailContainer);
 
-    submitButton = new QPushButton("开始生成");
-    contentLayout->addWidget(submitButton);
+    QHBoxLayout *buttonLayout = new QHBoxLayout();
+    buttonLayout->setSpacing(10);
+    submitButton = new QPushButton("🚀 生成视频");
+    submitButton->setCursor(Qt::PointingHandCursor);
+    resetButton = new QPushButton("♻️ 一键重置");
+    resetButton->setCursor(Qt::PointingHandCursor);
+    connect(resetButton, &QPushButton::clicked, this, [this]() {
+        promptInput->clear();
+        uploadedImagePaths.clear();
+        updateThumbnailGrid();
+        onAnyParameterChanged();
+        queueSaveSettings();
+    });
+    buttonLayout->addWidget(submitButton);
+    buttonLayout->addWidget(resetButton);
+    contentLayout->addLayout(buttonLayout);
+
+    statusHintLabel = new QLabel();
+    statusHintLabel->setStyleSheet("font-size: 13px; color: #94a3b8;");
+    statusHintLabel->setVisible(false);
+    contentLayout->addWidget(statusHintLabel);
 
     connect(submitButton, &QPushButton::clicked, this, &Sora2GenPage::onSubmitClicked);
     connect(unifiedFormatRadio, &QRadioButton::toggled, this, &Sora2GenPage::onApiFormatChanged);
     connect(openaiFormatRadio, &QRadioButton::toggled, this, &Sora2GenPage::onApiFormatChanged);
     connect(variantCombo, &QComboBox::currentTextChanged, this, [this](const QString &) {
         refreshDurationOptionsByVariant();
+        onAnyParameterChanged();
         queueSaveSettings();
     });
     connect(apiKeyCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int) {
@@ -317,31 +342,40 @@ void Sora2GenPage::setupUI()
             selectedApiKeyValue = key.apiKey;
         }
         emit apiKeySelectionChanged(selectedApiKeyValue);
+        onAnyParameterChanged();
         queueSaveSettings();
     });
 
     connect(serverCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int) {
+        onAnyParameterChanged();
         queueSaveSettings();
     });
     connect(promptInput, &QTextEdit::textChanged, this, [this]() {
+        onAnyParameterChanged();
         queueSaveSettings();
     });
     connect(unifiedSizeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int) {
+        onAnyParameterChanged();
         queueSaveSettings();
     });
     connect(unifiedOrientationCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int) {
+        onAnyParameterChanged();
         queueSaveSettings();
     });
     connect(openaiSizeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int) {
+        onAnyParameterChanged();
         queueSaveSettings();
     });
     connect(openaiStyleCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int) {
+        onAnyParameterChanged();
         queueSaveSettings();
     });
     connect(watermarkCheckBox, &QCheckBox::toggled, this, [this](bool) {
+        onAnyParameterChanged();
         queueSaveSettings();
     });
     connect(privateCheckBox, &QCheckBox::toggled, this, [this](bool) {
+        onAnyParameterChanged();
         queueSaveSettings();
     });
 
@@ -353,6 +387,7 @@ void Sora2GenPage::setupUI()
         const int value = currentDurationValue(unifiedDurationCombo, &ok);
         if (ok) {
             syncDurationValueToBoth(value, unifiedDurationCombo);
+            onAnyParameterChanged();
             queueSaveSettings();
         }
     });
@@ -364,6 +399,7 @@ void Sora2GenPage::setupUI()
         const int value = currentDurationValue(openaiSecondsCombo, &ok);
         if (ok) {
             syncDurationValueToBoth(value, openaiSecondsCombo);
+            onAnyParameterChanged();
             queueSaveSettings();
         }
     });
@@ -386,6 +422,9 @@ void Sora2GenPage::setupUI()
     applyApiFormatRadioStyle();
     loadSettings();
     suppressAutoSave = false;
+    parametersModified = false;
+    suppressDuplicateWarning = false;
+    lastSubmittedParamsHash.clear();
     lastSavedSettingsSnapshot = buildSettingsSnapshot();
 }
 
@@ -618,6 +657,74 @@ bool Sora2GenPage::validateDurationEditor(QComboBox *combo)
     return true;
 }
 
+QString Sora2GenPage::calculateParamsHash() const
+{
+    QVariantMap payload = currentApiFormat() == "unified"
+        ? buildUnifiedPayload()
+        : buildOpenAIPayload();
+
+    QJsonObject normalized;
+    normalized["api_format"] = payload.value("api_format").toString();
+    normalized["model"] = payload.value("model").toString();
+    normalized["prompt"] = payload.value("prompt").toString();
+    normalized["api_key_value"] = payload.value("api_key_value").toString();
+    normalized["server_url"] = payload.value("server_url").toString();
+    normalized["watermark"] = payload.value("watermark").toBool();
+    normalized["private"] = payload.value("private").toBool();
+
+    QJsonArray images;
+    const QStringList paths = payload.value("images").toStringList();
+    for (const QString &path : paths) {
+        images.append(path);
+    }
+    normalized["images"] = images;
+
+    const QString apiFormat = normalized["api_format"].toString();
+    if (apiFormat == "unified") {
+        normalized["size"] = payload.value("size").toString();
+        normalized["orientation"] = payload.value("orientation").toString();
+        normalized["duration"] = payload.value("duration").toString();
+    } else {
+        normalized["size"] = payload.value("size").toString();
+        normalized["seconds"] = payload.value("seconds").toString();
+        normalized["style"] = payload.value("style").toString();
+    }
+
+    const QByteArray json = QJsonDocument(normalized).toJson(QJsonDocument::Compact);
+    return QString(QCryptographicHash::hash(json, QCryptographicHash::Sha256).toHex());
+}
+
+bool Sora2GenPage::checkDuplicateSubmission()
+{
+    if (currentApiFormat() == "unified") {
+        return true;
+    }
+
+    const QString currentHash = calculateParamsHash();
+    if (!parametersModified && currentHash == lastSubmittedParamsHash && !suppressDuplicateWarning) {
+        QMessageBox msgBox(this);
+        msgBox.setWindowTitle("重复提交提醒");
+        msgBox.setText("刚刚已经提交这次任务，是否继续？");
+        msgBox.setIcon(QMessageBox::Question);
+        QPushButton *continueBtn = msgBox.addButton("继续", QMessageBox::AcceptRole);
+        QPushButton *cancelBtn = msgBox.addButton("停止", QMessageBox::RejectRole);
+        msgBox.exec();
+        if (msgBox.clickedButton() == cancelBtn) {
+            return false;
+        }
+        if (msgBox.clickedButton() == continueBtn) {
+            suppressDuplicateWarning = false;
+        }
+    }
+    return true;
+}
+
+void Sora2GenPage::onAnyParameterChanged()
+{
+    parametersModified = true;
+    suppressDuplicateWarning = false;
+}
+
 int Sora2GenPage::maxReferenceImages() const
 {
     return 10;
@@ -693,6 +800,7 @@ void Sora2GenPage::removeReferenceImage(int index)
     } else if (msgBox.clickedButton() == deleteBtn) {
         uploadedImagePaths.removeAt(index);
         updateThumbnailGrid();
+        onAnyParameterChanged();
         queueSaveSettings();
     }
 }
@@ -727,6 +835,7 @@ void Sora2GenPage::replaceReferenceImage(int index)
 
     uploadedImagePaths[index] = filePath;
     updateThumbnailGrid();
+    onAnyParameterChanged();
     queueSaveSettings();
 }
 
@@ -846,12 +955,33 @@ void Sora2GenPage::restoreDraftSettings()
     suppressAutoSave = true;
     loadSettings();
     suppressAutoSave = false;
+    parametersModified = false;
+    suppressDuplicateWarning = false;
+    lastSubmittedParamsHash.clear();
     lastSavedSettingsSnapshot = buildSettingsSnapshot();
 }
 
 void Sora2GenPage::setSubmitEnabled(bool enabled)
 {
     setSubmitting(!enabled);
+}
+
+void Sora2GenPage::setStatusHint(const QString &text)
+{
+    if (!statusHintLabel) {
+        return;
+    }
+    statusHintLabel->setText(text);
+    statusHintLabel->setVisible(!text.trimmed().isEmpty());
+}
+
+void Sora2GenPage::clearStatusHint()
+{
+    if (!statusHintLabel) {
+        return;
+    }
+    statusHintLabel->clear();
+    statusHintLabel->setVisible(false);
 }
 
 void Sora2GenPage::setSubmitting(bool submitting)
@@ -910,11 +1040,27 @@ void Sora2GenPage::onSubmitClicked()
         if (!validateDurationEditor(unifiedDurationCombo)) {
             return;
         }
-        emit createTaskRequested(buildUnifiedPayload());
     } else {
         if (!validateDurationEditor(openaiSecondsCombo)) {
             return;
         }
+    }
+
+    if (!checkDuplicateSubmission()) {
+        return;
+    }
+
+    showProgressDialog();
+    const int totalImages = currentImagePaths().size();
+    if (totalImages == 0) {
+        updateProgress(0, 0, "正在提交...");
+    } else {
+        updateProgress(0, totalImages, "正在上传图片 0/0");
+    }
+
+    if (currentApiFormat() == "unified") {
+        emit createTaskRequested(buildUnifiedPayload());
+    } else {
         emit createTaskRequested(buildOpenAIPayload());
     }
 }
@@ -922,6 +1068,7 @@ void Sora2GenPage::onSubmitClicked()
 void Sora2GenPage::onApiFormatChanged()
 {
     paramsStack->setCurrentIndex(unifiedFormatRadio->isChecked() ? 0 : 1);
+    onAnyParameterChanged();
     queueSaveSettings();
 }
 
@@ -976,6 +1123,7 @@ void Sora2GenPage::onUploadImagesClicked()
     }
     if (changed) {
         updateThumbnailGrid();
+        onAnyParameterChanged();
         queueSaveSettings();
     }
 }
@@ -1014,6 +1162,10 @@ void Sora2GenPage::loadFromTask(const VideoTask &task)
 
     updateThumbnailGrid();
     suppressAutoSave = false;
+    parametersModified = false;
+    suppressDuplicateWarning = false;
+    lastSubmittedParamsHash.clear();
+    lastSavedSettingsSnapshot = buildSettingsSnapshot();
 }
 
 void Sora2GenPage::queueSaveSettings()
@@ -1273,4 +1425,137 @@ void Sora2GenPage::loadSettings()
 
     updateThumbnailGrid();
     settings.endGroup();
+}
+
+void Sora2GenPage::showProgressDialog()
+{
+    if (progressDialog) {
+        return;
+    }
+
+    progressDialog = new QDialog(this);
+    progressDialog->setWindowTitle("正在提交任务");
+    progressDialog->setMinimumWidth(400);
+    progressDialog->setModal(true);
+
+    // 继承主题
+    QWidget *topLevel = window();
+    if (topLevel) {
+        progressDialog->setStyleSheet(topLevel->styleSheet());
+    }
+
+    auto *layout = new QVBoxLayout(progressDialog);
+    layout->setSpacing(12);
+    layout->setContentsMargins(20, 20, 20, 20);
+
+    auto *statusLabel = new QLabel("正在准备提交...", progressDialog);
+    statusLabel->setObjectName("progressStatusLabel");
+    statusLabel->setAlignment(Qt::AlignCenter);
+    statusLabel->setStyleSheet("font-size: 15px; font-weight: bold;");
+    layout->addWidget(statusLabel);
+
+    QProgressBar *progressBar = new QProgressBar(progressDialog);
+    progressBar->setObjectName("submitProgressBar");
+    progressBar->setRange(0, 100);
+    progressBar->setValue(0);
+    layout->addWidget(progressBar);
+
+    auto *hintLabel = new QLabel("💡 提交成功后请到【生成历史记录】查看进度", progressDialog);
+    hintLabel->setObjectName("progressHintLabel");
+    hintLabel->setAlignment(Qt::AlignCenter);
+    hintLabel->setStyleSheet("font-size: 12px; color: #888;");
+    layout->addWidget(hintLabel);
+
+    auto *closeBtn = new QPushButton("关闭", progressDialog);
+    closeBtn->setVisible(false);
+    layout->addWidget(closeBtn);
+    connect(closeBtn, &QPushButton::clicked, progressDialog, &QDialog::accept);
+
+    connect(progressDialog, &QDialog::finished, this, [this]() {
+        progressDialog = nullptr;
+    });
+
+    progressDialog->show();
+}
+
+void Sora2GenPage::updateProgress(int current, int total, const QString &status)
+{
+    if (!progressDialog) {
+        return;
+    }
+
+    auto *statusLabel = progressDialog->findChild<QLabel*>("progressStatusLabel");
+    auto *progressBar = progressDialog->findChild<QProgressBar*>("submitProgressBar");
+    if (statusLabel) {
+        statusLabel->setText(status);
+    }
+    if (progressBar) {
+        if (total > 0) {
+            progressBar->setRange(0, total);
+            progressBar->setValue(current);
+        } else {
+            progressBar->setRange(0, 0);
+            progressBar->setValue(0);
+        }
+    }
+}
+
+void Sora2GenPage::onSubmitSuccess(const QString &taskId)
+{
+    Q_UNUSED(taskId);
+    lastSubmittedParamsHash = calculateParamsHash();
+    parametersModified = false;
+    suppressDuplicateWarning = false;
+
+    if (!progressDialog) {
+        return;
+    }
+
+    auto *statusLabel = progressDialog->findChild<QLabel*>("progressStatusLabel");
+    auto *progressBar = progressDialog->findChild<QProgressBar*>("submitProgressBar");
+    auto *hintLabel = progressDialog->findChild<QLabel*>("progressHintLabel");
+    auto *closeBtn = progressDialog->findChild<QPushButton*>();
+
+    if (statusLabel) {
+        statusLabel->setText("✅ 已成功提交！请到历史记录查看进度");
+        statusLabel->setStyleSheet("font-size: 15px; font-weight: bold; color: #4CAF50;");
+    }
+    if (progressBar) {
+        progressBar->setVisible(false);
+    }
+    if (hintLabel) {
+        hintLabel->setVisible(false);
+    }
+    if (closeBtn) {
+        closeBtn->setVisible(true);
+    }
+
+    QTimer::singleShot(3000, progressDialog, &QDialog::accept);
+}
+
+void Sora2GenPage::onSubmitError(const QString &error)
+{
+    if (!progressDialog) {
+        QMessageBox::warning(this, "提交失败", error);
+        return;
+    }
+
+    auto *statusLabel = progressDialog->findChild<QLabel*>("progressStatusLabel");
+    auto *progressBar = progressDialog->findChild<QProgressBar*>("submitProgressBar");
+    auto *hintLabel = progressDialog->findChild<QLabel*>("progressHintLabel");
+    auto *closeBtn = progressDialog->findChild<QPushButton*>();
+
+    if (statusLabel) {
+        statusLabel->setText("❌ 提交失败: " + error);
+        statusLabel->setStyleSheet("font-size: 15px; font-weight: bold; color: #f44336;");
+    }
+    if (progressBar) {
+        progressBar->setVisible(false);
+    }
+    if (hintLabel) {
+        hintLabel->setVisible(false);
+    }
+    if (closeBtn) {
+        closeBtn->setVisible(true);
+    }
 }

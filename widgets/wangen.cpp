@@ -49,6 +49,7 @@ WanGenPage::WanGenPage(QWidget *parent)
     api = new VideoAPI(this);
     connect(api, &VideoAPI::videoCreated, this, &WanGenPage::onVideoCreated);
     connect(api, &VideoAPI::taskStatusUpdated, this, &WanGenPage::onTaskStatusUpdated);
+    connect(api, &VideoAPI::imageUploadProgress, this, &WanGenPage::onImageUploadProgress);
     connect(api, &VideoAPI::errorOccurred, this, &WanGenPage::onApiError);
 
     setupUI();
@@ -757,14 +758,26 @@ void WanGenPage::onTaskStatusUpdated(const QString &taskId, const QString &statu
     Q_UNUSED(progress);
 }
 
+void WanGenPage::onImageUploadProgress(int current, int total)
+{
+    previewLabel->setText(QString("⏳ 正在上传第%1张/共%2张").arg(current).arg(total));
+    if (!currentTaskId.isEmpty()) {
+        DBManager::instance()->updateTaskStatus(currentTaskId,
+                                                QString("uploading_images:%1/%2").arg(current).arg(total),
+                                                0,
+                                                "");
+    }
+}
+
 void WanGenPage::onApiError(const QString &error)
 {
+    const QString userFacingError = VideoAPI::normalizeUserFacingError(error);
     setSubmitting(false);
     if (!currentTaskId.isEmpty()) {
         DBManager::instance()->updateTaskStatus(currentTaskId, "failed", 0, "");
-        DBManager::instance()->updateTaskErrorMessage(currentTaskId, error);
+        DBManager::instance()->updateTaskErrorMessage(currentTaskId, userFacingError);
     }
-    QMessageBox::critical(this, "错误", QString("API 调用失败:\n%1").arg(error));
+    QMessageBox::critical(this, "错误", QString("API 调用失败:\n%1").arg(userFacingError));
     previewLabel->setText("💡 生成结果将在【生成历史记录】");
 }
 

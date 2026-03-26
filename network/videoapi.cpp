@@ -9,6 +9,7 @@
 #include <QJsonArray>
 #include <QUrlQuery>
 #include <QDebug>
+#include <QRegularExpression>
 
 VideoAPI::VideoAPI(QObject *parent)
     : QObject(parent)
@@ -21,6 +22,46 @@ VideoAPI::VideoAPI(QObject *parent)
 
 VideoAPI::~VideoAPI()
 {
+}
+
+bool VideoAPI::isQuotaInsufficientError(const QString &error)
+{
+    const QString normalized = error.toLower();
+
+    if (normalized.contains("http 429")
+        || normalized.contains("status 429")
+        || normalized.contains("code 429")
+        || QRegularExpression(QStringLiteral("(^|\\D)429(\\D|$)")).match(normalized).hasMatch()) {
+        return true;
+    }
+
+    static const QStringList quotaKeywords = {
+        "insufficient quota",
+        "quota exceeded",
+        "quota has been exceeded",
+        "insufficient balance",
+        "balance not enough",
+        "exceeded your current quota",
+        "credit balance is too low",
+        "billing hard limit"
+    };
+
+    for (const QString &keyword : quotaKeywords) {
+        if (normalized.contains(keyword)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+QString VideoAPI::normalizeUserFacingError(const QString &error)
+{
+    if (isQuotaInsufficientError(error)) {
+        return QStringLiteral("用户额度不足，请前往API平台充值");
+    }
+
+    return error;
 }
 
 void VideoAPI::prepareWanRequest(const WanVideoParams &params)
@@ -298,7 +339,11 @@ void VideoAPI::createVeo3UnifiedVideo(const QString &apiKey,
         jsonObj["orientation"] = orientation;
     }
     if (!duration.isEmpty()) {
-        jsonObj["duration"] = duration;
+        bool ok = false;
+        int durationVal = duration.toInt(&ok);
+        if (ok && durationVal > 0) {
+            jsonObj["duration"] = durationVal;
+        }
     }
     jsonObj["watermark"] = watermark;
     jsonObj["private"] = privateMode;
@@ -515,6 +560,11 @@ void VideoAPI::onImageUploadSuccess(const QString &url)
     // 图片上传成功，添加到URL列表
     currentRequest.uploadedUrls.append(url);
     currentRequest.uploadIndex++;
+
+    const int totalImages = currentRequest.localImagePaths.size();
+    if (totalImages > 0) {
+        emit imageUploadProgress(currentRequest.uploadIndex, totalImages);
+    }
 
     // 检查是否还有更多图片需要上传
     if (currentRequest.uploadIndex < currentRequest.localImagePaths.size()) {

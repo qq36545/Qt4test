@@ -45,6 +45,7 @@ private slots:
     void clearImage(int index);
     void onVideoCreated(const QString &taskId, const QString &status);
     void onTaskStatusUpdated(const QString &taskId, const QString &status, const QString &videoUrl, int progress);
+    void onImageUploadProgress(int current, int total);
     void onApiError(const QString &error);
     void onAnyParameterChanged();
 

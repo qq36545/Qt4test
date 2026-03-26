@@ -214,23 +214,26 @@ void ImageUploader::uploadToImgbb(const QString &localPath, const QString &image
     currentRetry = 0;
     retryCanceled = false;
 
-    if (!progressDialog) {
-        progressDialog = new QProgressDialog(QString(), "取消重试", 0, 0);
-        progressDialog->setAutoClose(false);
-        progressDialog->setAutoReset(false);
-        progressDialog->setMinimumDuration(0);
-        progressDialog->setWindowModality(Qt::ApplicationModal);
-        connect(progressDialog, &QProgressDialog::canceled, this, &ImageUploader::cancelUpload);
-    }
-
-    progressDialog->setLabelText("正在上传图片...");
-    progressDialog->show();
-
     startPublicUploadRequest();
 }
 
 void ImageUploader::startPublicUploadRequest()
 {
+    // Capture old reply before it is overwritten by the new post() below.
+    // Qt re-enters the event loop during network operations, so we must ensure
+    // the old reply's stale finished() signal cannot reach onPublicUploadFinished
+    // via the new currentReply pointer.
+    QNetworkReply *oldReply = currentReply;
+    if (oldReply) {
+        disconnect(oldReply, &QNetworkReply::finished, this, &ImageUploader::onPublicUploadFinished);
+        // Deferred lambda: abort+delete the old reply after this function returns
+        // and the event loop is re-entered (post() below resets currentReply first).
+        QTimer::singleShot(0, this, [oldReply]() {
+            oldReply->abort();
+            oldReply->deleteLater();
+        });
+    }
+
     QFile *file = new QFile(currentFilePath);
     if (!file->open(QIODevice::ReadOnly)) {
         delete file;
