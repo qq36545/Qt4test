@@ -20,6 +20,7 @@
 #include <QTextEdit>
 #include <QVariantMap>
 #include <QList>
+#include <QDialog>
 
 // 前向声明
 struct VideoTask;
@@ -55,6 +56,9 @@ private slots:
     void onSora2CreateTaskRequested(const QVariantMap& payload);
     void onSora2VideoCreated(const QString& taskId, const QString& status);
     void onSora2ImageUploadProgress(int current, int total);
+    void onVeoImageUploadProgress(int current, int total);
+    void onGrokImageUploadProgress(int current, int total);
+    void onWanImageUploadProgress(int current, int total);
     void onSora2ApiError(const QString& error);
 
 private:
@@ -79,6 +83,10 @@ private:
     void setupUI();
     void setSora2Submitting(bool submitting);
     SubmitDialogTheme resolveSubmitDialogTheme() const;
+    void showGeneralSubmittingDialog(const QString& message = QStringLiteral("正在提交..."));
+    void updateGeneralSubmittingDialog(int current, int total);
+    void closeGeneralSubmittingDialog();
+    void showSubmitSuccessToast();
     void showUnifiedSubmitResultDialog(bool success,
                                        const QString& title,
                                        const QString& message,
@@ -91,6 +99,8 @@ private:
     Sora2GenPage *sora2Page;
     QComboBox *modelCombo;
     VideoAPI *sora2Api;
+    QDialog *generalSubmittingDialog = nullptr;
+    QLabel *generalSubmittingLabel = nullptr;
     QList<Sora2PendingContext> sora2PendingTasks;
     bool sora2Submitting = false;
 };

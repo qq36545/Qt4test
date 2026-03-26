@@ -315,6 +315,38 @@ VideoSingleTab::VideoSingleTab(QWidget *parent)
     connect(wanPage, &WanGenPage::submitSucceeded, this, &VideoSingleTab::onWanSubmitSucceeded);
     connect(wanPage, &WanGenPage::submitFailed, this, &VideoSingleTab::onWanSubmitFailed);
 
+    if (auto *veoApi = veoPage->findChild<VideoAPI*>()) {
+        connect(veoApi, &VideoAPI::imageUploadProgress,
+                this, &VideoSingleTab::onVeoImageUploadProgress);
+    }
+    if (auto *grokApi = grokPage->findChild<VideoAPI*>()) {
+        connect(grokApi, &VideoAPI::imageUploadProgress,
+                this, &VideoSingleTab::onGrokImageUploadProgress);
+    }
+    if (auto *wanApi = wanPage->findChild<VideoAPI*>()) {
+        connect(wanApi, &VideoAPI::imageUploadProgress,
+                this, &VideoSingleTab::onWanImageUploadProgress);
+    }
+
+    auto bindGeneralSubmitDialogTrigger = [this](QWidget *page) {
+        const auto buttons = page->findChildren<QPushButton*>();
+        for (QPushButton *button : buttons) {
+            if (button && button->text().contains("生成视频")) {
+                connect(button, &QPushButton::clicked, this, [this, button]() {
+                    QTimer::singleShot(0, this, [this, button]() {
+                        if (!button || !button->isEnabled()) {
+                            showGeneralSubmittingDialog();
+                        }
+                    });
+                });
+                break;
+            }
+        }
+    };
+    bindGeneralSubmitDialogTrigger(veoPage);
+    bindGeneralSubmitDialogTrigger(grokPage);
+    bindGeneralSubmitDialogTrigger(wanPage);
+
     connect(sora2Page, &Sora2GenPage::createTaskRequested,
             this, &VideoSingleTab::onSora2CreateTaskRequested);
     connect(sora2Api, &VideoAPI::videoCreated,
@@ -360,6 +392,7 @@ void VideoSingleTab::setupUI()
 
 void VideoSingleTab::onModelChanged(int index)
 {
+    closeGeneralSubmittingDialog();
     stack->setCurrentIndex(index);
 
     // 切换页面时刷新当前页的 API 密钥列表
@@ -434,18 +467,113 @@ VideoSingleTab::SubmitDialogTheme VideoSingleTab::resolveSubmitDialogTheme() con
     return theme;
 }
 
+void VideoSingleTab::showGeneralSubmittingDialog(const QString& message)
+{
+    if (generalSubmittingDialog && generalSubmittingLabel) {
+        generalSubmittingLabel->setText(message.isEmpty() ? QStringLiteral("正在提交...") : message);
+        generalSubmittingDialog->show();
+        generalSubmittingDialog->raise();
+        generalSubmittingDialog->activateWindow();
+        return;
+    }
+
+    const SubmitDialogTheme theme = resolveSubmitDialogTheme();
+
+    generalSubmittingDialog = new QDialog(this);
+    generalSubmittingDialog->setObjectName("generalSubmittingDialog");
+    generalSubmittingDialog->setWindowTitle("正在提交任务");
+    generalSubmittingDialog->setModal(true);
+    generalSubmittingDialog->setAttribute(Qt::WA_DeleteOnClose, false);
+    generalSubmittingDialog->setAttribute(Qt::WA_StyledBackground, true);
+    generalSubmittingDialog->setMinimumWidth(420);
+
+    auto *layout = new QVBoxLayout(generalSubmittingDialog);
+    layout->setContentsMargins(20, 18, 20, 18);
+    layout->setSpacing(12);
+
+    auto *titleLabel = new QLabel("正在提交任务", generalSubmittingDialog);
+    titleLabel->setStyleSheet(QString("font-size: 14px; font-weight: 700; color: %1;").arg(theme.textColor));
+    layout->addWidget(titleLabel);
+
+    generalSubmittingLabel = new QLabel(message.isEmpty() ? QStringLiteral("正在提交...") : message, generalSubmittingDialog);
+    generalSubmittingLabel->setWordWrap(true);
+    generalSubmittingLabel->setStyleSheet(QString("font-size: 14px; color: %1;").arg(theme.textColor));
+    layout->addWidget(generalSubmittingLabel);
+
+    generalSubmittingDialog->setStyleSheet(QString(
+        "QDialog#generalSubmittingDialog {"
+        "  background: %1;"
+        "  border: 1px solid %2;"
+        "  border-radius: 12px;"
+        "}"
+    ).arg(theme.bgColor, theme.borderColor));
+
+    generalSubmittingDialog->show();
+}
+
+void VideoSingleTab::updateGeneralSubmittingDialog(int current, int total)
+{
+    if (current <= 0 || total <= 0) {
+        return;
+    }
+    showGeneralSubmittingDialog(QString("正在提交 第%1张图片/共%2张图片").arg(current).arg(total));
+}
+
+void VideoSingleTab::closeGeneralSubmittingDialog()
+{
+    if (!generalSubmittingDialog) {
+        return;
+    }
+    generalSubmittingDialog->hide();
+    if (generalSubmittingLabel) {
+        generalSubmittingLabel->setText(QStringLiteral("正在提交..."));
+    }
+}
+
+void VideoSingleTab::showSubmitSuccessToast()
+{
+    QLabel *toast = new QLabel("✅视频生成任务已经提交，请往【生成历史记录】查看任务状态", this);
+    toast->setStyleSheet(
+        "QLabel {"
+        "    background-color: #12B76A;"
+        "    color: #FFFFFF;"
+        "    padding: 10px 16px;"
+        "    border-radius: 8px;"
+        "    font-size: 13px;"
+        "    font-weight: 600;"
+        "}"
+    );
+    toast->setAlignment(Qt::AlignCenter);
+    toast->setWindowFlags(Qt::ToolTip | Qt::FramelessWindowHint);
+    toast->setAttribute(Qt::WA_TranslucentBackground);
+    toast->setWordWrap(true);
+    toast->setMaximumWidth(420);
+    toast->adjustSize();
+
+    const QPoint globalPos = mapToGlobal(rect().center());
+    toast->move(globalPos.x() - (toast->width() / 2), globalPos.y() - 110);
+    toast->show();
+
+    QTimer::singleShot(3000, toast, &QLabel::deleteLater);
+}
+
 void VideoSingleTab::showUnifiedSubmitResultDialog(bool success,
                                                     const QString& title,
                                                     const QString& message,
                                                     const QString& detail)
 {
     const SubmitDialogTheme theme = resolveSubmitDialogTheme();
+    const bool isFailure = !success;
     const QString statusText = success ? "提交成功" : "提交失败";
     const QString accentColor = success ? "#12B76A" : "#F04438";
+    const QString primaryTextColor = isFailure ? "#FFFFFF" : theme.textColor;
+    const QString frameBorderColor = isFailure ? theme.borderColor : accentColor;
 
     QDialog dialog(this);
+    dialog.setObjectName("submitResultDialog");
     dialog.setWindowTitle(title);
     dialog.setModal(true);
+    dialog.setAttribute(Qt::WA_StyledBackground, true);
     dialog.setMinimumWidth(460);
 
     auto *layout = new QVBoxLayout(&dialog);
@@ -454,12 +582,12 @@ void VideoSingleTab::showUnifiedSubmitResultDialog(bool success,
 
     auto *titleLabel = new QLabel(title, &dialog);
     titleLabel->setWordWrap(true);
-    titleLabel->setStyleSheet(QString("font-size: 16px; font-weight: 700; color: %1;").arg(theme.textColor));
+    titleLabel->setStyleSheet(QString("font-size: 14px; font-weight: 700; color: %1;").arg(primaryTextColor));
     layout->addWidget(titleLabel);
 
     auto *messageLabel = new QLabel(message, &dialog);
     messageLabel->setWordWrap(true);
-    messageLabel->setStyleSheet(QString("font-size: 13px; line-height: 1.45; color: %1;").arg(theme.textColor));
+    messageLabel->setStyleSheet(QString("font-size: 14px; line-height: 1.45; color: %1;").arg(primaryTextColor));
     layout->addWidget(messageLabel);
 
     auto *statusFrame = new QFrame(&dialog);
@@ -469,19 +597,19 @@ void VideoSingleTab::showUnifiedSubmitResultDialog(bool success,
         "  border: 1px solid %1;"
         "  background: %2;"
         "}"
-    ).arg(accentColor, theme.accentBgColor));
+    ).arg(frameBorderColor, theme.accentBgColor));
     auto *statusLayout = new QVBoxLayout(statusFrame);
     statusLayout->setContentsMargins(12, 10, 12, 10);
     statusLayout->setSpacing(6);
 
     auto *statusLabel = new QLabel(statusText, statusFrame);
-    statusLabel->setStyleSheet(QString("font-size: 12px; font-weight: 700; color: %1;").arg(accentColor));
+    statusLabel->setStyleSheet(QString("font-size: 14px; font-weight: 700; color: %1;").arg(primaryTextColor));
     statusLayout->addWidget(statusLabel);
 
     if (!detail.trimmed().isEmpty()) {
         auto *detailLabel = new QLabel(detail, statusFrame);
         detailLabel->setWordWrap(true);
-        detailLabel->setStyleSheet(QString("font-size: 12px; color: %1;").arg(theme.textColor));
+        detailLabel->setStyleSheet(QString("font-size: 14px; color: %1;").arg(primaryTextColor));
         statusLayout->addWidget(detailLabel);
     }
 
@@ -507,10 +635,11 @@ void VideoSingleTab::showUnifiedSubmitResultDialog(bool success,
         "QPushButton:pressed { background: %4; }"
     ).arg(theme.borderColor, theme.buttonBgColor, theme.buttonTextColor, theme.buttonHoverColor));
     buttonRow->addWidget(okButton);
+    buttonRow->addStretch();
     layout->addLayout(buttonRow);
 
     dialog.setStyleSheet(QString(
-        "QDialog {"
+        "QDialog#submitResultDialog {"
         "  background: %1;"
         "  border: 1px solid %2;"
         "  border-radius: 12px;"
@@ -523,16 +652,14 @@ void VideoSingleTab::showUnifiedSubmitResultDialog(bool success,
 
 void VideoSingleTab::onVeoSubmitSucceeded(const QString& modelName)
 {
-    showUnifiedSubmitResultDialog(
-        true,
-        QString("%1任务已提交").arg(modelName),
-        "视频生成任务已提交，请前往【生成历史记录】查看任务状态。",
-        "系统将自动轮询任务状态并下载完成的视频。"
-    );
+    Q_UNUSED(modelName);
+    closeGeneralSubmittingDialog();
+    showSubmitSuccessToast();
 }
 
 void VideoSingleTab::onVeoSubmitFailed(const QString& modelName, const QString& error)
 {
+    closeGeneralSubmittingDialog();
     showUnifiedSubmitResultDialog(
         false,
         QString("%1提交失败").arg(modelName),
@@ -561,8 +688,24 @@ void VideoSingleTab::onWanSubmitFailed(const QString& modelName, const QString& 
     onVeoSubmitFailed(modelName, error);
 }
 
+void VideoSingleTab::onVeoImageUploadProgress(int current, int total)
+{
+    updateGeneralSubmittingDialog(current, total);
+}
+
+void VideoSingleTab::onGrokImageUploadProgress(int current, int total)
+{
+    updateGeneralSubmittingDialog(current, total);
+}
+
+void VideoSingleTab::onWanImageUploadProgress(int current, int total)
+{
+    updateGeneralSubmittingDialog(current, total);
+}
+
 void VideoSingleTab::onSora2CreateTaskRequested(const QVariantMap& payload)
 {
+    closeGeneralSubmittingDialog();
     if (sora2Submitting) {
         return;
     }
@@ -738,12 +881,7 @@ void VideoSingleTab::onSora2VideoCreated(const QString& taskId, const QString& s
         showSora2RecoveryHint(this, taskId, "缺少轮询所需上下文");
     }
 
-    showUnifiedSubmitResultDialog(
-        true,
-        "Sora2视频任务已提交",
-        "视频生成任务已提交，请前往【生成历史记录】查看任务状态。",
-        "系统将自动轮询任务状态并下载完成的视频。"
-    );
+    showSubmitSuccessToast();
 }
 
 void VideoSingleTab::onSora2ImageUploadProgress(int current, int total)

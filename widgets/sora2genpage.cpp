@@ -727,7 +727,7 @@ void Sora2GenPage::onAnyParameterChanged()
 
 int Sora2GenPage::maxReferenceImages() const
 {
-    return 10;
+    return 5;
 }
 
 void Sora2GenPage::updateThumbnailGrid()
@@ -1451,7 +1451,7 @@ void Sora2GenPage::showProgressDialog()
     auto *statusLabel = new QLabel("正在准备提交...", progressDialog);
     statusLabel->setObjectName("progressStatusLabel");
     statusLabel->setAlignment(Qt::AlignCenter);
-    statusLabel->setStyleSheet("font-size: 15px; font-weight: bold;");
+    statusLabel->setStyleSheet("font-size: 15px; font-weight: bold; color: #000000;");
     layout->addWidget(statusLabel);
 
     QProgressBar *progressBar = new QProgressBar(progressDialog);
@@ -1463,10 +1463,11 @@ void Sora2GenPage::showProgressDialog()
     auto *hintLabel = new QLabel("💡 提交成功后请到【生成历史记录】查看进度", progressDialog);
     hintLabel->setObjectName("progressHintLabel");
     hintLabel->setAlignment(Qt::AlignCenter);
-    hintLabel->setStyleSheet("font-size: 12px; color: #888;");
+    hintLabel->setStyleSheet("font-size: 12px; color: #000000;");
     layout->addWidget(hintLabel);
 
     auto *closeBtn = new QPushButton("关闭", progressDialog);
+    closeBtn->setStyleSheet("color: #000000;");
     closeBtn->setVisible(false);
     layout->addWidget(closeBtn);
     connect(closeBtn, &QPushButton::clicked, progressDialog, &QDialog::accept);
