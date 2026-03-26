@@ -67,7 +67,6 @@ private:
     QString buildSettingsSnapshot() const;
     QString calculateParamsHash() const;
     bool checkDuplicateSubmission();
-    bool validateImgbbKey(QString &errorMsg) const;
     void setSubmitting(bool submitting);
 
 protected:

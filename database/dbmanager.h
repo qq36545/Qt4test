@@ -14,13 +14,6 @@ struct ApiKey {
     QDateTime createdAt;
 };
 
-struct ImgbbKey {
-    int id;
-    QString name;
-    QString apiKey;
-    bool isActive;
-};
-
 struct GenerationHistory {
     int id;
     QString date;
@@ -97,14 +90,6 @@ public:
     bool deleteApiKey(int id);
     QList<ApiKey> getAllApiKeys();
     ApiKey getApiKey(int id);
-
-    // Imgbb Keys
-    bool addImgbbKey(const QString& name, const QString& apiKey);
-    bool updateImgbbKey(int id, const QString& name, const QString& apiKey);
-    bool deleteImgbbKey(int id);
-    bool setActiveImgbbKey(int id);
-    QList<ImgbbKey> getAllImgbbKeys();
-    ImgbbKey getActiveImgbbKey();
 
     // Generation History
     int addGenerationHistory(const GenerationHistory& history);

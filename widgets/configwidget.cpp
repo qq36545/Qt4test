@@ -5,13 +5,10 @@
 #include <QClipboard>
 #include <QApplication>
 #include <QFormLayout>
-#include <QDialogButtonBox>
 #include <QResizeEvent>
 #include <QScreen>
-#include <QRadioButton>
 #include <QEvent>
 #include <QPalette>
-#include <QTimer>
 
 namespace {
 QVBoxLayout* createCenteredContentLayout(QWidget *parent, QVBoxLayout *parentLayout, int spacing)
@@ -63,13 +60,11 @@ void applyKeyDialogTheme(QDialog *dialog, bool isDarkTheme)
 }
 
 ConfigWidget::ConfigWidget(QWidget *parent)
-    : QWidget(parent), imgbbKeyGroup(new QButtonGroup(this)), scaleFactor(1.0)
+    : QWidget(parent), scaleFactor(1.0)
 {
-    imgbbKeyGroup->setExclusive(true);
     scaleFactor = calculateScaleFactor();
     setupUI();
     loadApiKeys();
-    loadImgbbKeys();
 }
 
 void ConfigWidget::setupUI()
@@ -88,10 +83,6 @@ void ConfigWidget::setupUI()
     QWidget *apiTab = new QWidget();
     setupApiKeyTab(apiTab);
     tabWidget->addTab(apiTab, "AI服务商密钥配置");
-
-    QWidget *imgbbTab = new QWidget();
-    setupImgbbTab(imgbbTab);
-    tabWidget->addTab(imgbbTab, "临时图床密钥配置");
 }
 
 void ConfigWidget::setupApiKeyTab(QWidget *tab)
@@ -131,60 +122,6 @@ void ConfigWidget::setupApiKeyTab(QWidget *tab)
     contentLayout->addWidget(apiKeyTable);
 }
 
-void ConfigWidget::setupImgbbTab(QWidget *tab)
-{
-    QVBoxLayout *layout = new QVBoxLayout(tab);
-    layout->setContentsMargins(20, 20, 20, 20);
-    layout->setSpacing(15);
-
-    QVBoxLayout *contentLayout = createCenteredContentLayout(tab, layout, 15);
-
-    QWidget *buttonRow = new QWidget();
-    QHBoxLayout *buttonLayout = new QHBoxLayout(buttonRow);
-    buttonLayout->setContentsMargins(0, 0, 0, 0);
-    addImgbbButton = new QPushButton("➕ 添加密钥");
-    addImgbbButton->setObjectName("primaryButton");
-    addImgbbButton->setFixedHeight(40);
-    addImgbbButton->setMinimumWidth(120);
-    connect(addImgbbButton, &QPushButton::clicked, this, &ConfigWidget::addImgbbKey);
-
-    QPushButton *applyBtn = new QPushButton("✅ 应用选中");
-    applyBtn->setFixedHeight(40);
-    applyBtn->setMinimumWidth(120);
-    connect(applyBtn, &QPushButton::clicked, this, &ConfigWidget::applyImgbbKey);
-
-    buttonLayout->addWidget(addImgbbButton);
-    buttonLayout->addWidget(applyBtn);
-    buttonLayout->addStretch();
-    contentLayout->addWidget(buttonRow);
-
-    imgbbKeyTable = new QTableWidget();
-    imgbbKeyTable->setObjectName("imgbbKeyTable");
-    imgbbKeyTable->setColumnCount(5);
-    imgbbKeyTable->setHorizontalHeaderLabels({"序号", "名称", "密钥", "操作", "应用状态"});
-    setupTableStyle(imgbbKeyTable);
-    contentLayout->addWidget(imgbbKeyTable);
-
-    // 引导区
-    hint1Label = new QLabel("1. 获取上传临时图床密钥注册地址，<a href=\"https://imgbb.com/signup\">注册</a>");
-    hint1Label->setOpenExternalLinks(true);
-    hint1Label->setAlignment(Qt::AlignLeft);
-
-    hint2Label = new QLabel("2.注册之后登录账号，前往<a href=\"https://api.imgbb.com/\">这里</a>创建临时图床API密钥 注意⚠️：这个是图床密钥跟充值那边的API密钥无关！");
-    hint2Label->setOpenExternalLinks(true);
-    hint2Label->setAlignment(Qt::AlignLeft);
-
-    hint3Label = new QLabel("3. 临时图床为免费注册和使用，不需要充值，但是有用量的限制，一般个人用户够用，不够用可以创建多个即可解决问题。");
-    hint3Label->setWordWrap(true);
-    hint3Label->setAlignment(Qt::AlignLeft);
-
-    contentLayout->addWidget(hint1Label);
-    contentLayout->addWidget(hint2Label);
-    contentLayout->addWidget(hint3Label);
-    updateThemeStyles();
-    QTimer::singleShot(0, this, [this]() { updateThemeStyles(); });
-}
-
 double ConfigWidget::calculateScaleFactor()
 {
     QScreen *screen = QApplication::primaryScreen();
@@ -198,12 +135,12 @@ double ConfigWidget::calculateScaleFactor()
 
 void ConfigWidget::updateRowHeight()
 {
+    if (!apiKeyTable) return;
+
     int rowHeight = static_cast<int>(36 * scaleFactor) + 10 + 14;
-    for (QTableWidget *table : {apiKeyTable, imgbbKeyTable}) {
-        if (!table) continue;
-        table->verticalHeader()->setDefaultSectionSize(rowHeight);
-        for (int i = 0; i < table->rowCount(); ++i)
-            table->setRowHeight(i, rowHeight);
+    apiKeyTable->verticalHeader()->setDefaultSectionSize(rowHeight);
+    for (int i = 0; i < apiKeyTable->rowCount(); ++i) {
+        apiKeyTable->setRowHeight(i, rowHeight);
     }
 }
 
@@ -224,32 +161,22 @@ void ConfigWidget::changeEvent(QEvent *event)
 
 void ConfigWidget::updateThemeStyles()
 {
-    const QWidget *host = window() ? window() : this;
-    const QColor bgColor = host->palette().color(QPalette::Window);
-    const bool isDarkTheme = bgColor.lightness() < 128;
-
-    const QString hintColor = isDarkTheme ? "#ffffff" : "#111111";
-    const QString hintStyle = QString("color: %1; font-size: 13px;").arg(hintColor);
-
-    if (hint1Label) hint1Label->setStyleSheet(hintStyle);
-    if (hint2Label) hint2Label->setStyleSheet(hintStyle);
-    if (hint3Label) hint3Label->setStyleSheet(hintStyle);
 }
+
 void ConfigWidget::updateColumnWidths()
 {
-    // 序号/名称：内容自适应；密钥：拉伸填满；操作/最后列：固定（约为内容宽度的2倍）
-    const int actionColWidth = 160;  // 操作列（编辑+删除按钮）
-    const int lastColWidth = 100;    // 查看/应用状态列
-    for (QTableWidget *table : {apiKeyTable, imgbbKeyTable}) {
-        if (!table) continue;
-        table->horizontalHeader()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
-        table->horizontalHeader()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
-        table->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Stretch);
-        table->horizontalHeader()->setSectionResizeMode(3, QHeaderView::Fixed);
-        table->horizontalHeader()->setSectionResizeMode(4, QHeaderView::Fixed);
-        table->setColumnWidth(3, actionColWidth);
-        table->setColumnWidth(4, lastColWidth);
-    }
+    if (!apiKeyTable) return;
+
+    const int actionColWidth = 160;
+    const int lastColWidth = 100;
+
+    apiKeyTable->horizontalHeader()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
+    apiKeyTable->horizontalHeader()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
+    apiKeyTable->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Stretch);
+    apiKeyTable->horizontalHeader()->setSectionResizeMode(3, QHeaderView::Fixed);
+    apiKeyTable->horizontalHeader()->setSectionResizeMode(4, QHeaderView::Fixed);
+    apiKeyTable->setColumnWidth(3, actionColWidth);
+    apiKeyTable->setColumnWidth(4, lastColWidth);
 }
 
 void ConfigWidget::setupTableStyle(QTableWidget *table)
@@ -320,67 +247,6 @@ void ConfigWidget::loadApiKeys()
 
         viewLayout->addWidget(viewBtn);
         apiKeyTable->setCellWidget(i, 4, viewWidget);
-    }
-    updateColumnWidths();
-    updateRowHeight();
-}
-
-void ConfigWidget::loadImgbbKeys()
-{
-    imgbbKeyTable->setRowCount(0);
-    QList<ImgbbKey> keys = DBManager::instance()->getAllImgbbKeys();
-
-    for (QAbstractButton *button : imgbbKeyGroup->buttons()) {
-        imgbbKeyGroup->removeButton(button);
-    }
-
-    QFont buttonFont;
-    buttonFont.setPointSize(12);
-    int buttonHeight = static_cast<int>(36 * scaleFactor);
-
-    for (int i = 0; i < keys.size(); ++i) {
-        const ImgbbKey& key = keys[i];
-        imgbbKeyTable->insertRow(i);
-
-        QTableWidgetItem *idItem = new QTableWidgetItem(QString::number(key.id));
-        idItem->setTextAlignment(Qt::AlignCenter);
-        imgbbKeyTable->setItem(i, 0, idItem);
-
-        imgbbKeyTable->setItem(i, 1, new QTableWidgetItem(key.name));
-        imgbbKeyTable->setItem(i, 2, new QTableWidgetItem(maskApiKey(key.apiKey)));
-
-        QWidget *actionWidget = new QWidget();
-        QHBoxLayout *actionLayout = new QHBoxLayout(actionWidget);
-        actionLayout->setContentsMargins(5, 5, 5, 5);
-        actionLayout->setSpacing(5);
-
-        QPushButton *editBtn = new QPushButton("编辑");
-        editBtn->setFont(buttonFont);
-        editBtn->setMinimumHeight(buttonHeight);
-        editBtn->setProperty("keyId", key.id);
-        connect(editBtn, &QPushButton::clicked, this, &ConfigWidget::editImgbbKey);
-
-        QPushButton *deleteBtn = new QPushButton("删除");
-        deleteBtn->setFont(buttonFont);
-        deleteBtn->setMinimumHeight(buttonHeight);
-        deleteBtn->setProperty("keyId", key.id);
-        connect(deleteBtn, &QPushButton::clicked, this, &ConfigWidget::deleteImgbbKey);
-
-        actionLayout->addWidget(editBtn);
-        actionLayout->addWidget(deleteBtn);
-        imgbbKeyTable->setCellWidget(i, 3, actionWidget);
-
-        QWidget *radioWidget = new QWidget();
-        QHBoxLayout *radioLayout = new QHBoxLayout(radioWidget);
-        radioLayout->setContentsMargins(5, 5, 5, 5);
-        radioLayout->setAlignment(Qt::AlignCenter);
-
-        QRadioButton *radio = new QRadioButton();
-        radio->setChecked(key.isActive);
-        radio->setProperty("keyId", key.id);
-        imgbbKeyGroup->addButton(radio, key.id);
-        radioLayout->addWidget(radio);
-        imgbbKeyTable->setCellWidget(i, 4, radioWidget);
     }
     updateColumnWidths();
     updateRowHeight();
@@ -494,89 +360,6 @@ void ConfigWidget::refreshTable()
     loadApiKeys();
 }
 
-void ConfigWidget::addImgbbKey()
-{
-    ImgbbKeyDialog dialog(this);
-    if (dialog.exec() == QDialog::Accepted) {
-        QString name = dialog.getName();
-        QString apiKey = dialog.getApiKey();
-        if (name.isEmpty() || apiKey.isEmpty()) {
-            QMessageBox::warning(this, "错误", "名称和密钥不能为空");
-            return;
-        }
-        if (DBManager::instance()->addImgbbKey(name, apiKey)) {
-            QList<ImgbbKey> keys = DBManager::instance()->getAllImgbbKeys();
-            if (keys.size() == 1) {
-                DBManager::instance()->setActiveImgbbKey(keys.first().id);
-            }
-            QMessageBox::information(this, "成功", "密钥添加成功");
-            loadImgbbKeys();
-        } else {
-            QMessageBox::critical(this, "错误", "密钥添加失败");
-        }
-    }
-}
-
-void ConfigWidget::editImgbbKey()
-{
-    QPushButton *btn = qobject_cast<QPushButton*>(sender());
-    if (!btn) return;
-    int keyId = btn->property("keyId").toInt();
-    ImgbbKeyDialog dialog(this, keyId);
-    if (dialog.exec() == QDialog::Accepted) {
-        QString name = dialog.getName();
-        QString apiKey = dialog.getApiKey();
-        if (name.isEmpty() || apiKey.isEmpty()) {
-            QMessageBox::warning(this, "错误", "名称和密钥不能为空");
-            return;
-        }
-        if (DBManager::instance()->updateImgbbKey(keyId, name, apiKey)) {
-            QMessageBox::information(this, "成功", "密钥更新成功");
-            loadImgbbKeys();
-        } else {
-            QMessageBox::critical(this, "错误", "密钥更新失败");
-        }
-    }
-}
-
-void ConfigWidget::deleteImgbbKey()
-{
-    QPushButton *btn = qobject_cast<QPushButton*>(sender());
-    if (!btn) return;
-    int keyId = btn->property("keyId").toInt();
-    if (QMessageBox::question(this, "确认删除", "确定要删除这个密钥吗？",
-            QMessageBox::Yes | QMessageBox::No) == QMessageBox::Yes) {
-        if (DBManager::instance()->deleteImgbbKey(keyId)) {
-            QMessageBox::information(this, "成功", "密钥删除成功");
-            loadImgbbKeys();
-        } else {
-            QMessageBox::critical(this, "错误", "密钥删除失败");
-        }
-    }
-}
-
-void ConfigWidget::applyImgbbKey()
-{
-    QAbstractButton *checkedButton = imgbbKeyGroup->checkedButton();
-    if (!checkedButton) {
-        QMessageBox::warning(this, "提示", "请先选择一个密钥");
-        return;
-    }
-
-    int keyId = checkedButton->property("keyId").toInt();
-    if (DBManager::instance()->setActiveImgbbKey(keyId)) {
-        QMessageBox::information(this, "成功", "已应用该密钥");
-        loadImgbbKeys();
-    } else {
-        QMessageBox::critical(this, "错误", "应用失败");
-    }
-}
-
-void ConfigWidget::refreshImgbbTable()
-{
-    loadImgbbKeys();
-}
-
 // ApiKeyDialog
 ApiKeyDialog::ApiKeyDialog(QWidget *parent, int keyId)
     : QDialog(parent), keyId(keyId)
@@ -630,63 +413,3 @@ void ApiKeyDialog::loadApiKey(int id)
     nameEdit->setText(key.name);
     apiKeyEdit->setText(key.apiKey);
 }
-
-// ImgbbKeyDialog
-ImgbbKeyDialog::ImgbbKeyDialog(QWidget *parent, int keyId)
-    : QDialog(parent), keyId(keyId)
-{
-    setupUI();
-    if (keyId != -1) loadKey(keyId);
-}
-
-void ImgbbKeyDialog::setupUI()
-{
-    setWindowTitle(keyId == -1 ? "添加imgbb密钥" : "编辑imgbb密钥");
-    setMinimumWidth(500);
-    QVBoxLayout *mainLayout = new QVBoxLayout(this);
-    QFormLayout *formLayout = new QFormLayout();
-    formLayout->setLabelAlignment(Qt::AlignLeft | Qt::AlignVCenter);
-    formLayout->setFormAlignment(Qt::AlignLeft | Qt::AlignTop);
-    formLayout->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
-
-    nameEdit = new QLineEdit();
-    nameEdit->setPlaceholderText("例如: 我的imgbb密钥");
-
-    apiKeyEdit = new QLineEdit();
-    apiKeyEdit->setPlaceholderText("imgbb API Key");
-
-    formLayout->addRow("名称:", nameEdit);
-    formLayout->addRow("密钥:", apiKeyEdit);
-    mainLayout->addLayout(formLayout);
-
-    QHBoxLayout *buttonLayout = new QHBoxLayout();
-    QPushButton *saveBtn = new QPushButton("保存");
-    saveBtn->setFixedHeight(40);
-    saveBtn->setMinimumWidth(100);
-    connect(saveBtn, &QPushButton::clicked, this, &QDialog::accept);
-
-    QPushButton *cancelBtn = new QPushButton("取消");
-    cancelBtn->setFixedHeight(40);
-    cancelBtn->setMinimumWidth(100);
-    connect(cancelBtn, &QPushButton::clicked, this, &QDialog::reject);
-
-    buttonLayout->setAlignment(Qt::AlignCenter);
-    buttonLayout->addWidget(saveBtn);
-    buttonLayout->addWidget(cancelBtn);
-    mainLayout->addLayout(buttonLayout);
-
-    applyKeyDialogTheme(this, isDarkThemeWidget(this));
-}
-
-void ImgbbKeyDialog::loadKey(int id)
-{
-    QList<ImgbbKey> keys = DBManager::instance()->getAllImgbbKeys();
-    for (const ImgbbKey& k : keys) {
-        if (k.id == id) {
-            nameEdit->setText(k.name);
-            apiKeyEdit->setText(k.apiKey);
-            break;
-        }
-    }
-}
-

@@ -555,16 +555,6 @@ bool WanGenPage::validateImageFile(const QString &filePath, QString &errorMsg) c
     return true;
 }
 
-bool WanGenPage::validateImgbbKey(QString &errorMsg) const
-{
-    ImgbbKey activeImgbbKey = DBManager::instance()->getActiveImgbbKey();
-    if (activeImgbbKey.apiKey.isEmpty()) {
-        errorMsg = "请先到设置页应用临时图床密钥";
-        return false;
-    }
-    return true;
-}
-
 void WanGenPage::uploadAudio()
 {
     if (isSubmitting || audioUploading) return;
@@ -646,12 +636,6 @@ void WanGenPage::generateVideo()
         return;
     }
 
-    QString errorMsg;
-    if (!validateImgbbKey(errorMsg)) {
-        QMessageBox::warning(this, "提示", errorMsg);
-        return;
-    }
-
     if (uploadedImagePath.isEmpty()) {
         QMessageBox::warning(this, "提示", "WAN 模型需要上传图片");
         return;
@@ -702,8 +686,6 @@ void WanGenPage::generateVideo()
     previewLabel->setText("⏳ 正在提交视频生成任务...");
     setSubmitting(true);
 
-    ImgbbKey activeImgbbKey = DBManager::instance()->getActiveImgbbKey();
-
     VideoAPI::WanVideoParams params;
     params.apiKey = apiKeyData.apiKey;
     params.baseUrl = server;
@@ -721,7 +703,7 @@ void WanGenPage::generateVideo()
     params.seed = QString::number(seedInput->value());
 
     api->prepareWanRequest(params);
-    api->uploadImageToImgbb(uploadedImagePath, activeImgbbKey.apiKey);
+    api->uploadImageToImgbb(uploadedImagePath, apiKeyData.apiKey);
 }
 
 void WanGenPage::onVideoCreated(const QString &taskId, const QString &status)

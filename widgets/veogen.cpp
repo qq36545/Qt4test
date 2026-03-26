@@ -775,16 +775,6 @@ bool VeoGenPage::validateImageFile(const QString &filePath, QString &errorMsg) c
     return true;
 }
 
-bool VeoGenPage::validateImgbbKey(QString &errorMsg) const
-{
-    ImgbbKey activeImgbbKey = DBManager::instance()->getActiveImgbbKey();
-    if (activeImgbbKey.apiKey.isEmpty()) {
-        errorMsg = "请先到设置页应用临时图床密钥";
-        return false;
-    }
-    return true;
-}
-
 QString VeoGenPage::normalizeImageReferences(const QString &prompt) const
 {
     QString result = prompt;
@@ -906,11 +896,6 @@ void VeoGenPage::generateVideo()
 
     if (variantType2Radio && variantType2Radio->isChecked()) {
         // VEO3 Variant 2 统一格式
-        ImgbbKey activeImgbbKey = DBManager::instance()->getActiveImgbbKey();
-        if (activeImgbbKey.apiKey.isEmpty()) {
-            QMessageBox::warning(this, "提示", "请先到设置页应用临时图床密钥");
-            return;
-        }
         bool enhancePrompt = enhancePromptCheckBox->isChecked();
         bool enableUpsample = enableUpsampleCheckBox->isChecked();
         QString aspectRatio = aspectRatioCombo->currentData().toString();
@@ -927,7 +912,7 @@ void VeoGenPage::generateVideo()
             "",
             false,
             aspectRatio,
-            activeImgbbKey.apiKey,
+            apiKeyData.apiKey,
             enhancePrompt,
             enableUpsample
         );

@@ -167,23 +167,8 @@ bool DBManager::createTables()
         }
     }
 
-    // 创建 imgbb_keys 表
-    QString createImgbbKeysTable = R"(
-        CREATE TABLE IF NOT EXISTS imgbb_keys (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL,
-            api_key TEXT NOT NULL,
-            is_active INTEGER DEFAULT 0,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    )";
-
-    if (!query.exec(createImgbbKeysTable)) {
-        qCritical() << "Failed to create imgbb_keys table:" << query.lastError().text();
-        return false;
-    }
-
     // 创建 Image Preferences 表
+
     QString createImagePrefsTable = R"(
         CREATE TABLE IF NOT EXISTS image_preferences (
             model_variant TEXT PRIMARY KEY,
@@ -737,9 +722,12 @@ QList<VideoTask> DBManager::getPendingTasks()
     QList<VideoTask> tasks;
     QSqlQuery query(R"(
         SELECT id, task_id, task_type, prompt, model_variant, status, progress, video_url, video_path,
-               thumbnail_path, download_status, created_at, completed_at
+               thumbnail_path, download_status, created_at, completed_at,
+               model_name, api_key_name, server_url, error_message
         FROM video_history
         WHERE status IN ('pending', 'processing', 'video_generating')
+           OR (status = 'completed' AND video_url IS NOT NULL AND video_url != ''
+               AND IFNULL(download_status, 'not_started') != 'completed')
         ORDER BY created_at ASC
     )");
 
@@ -763,11 +751,16 @@ QList<VideoTask> DBManager::getPendingTasks()
         task.downloadStatus = query.value(10).toString();
         task.createdAt = query.value(11).toDateTime();
         task.completedAt = query.value(12).toDateTime();
+        task.modelName = query.value(13).toString();
+        task.apiKeyName = query.value(14).toString();
+        task.serverUrl = query.value(15).toString();
+        task.errorMessage = query.value(16).toString();
         tasks.append(task);
     }
 
     return tasks;
 }
+
 
 bool DBManager::updateTaskId(const QString& oldTaskId, const QString& newTaskId)
 {
@@ -797,91 +790,8 @@ bool DBManager::updateTaskErrorMessage(const QString& taskId, const QString& err
     return true;
 }
 
-// Imgbb Keys CRUD
-bool DBManager::addImgbbKey(const QString& name, const QString& apiKey)
-{
-    QSqlQuery query;
-    query.prepare("INSERT INTO imgbb_keys (name, api_key) VALUES (:name, :api_key)");
-    query.bindValue(":name", name);
-    query.bindValue(":api_key", apiKey);
-    if (!query.exec()) {
-        qCritical() << "Failed to add imgbb key:" << query.lastError().text();
-        return false;
-    }
-    return true;
-}
-
-bool DBManager::updateImgbbKey(int id, const QString& name, const QString& apiKey)
-{
-    QSqlQuery query;
-    query.prepare("UPDATE imgbb_keys SET name = :name, api_key = :api_key WHERE id = :id");
-    query.bindValue(":id", id);
-    query.bindValue(":name", name);
-    query.bindValue(":api_key", apiKey);
-    if (!query.exec()) {
-        qCritical() << "Failed to update imgbb key:" << query.lastError().text();
-        return false;
-    }
-    return true;
-}
-
-bool DBManager::deleteImgbbKey(int id)
-{
-    QSqlQuery query;
-    query.prepare("DELETE FROM imgbb_keys WHERE id = :id");
-    query.bindValue(":id", id);
-    if (!query.exec()) {
-        qCritical() << "Failed to delete imgbb key:" << query.lastError().text();
-        return false;
-    }
-    return true;
-}
-
-bool DBManager::setActiveImgbbKey(int id)
-{
-    db.transaction();
-    QSqlQuery query;
-    query.exec("UPDATE imgbb_keys SET is_active = 0");
-    query.prepare("UPDATE imgbb_keys SET is_active = 1 WHERE id = :id");
-    query.bindValue(":id", id);
-    if (!query.exec()) {
-        db.rollback();
-        qCritical() << "Failed to set active imgbb key:" << query.lastError().text();
-        return false;
-    }
-    db.commit();
-    return true;
-}
-
-QList<ImgbbKey> DBManager::getAllImgbbKeys()
-{
-    QList<ImgbbKey> keys;
-    QSqlQuery query("SELECT id, name, api_key, is_active FROM imgbb_keys ORDER BY id");
-    while (query.next()) {
-        ImgbbKey key;
-        key.id = query.value(0).toInt();
-        key.name = query.value(1).toString();
-        key.apiKey = query.value(2).toString();
-        key.isActive = query.value(3).toInt() == 1;
-        keys.append(key);
-    }
-    return keys;
-}
-
-ImgbbKey DBManager::getActiveImgbbKey()
-{
-    ImgbbKey key;
-    QSqlQuery query("SELECT id, name, api_key, is_active FROM imgbb_keys WHERE is_active = 1 LIMIT 1");
-    if (query.next()) {
-        key.id = query.value(0).toInt();
-        key.name = query.value(1).toString();
-        key.apiKey = query.value(2).toString();
-        key.isActive = true;
-    }
-    return key;
-}
-
 // Image Preferences CRUD
+
 bool DBManager::saveImagePreferences(const ImagePreferences& prefs)
 {
     QSqlQuery query;

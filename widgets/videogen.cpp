@@ -70,7 +70,7 @@ void showSora2RecoveryHint(QWidget* parent, const QString& taskId, const QString
 {
     QMessageBox::warning(parent, "提示",
         QString("任务已创建（%1），但%2，未自动启动轮询。\n"
-                "请前往历史记录使用\"修复任务ID\"进行恢复。")
+                "请稍后在历史记录中刷新状态，或重启应用后自动恢复。")
             .arg(taskId, reason));
 }
 
@@ -821,6 +821,12 @@ void VideoSingleTab::onSora2CreateTaskRequested(const QVariantMap& payload)
         sora2Page->setStatusHint("⏳ 正在提交视频生成任务...");
     }
 
+    if (imagePaths.isEmpty()) {
+        showGeneralSubmittingDialog(QStringLiteral("正在提交..."));
+    } else {
+        showGeneralSubmittingDialog(QString("正在上传第1张/共%1张").arg(imagePaths.size()));
+    }
+
     sora2Api->createVideo(
         selectedKey.apiKey,
         baseUrl,
@@ -846,6 +852,7 @@ void VideoSingleTab::onSora2CreateTaskRequested(const QVariantMap& payload)
 void VideoSingleTab::onSora2VideoCreated(const QString& taskId, const QString& status)
 {
     setSora2Submitting(false);
+    closeGeneralSubmittingDialog();
     if (sora2Page) {
         sora2Page->clearStatusHint();
     }
@@ -888,9 +895,8 @@ void VideoSingleTab::onSora2ImageUploadProgress(int current, int total)
 {
     if (sora2Page) {
         sora2Page->setStatusHint(QString("⏳ 正在上传第%1张/共%2张").arg(current).arg(total));
-        sora2Page->updateProgress(current, total,
-            QString("正在上传图片 %1/%2").arg(current).arg(total));
     }
+    updateGeneralSubmittingDialog(current, total);
     if (!sora2PendingTasks.isEmpty()) {
         const auto &context = sora2PendingTasks.first();
         if (!context.tempTaskId.isEmpty()) {
@@ -907,6 +913,7 @@ void VideoSingleTab::onSora2ApiError(const QString& error)
 {
     const QString userFacingError = VideoAPI::normalizeUserFacingError(error);
     setSora2Submitting(false);
+    closeGeneralSubmittingDialog();
     if (sora2Page) {
         sora2Page->clearStatusHint();
     }
@@ -1215,7 +1222,7 @@ void VideoHistoryWidget::setupUI()
 
 // VideoSingleHistoryTab 实现
 VideoSingleHistoryTab::VideoSingleHistoryTab(QWidget *parent)
-    : QWidget(parent), isListView(true), currentOffset(0), hasShownRecoveryPrompt(false)
+    : QWidget(parent), isListView(true), currentOffset(0)
 {
     setupUI();
     loadHistory();
@@ -1310,40 +1317,6 @@ void VideoSingleHistoryTab::showEvent(QShowEvent *event)
     QWidget::showEvent(event);
     // tab显示时自动刷新历史记录
     refreshHistory();
-
-    // 检查是否有创建时间<5分钟的temp-ID任务
-    if (!hasShownRecoveryPrompt) {
-        QList<VideoTask> allTasks = DBManager::instance()->getTasksByType("video_single", 0, 100);
-        QStringList recentTempIds;
-        QDateTime now = QDateTime::currentDateTime();
-
-        for (const VideoTask& task : allTasks) {
-            if (isTempTaskId(task.taskId)) {
-                qint64 secondsElapsed = task.createdAt.secsTo(now);
-                if (secondsElapsed < 300) {  // 5分钟 = 300秒
-                    recentTempIds.append(task.taskId);
-                }
-            }
-        }
-
-        if (!recentTempIds.isEmpty()) {
-            hasShownRecoveryPrompt = true;
-
-            QMessageBox msgBox(this);
-            msgBox.setWindowTitle("检测到未完成的任务恢复");
-            msgBox.setText(QString("发现 %1 个最近创建的任务因超时未获取到任务ID，是否立即修复？").arg(recentTempIds.size()));
-            msgBox.setIcon(QMessageBox::Question);
-            QPushButton* fixNowBtn = msgBox.addButton("立即修复", QMessageBox::AcceptRole);
-            QPushButton* laterBtn = msgBox.addButton("稍后处理", QMessageBox::RejectRole);
-
-            msgBox.exec();
-
-            if (msgBox.clickedButton() == fixNowBtn) {
-                // 自动选中第一个temp-ID任务并打开修复对话框
-                onFixTaskId(recentTempIds.first());
-            }
-        }
-    }
 }
 
 bool VideoSingleHistoryTab::eventFilter(QObject *obj, QEvent *event)
@@ -1991,12 +1964,6 @@ void VideoSingleHistoryTab::showContextMenu(const QPoint &pos)
         copyErrorAction = contextMenu.addAction("📋 复制错误详情");
     }
 
-    // 如果是 temp-ID，添加修复选项
-    QAction *fixAction = nullptr;
-    if (isTempTaskId(taskId)) {
-        fixAction = contextMenu.addAction("🔧 修复任务ID");
-    }
-
     // 显示菜单并获取用户选择
     QAction *selectedAction = contextMenu.exec(historyTable->viewport()->mapToGlobal(pos));
 
@@ -2020,8 +1987,6 @@ void VideoSingleHistoryTab::showContextMenu(const QPoint &pos)
     } else if (copyErrorAction && selectedAction == copyErrorAction) {
         QClipboard *clipboard = QApplication::clipboard();
         clipboard->setText(task.errorMessage.trimmed());
-    } else if (fixAction && selectedAction == fixAction) {
-        onFixTaskId(taskId);
     }
 }
 
@@ -2053,131 +2018,6 @@ void VideoSingleHistoryTab::onDeleteSelected()
     } else {
         QMessageBox::warning(this, "删除失败", "删除记录失败，请查看日志");
     }
-}
-
-void VideoSingleHistoryTab::onFixTaskId(const QString& tempTaskId)
-{
-    // 创建自定义对话框以支持主题适配
-    QDialog dialog(this);
-    dialog.setWindowTitle("修复任务ID");
-    dialog.setMinimumWidth(400);
-
-    // 继承父窗口的样式表
-    QWidget *topLevelWidget = window();
-    if (topLevelWidget) {
-        dialog.setStyleSheet(topLevelWidget->styleSheet());
-    }
-
-    // 为对话框显式设置深色主题样式
-    QString dialogStyle = R"(
-        QDialog {
-            background: rgba(30, 27, 75, 0.95);
-            color: #F8FAFC;
-        }
-        QLabel {
-            color: #F8FAFC;
-            font-size: 14px;
-        }
-        QLineEdit {
-            background: rgba(248, 250, 252, 0.05);
-            border: 1px solid rgba(248, 250, 252, 0.1);
-            border-radius: 8px;
-            color: #F8FAFC;
-            padding: 8px 12px;
-            font-size: 14px;
-        }
-        QLineEdit:focus {
-            border: 1px solid rgba(225, 29, 72, 0.5);
-            background: rgba(248, 250, 252, 0.08);
-        }
-        QPushButton {
-            background: rgba(225, 29, 72, 0.2);
-            border: 1px solid rgba(225, 29, 72, 0.5);
-            border-radius: 8px;
-            color: #F8FAFC;
-            padding: 8px 16px;
-            font-size: 14px;
-            font-weight: 500;
-        }
-        QPushButton:hover {
-            background: rgba(225, 29, 72, 0.3);
-            border: 1px solid rgba(225, 29, 72, 0.7);
-        }
-        QPushButton:pressed {
-            background: rgba(225, 29, 72, 0.4);
-        }
-    )";
-    dialog.setStyleSheet(dialogStyle);
-
-    QVBoxLayout *layout = new QVBoxLayout(&dialog);
-    layout->setSpacing(15);
-    layout->setContentsMargins(20, 20, 20, 20);
-
-    // 提示标签
-    QLabel *hintLabel = new QLabel(QString("临时任务ID: %1\n\n请输入真实的任务ID:").arg(tempTaskId));
-    hintLabel->setWordWrap(true);
-    layout->addWidget(hintLabel);
-
-    // 输入框
-    QLineEdit *lineEdit = new QLineEdit();
-    layout->addWidget(lineEdit);
-
-    // 按钮
-    QHBoxLayout *buttonLayout = new QHBoxLayout();
-    QPushButton *okButton = new QPushButton("确定");
-    QPushButton *cancelButton = new QPushButton("取消");
-    buttonLayout->addStretch();
-    buttonLayout->addWidget(okButton);
-    buttonLayout->addWidget(cancelButton);
-    layout->addLayout(buttonLayout);
-
-    // 连接信号
-    connect(okButton, &QPushButton::clicked, &dialog, &QDialog::accept);
-    connect(cancelButton, &QPushButton::clicked, &dialog, &QDialog::reject);
-    connect(lineEdit, &QLineEdit::returnPressed, &dialog, &QDialog::accept);
-
-    // 显示对话框
-    if (dialog.exec() != QDialog::Accepted) {
-        return;
-    }
-
-    QString realTaskId = lineEdit->text().trimmed();
-    if (realTaskId.isEmpty()) {
-        return;
-    }
-
-    // 验证真实任务ID格式（不能是temp-开头）
-    if (isTempTaskId(realTaskId)) {
-        QMessageBox::warning(this, "错误", "真实任务ID不能以 temp_ 或 temp- 开头");
-        return;
-    }
-
-    // 更新数据库
-    if (!DBManager::instance()->updateTaskId(tempTaskId, realTaskId)) {
-        QMessageBox::warning(this, "错误", "更新任务ID失败");
-        return;
-    }
-
-    // 更新任务状态为 pending
-    DBManager::instance()->updateTaskStatus(realTaskId, "pending", 0, "");
-
-    // 启动轮询
-    if (apiKeyCombo->count() > 0) {
-        int keyId = apiKeyCombo->currentData().toInt();
-        ApiKey apiKeyData = DBManager::instance()->getApiKey(keyId);
-        QString server = serverCombo->currentData().toString();
-
-        if (!apiKeyData.apiKey.isEmpty() && !server.isEmpty()) {
-            TaskPollManager::getInstance()->startPolling(realTaskId, "video_single",
-                apiKeyData.apiKey, server, "");
-        }
-    }
-
-    QMessageBox::information(this, "成功",
-        QString("任务ID已更新:\n%1\n→\n%2\n\n已启动轮询查询任务状态").arg(tempTaskId, realTaskId));
-
-    // 刷新历史记录
-    refreshHistory();
 }
 
 void VideoSingleHistoryTab::onSelectAllChanged(int state)

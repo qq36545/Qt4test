@@ -8,8 +8,13 @@
 #include <QStringList>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QUrl>
 
 #include "imageuploader.h"
+
+QUrl buildTaskQueryUrl(const QString &baseUrl,
+                       const QString &modelName,
+                       const QString &taskId);
 
 class VideoAPI : public QObject
 {

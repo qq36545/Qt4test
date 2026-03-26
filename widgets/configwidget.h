@@ -10,7 +10,6 @@
 #include <QLabel>
 #include <QDialog>
 #include <QLineEdit>
-#include <QButtonGroup>
 
 class ConfigWidget : public QWidget
 {
@@ -33,19 +32,11 @@ private slots:
     void viewApiKey();
     void refreshTable();
 
-    void addImgbbKey();
-    void editImgbbKey();
-    void deleteImgbbKey();
-    void applyImgbbKey();
-    void refreshImgbbTable();
-
 private:
     void setupUI();
     void setupApiKeyTab(QWidget *tab);
-    void setupImgbbTab(QWidget *tab);
     void setupTableStyle(QTableWidget *table);
     void loadApiKeys();
-    void loadImgbbKeys();
     void updateColumnWidths();
     void updateRowHeight();
     void updateThemeStyles();
@@ -54,13 +45,7 @@ private:
 
     QTabWidget *tabWidget;
     QTableWidget *apiKeyTable;
-    QTableWidget *imgbbKeyTable;
     QPushButton *addButton;
-    QPushButton *addImgbbButton;
-    QLabel *hint1Label;
-    QLabel *hint2Label;
-    QLabel *hint3Label;
-    QButtonGroup *imgbbKeyGroup;
     double scaleFactor;
 };
 
@@ -84,26 +69,6 @@ private:
     QLineEdit *apiKeyEdit;
     QPushButton *saveButton;
     QPushButton *cancelButton;
-};
-
-// 添加/编辑 imgbb 密钥对话框
-class ImgbbKeyDialog : public QDialog
-{
-    Q_OBJECT
-
-public:
-    explicit ImgbbKeyDialog(QWidget *parent = nullptr, int keyId = -1);
-
-    QString getName() const { return nameEdit->text(); }
-    QString getApiKey() const { return apiKeyEdit->text(); }
-
-private:
-    void setupUI();
-    void loadKey(int id);
-
-    int keyId;
-    QLineEdit *nameEdit;
-    QLineEdit *apiKeyEdit;
 };
 
 #endif // CONFIGWIDGET_H

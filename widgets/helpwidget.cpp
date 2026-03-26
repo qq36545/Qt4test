@@ -49,16 +49,13 @@ void HelpWidget::setupUI()
     QString htmlContent = R"(
         <div class="help-root">
             <h2>🚀 快速开始</h2>
-            <p>首次使用建议先完成下面两步配置，成功后即可开始批量生成。</p>
+            <p>首次使用建议先完成下面一步配置，成功后即可开始批量生成。</p>
             <hr/>
 
-            <h3>✅ 必做两步</h3>
+            <h3>✅ 必做一步</h3>
             <ol>
                 <li>
                     配置 AI 模型密钥：点击<a href="https://g1hzbw0p4dd.feishu.cn/docx/E9YedBOaGoaqS0xvx3qcTrG3n4e?from=from_copylink">这里</a>
-                </li>
-                <li>
-                    配置临时图床密钥：点击<a href="https://g1hzbw0p4dd.feishu.cn/docx/WBlkdfh30otuWTxvhhucazUpnyf?from=from_copylink">这里</a>
                 </li>
             </ol>
             <hr/>
@@ -136,16 +133,13 @@ void HelpWidget::updateThemeStyles()
     const QString htmlContent = QString(R"(
         <div style="font-size:20px; line-height:1.8; color:%1; text-align:left;">
             <h2 style="font-size:20px; color:%2; margin:8px 0 10px 0;">🚀 快速开始</h2>
-            <p style="font-size:20px; color:%1; margin:0 0 10px 0;">首次使用建议先完成下面两步配置，成功后即可开始批量生成。</p>
+            <p style="font-size:20px; color:%1; margin:0 0 10px 0;">首次使用建议先完成下面一步配置，成功后即可开始批量生成。</p>
             <hr style="border:none; border-top:1px solid %4; margin:16px 0;"/>
 
-            <h3 style="font-size:20px; color:%2; margin:8px 0 10px 0;">✅ 必做两步</h3>
+            <h3 style="font-size:20px; color:%2; margin:8px 0 10px 0;">✅ 必做一步</h3>
             <ol style="margin-left:20px; list-style-position: inside; color:%1; font-size:20px;">
                 <li style="margin-bottom:12px; color:%1; font-size:20px;">
                     配置 AI 模型密钥：点击<a href="https://g1hzbw0p4dd.feishu.cn/docx/E9YedBOaGoaqS0xvx3qcTrG3n4e?from=from_copylink" style="color:%3; font-size:22px; font-weight:700; text-decoration:none;">这里</a>
-                </li>
-                <li style="margin-bottom:12px; color:%1; font-size:20px;">
-                    配置临时图床密钥：点击<a href="https://g1hzbw0p4dd.feishu.cn/docx/WBlkdfh30otuWTxvhhucazUpnyf?from=from_copylink" style="color:%3; font-size:22px; font-weight:700; text-decoration:none;">这里</a>
                 </li>
             </ol>
             <hr style="border:none; border-top:1px solid %4; margin:16px 0;"/>

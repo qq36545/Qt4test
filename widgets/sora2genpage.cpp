@@ -1050,14 +1050,6 @@ void Sora2GenPage::onSubmitClicked()
         return;
     }
 
-    showProgressDialog();
-    const int totalImages = currentImagePaths().size();
-    if (totalImages == 0) {
-        updateProgress(0, 0, "正在提交...");
-    } else {
-        updateProgress(0, totalImages, "正在上传图片 0/0");
-    }
-
     if (currentApiFormat() == "unified") {
         emit createTaskRequested(buildUnifiedPayload());
     } else {
@@ -1429,76 +1421,14 @@ void Sora2GenPage::loadSettings()
 
 void Sora2GenPage::showProgressDialog()
 {
-    if (progressDialog) {
-        return;
-    }
-
-    progressDialog = new QDialog(this);
-    progressDialog->setWindowTitle("正在提交任务");
-    progressDialog->setMinimumWidth(400);
-    progressDialog->setModal(true);
-
-    // 继承主题
-    QWidget *topLevel = window();
-    if (topLevel) {
-        progressDialog->setStyleSheet(topLevel->styleSheet());
-    }
-
-    auto *layout = new QVBoxLayout(progressDialog);
-    layout->setSpacing(12);
-    layout->setContentsMargins(20, 20, 20, 20);
-
-    auto *statusLabel = new QLabel("正在准备提交...", progressDialog);
-    statusLabel->setObjectName("progressStatusLabel");
-    statusLabel->setAlignment(Qt::AlignCenter);
-    statusLabel->setStyleSheet("font-size: 15px; font-weight: bold; color: #000000;");
-    layout->addWidget(statusLabel);
-
-    QProgressBar *progressBar = new QProgressBar(progressDialog);
-    progressBar->setObjectName("submitProgressBar");
-    progressBar->setRange(0, 100);
-    progressBar->setValue(0);
-    layout->addWidget(progressBar);
-
-    auto *hintLabel = new QLabel("💡 提交成功后请到【生成历史记录】查看进度", progressDialog);
-    hintLabel->setObjectName("progressHintLabel");
-    hintLabel->setAlignment(Qt::AlignCenter);
-    hintLabel->setStyleSheet("font-size: 12px; color: #000000;");
-    layout->addWidget(hintLabel);
-
-    auto *closeBtn = new QPushButton("关闭", progressDialog);
-    closeBtn->setStyleSheet("color: #000000;");
-    closeBtn->setVisible(false);
-    layout->addWidget(closeBtn);
-    connect(closeBtn, &QPushButton::clicked, progressDialog, &QDialog::accept);
-
-    connect(progressDialog, &QDialog::finished, this, [this]() {
-        progressDialog = nullptr;
-    });
-
-    progressDialog->show();
+    // 提交反馈统一由 VideoSingleTab 管理
 }
 
 void Sora2GenPage::updateProgress(int current, int total, const QString &status)
 {
-    if (!progressDialog) {
-        return;
-    }
-
-    auto *statusLabel = progressDialog->findChild<QLabel*>("progressStatusLabel");
-    auto *progressBar = progressDialog->findChild<QProgressBar*>("submitProgressBar");
-    if (statusLabel) {
-        statusLabel->setText(status);
-    }
-    if (progressBar) {
-        if (total > 0) {
-            progressBar->setRange(0, total);
-            progressBar->setValue(current);
-        } else {
-            progressBar->setRange(0, 0);
-            progressBar->setValue(0);
-        }
-    }
+    Q_UNUSED(current);
+    Q_UNUSED(total);
+    Q_UNUSED(status);
 }
 
 void Sora2GenPage::onSubmitSuccess(const QString &taskId)
@@ -1507,16 +1437,9 @@ void Sora2GenPage::onSubmitSuccess(const QString &taskId)
     lastSubmittedParamsHash = calculateParamsHash();
     parametersModified = false;
     suppressDuplicateWarning = false;
-
-    if (progressDialog) {
-        progressDialog->accept();
-    }
 }
 
 void Sora2GenPage::onSubmitError(const QString &error)
 {
     Q_UNUSED(error);
-    if (progressDialog) {
-        progressDialog->accept();
-    }
 }

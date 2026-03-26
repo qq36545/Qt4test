@@ -86,17 +86,14 @@ void TaskPollManager::onPollTimer()
             continue;
         }
 
-        // 查询任务状态
+        // 查询任务状态（与 VideoAPI::queryTask 共用同一规则）
         QNetworkRequest request;
-        QString url;
-        // taskId 以 "video_" 开头 → OpenAI格式查询；否则 → 统一格式查询
-        if (info.taskId.startsWith("video_")) {
-            url = info.baseUrl + "/v1/videos/" + info.taskId;
-        } else {
-            url = info.baseUrl + "/v1/video/query?id=" + info.taskId;
-        }
-        request.setUrl(QUrl(url));
+        const QUrl url = buildTaskQueryUrl(info.baseUrl, info.modelName, info.taskId);
+
+        request.setUrl(url);
         request.setRawHeader("Authorization", QString("Bearer %1").arg(info.apiKey).toUtf8());
+        request.setRawHeader("Content-Type", "application/json");
+        request.setRawHeader("Accept", "application/json");
 
         QNetworkReply* reply = networkManager->get(request);
         replyTaskMap[reply] = info.taskId;
@@ -336,18 +333,70 @@ void TaskPollManager::triggerDownload(const QString& taskId, const QString& vide
 
 void TaskPollManager::recoverPendingTasks()
 {
-    QList<VideoTask> pendingTasks = DBManager::instance()->getPendingTasks();
+    const QList<VideoTask> pendingTasks = DBManager::instance()->getPendingTasks();
+    const QList<ApiKey> allKeys = DBManager::instance()->getAllApiKeys();
+
+    auto resolveApiKeyValue = [&allKeys](const QString& keyName) -> QString {
+        for (const ApiKey& key : allKeys) {
+            if (key.name == keyName) {
+                return key.apiKey;
+            }
+        }
+        return QString();
+    };
 
     for (const VideoTask& task : pendingTasks) {
-        // 检查是否超时
+        if (task.taskId.trimmed().isEmpty()) {
+            qWarning() << "[Recover] skip task with empty task_id, db id:" << task.id;
+            continue;
+        }
+
         if (isTaskTimeout(task.createdAt)) {
+            qWarning() << "[Recover] task timeout on startup:" << task.taskId;
             DBManager::instance()->updateTaskStatus(task.taskId, "timeout", 0);
             continue;
         }
 
-        // 重新启动轮询（需要从数据库或配置中获取 apiKey 和 baseUrl）
-        // 这里先留空，需要改进
-        qDebug() << "TODO: Recover task" << task.taskId;
+        const QString apiKey = resolveApiKeyValue(task.apiKeyName);
+        if (apiKey.trimmed().isEmpty()) {
+            const QString msg = QString("恢复失败：未找到 API 密钥（%1）").arg(task.apiKeyName);
+            qWarning() << "[Recover]" << msg << "task:" << task.taskId;
+            DBManager::instance()->updateTaskErrorMessage(task.taskId, msg);
+            emit taskFailed(task.taskId, msg);
+            continue;
+        }
+
+        const QString baseUrl = task.serverUrl.trimmed();
+        if (baseUrl.isEmpty()) {
+            const QString msg = "恢复失败：缺少服务器地址";
+            qWarning() << "[Recover]" << msg << "task:" << task.taskId;
+            DBManager::instance()->updateTaskErrorMessage(task.taskId, msg);
+            emit taskFailed(task.taskId, msg);
+            continue;
+        }
+
+        const bool canResumeDownload =
+            !task.videoUrl.trimmed().isEmpty() &&
+            task.downloadStatus != "completed";
+
+        if (canResumeDownload) {
+            qDebug() << "[Recover] resume download task:" << task.taskId;
+            triggerDownload(task.taskId,
+                            task.videoUrl,
+                            apiKey,
+                            baseUrl,
+                            task.taskType);
+            continue;
+        }
+
+        qDebug() << "[Recover] resume polling task:" << task.taskId
+                 << "status:" << task.status
+                 << "model:" << task.modelName;
+        startPolling(task.taskId,
+                     task.taskType,
+                     apiKey,
+                     baseUrl,
+                     task.modelName);
     }
 }
 

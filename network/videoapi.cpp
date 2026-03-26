@@ -11,6 +11,37 @@
 #include <QDebug>
 #include <QRegularExpression>
 
+QUrl buildTaskQueryUrl(const QString &baseUrl,
+                       const QString &modelName,
+                       const QString &taskId)
+{
+    if (modelName.contains("Grok", Qt::CaseInsensitive)) {
+        QUrl url(baseUrl + "/v1/video/query");
+        QUrlQuery query;
+        query.addQueryItem("id", taskId);
+        url.setQuery(query);
+        return url;
+    }
+
+    if (modelName.contains("Sora2", Qt::CaseInsensitive)) {
+        if (taskId.startsWith("video_")) {
+            return QUrl(baseUrl + "/v1/videos/" + taskId);
+        }
+
+        QUrl url(baseUrl + "/v1/video/query");
+        QUrlQuery query;
+        query.addQueryItem("id", taskId);
+        url.setQuery(query);
+        return url;
+    }
+
+    if (modelName.contains("wan", Qt::CaseInsensitive)) {
+        return QUrl(baseUrl + "/alibailian/api/v1/tasks/" + taskId);
+    }
+
+    return QUrl(baseUrl + "/v1/videos/" + taskId);
+}
+
 VideoAPI::VideoAPI(QObject *parent)
     : QObject(parent)
     , networkManager(new QNetworkAccessManager(this))
@@ -431,30 +462,7 @@ void VideoAPI::queryTask(const QString &apiKey,
                          const QString &modelName,
                          const QString &taskId)
 {
-    QUrl url;
-    if (modelName.contains("Grok", Qt::CaseInsensitive)) {
-        // Grok查询接口
-        url = QUrl(baseUrl + "/v1/video/query");
-        QUrlQuery query;
-        query.addQueryItem("id", taskId);
-        url.setQuery(query);
-    } else if (modelName.contains("Sora2", Qt::CaseInsensitive)) {
-        // Sora2 查询：video_ 前缀走 OpenAI 路径，其余走 unified 查询路径
-        if (taskId.startsWith("video_")) {
-            url = QUrl(baseUrl + "/v1/videos/" + taskId);
-        } else {
-            url = QUrl(baseUrl + "/v1/video/query");
-            QUrlQuery query;
-            query.addQueryItem("id", taskId);
-            url.setQuery(query);
-        }
-    } else if (modelName.contains("wan", Qt::CaseInsensitive)) {
-        // WAN 查询接口
-        url = QUrl(baseUrl + "/alibailian/api/v1/tasks/" + taskId);
-    } else {
-        // VEO3查询接口
-        url = QUrl(baseUrl + "/v1/videos/" + taskId);
-    }
+    QUrl url = buildTaskQueryUrl(baseUrl, modelName, taskId);
 
     QNetworkRequest request(url);
     request.setRawHeader("Authorization", QString("Bearer %1").arg(apiKey).toUtf8());
@@ -682,7 +690,7 @@ void VideoAPI::onCreateVideoFinished()
     } else {
         // 检查是否是超时错误
         if (reply->error() == QNetworkReply::TimeoutError) {
-            emit errorOccurred("任务提交超时，但任务可能已创建。请稍后在历史记录中右键选择'修复任务ID'来恢复。");
+            emit errorOccurred("任务提交超时，但任务可能已创建。请稍后在历史记录中刷新状态或重启应用后自动恢复。" );
         } else {
             int statusCode = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
             qDebug() << "[VideoAPI] create video failed:" << statusCode << responseData;

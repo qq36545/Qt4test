@@ -521,12 +521,6 @@ void GrokGenPage::generateVideo()
         return;
     }
 
-    ImgbbKey activeImgbbKey = DBManager::instance()->getActiveImgbbKey();
-    if (activeImgbbKey.apiKey.isEmpty()) {
-        QMessageBox::warning(this, "提示", "请先到设置页应用临时图床密钥");
-        return;
-    }
-
     if (!checkDuplicateSubmission()) return;
 
     QString modelVariant = modelVariantCombo->currentData().toString();
@@ -590,7 +584,7 @@ void GrokGenPage::generateVideo()
         QString::number(grokDuration),
         false,
         aspectRatio,
-        activeImgbbKey.apiKey
+        apiKeyData.apiKey
     );
 }
 

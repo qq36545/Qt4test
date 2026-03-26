@@ -59,7 +59,6 @@ private:
     QString buildSettingsSnapshot() const;
     QString calculateParamsHash() const;
     bool checkDuplicateSubmission();
-    bool validateImgbbKey(QString &errorMsg) const;
     QString selectAndValidateImageFile(const QString &dialogTitle);
     bool validateImageFile(const QString &filePath, QString &errorMsg) const;
     void setSubmitting(bool submitting);

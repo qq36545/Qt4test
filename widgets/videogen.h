@@ -153,7 +153,6 @@ private slots:
     void onRetryQuery(const QString& taskId);
     void onRegenerate(const QString& taskId);
     void showContextMenu(const QPoint &pos);  // 显示右键菜单
-    void onFixTaskId(const QString& taskId);  // 修复任务ID
     void onDeleteSelected();  // 删除选中的记录
     void onSelectAllChanged(int state);  // 全选/取消全选
     void onCheckBoxStateChanged();  // 单个勾选框状态变化
@@ -191,7 +190,6 @@ private:
     class VideoAPI* veo3API;  // API实例，用于重新查询任务状态
     QString currentRefreshingTaskId;  // 当前正在刷新的任务ID
     QTimer* tooltipHideTimer;  // 状态tooltip 3秒自动消失计时器
-    bool hasShownRecoveryPrompt;  // 是否已显示过恢复提示
     QSet<QString> notifiedTaskFailures;  // 已提示失败/超时的任务ID（防重复）
 };
 
