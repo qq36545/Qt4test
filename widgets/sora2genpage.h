@@ -25,6 +25,7 @@ class Sora2GenPage : public QWidget
 public:
     explicit Sora2GenPage(QWidget *parent = nullptr);
     void loadFromTask(const VideoTask &task);
+    void setSubmitEnabled(bool enabled);
 
 protected:
     void changeEvent(QEvent *event) override;

@@ -831,6 +831,13 @@ void Sora2GenPage::restoreDraftSettings()
     lastSavedSettingsSnapshot = buildSettingsSnapshot();
 }
 
+void Sora2GenPage::setSubmitEnabled(bool enabled)
+{
+    if (submitButton) {
+        submitButton->setEnabled(enabled);
+    }
+}
+
 void Sora2GenPage::onSubmitClicked()
 {
     const QString prompt = promptInput->toPlainText().trimmed();

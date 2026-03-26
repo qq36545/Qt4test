@@ -113,8 +113,8 @@ VideoTaskDisplayState resolveVideoTaskDisplayState(const VideoTask& task)
         displayState.statusIcon = "❌";
     } else if (task.status == "timeout") {
         displayState.resolvedState = VideoResolvedState::Timeout;
-        displayState.statusText = "⏱️ 超时";
-        displayState.statusIcon = "⏱️";
+        displayState.statusText = "❌ 失败（超时）";
+        displayState.statusIcon = "❌";
     } else if (task.downloadStatus == "downloading") {
         displayState.resolvedState = VideoResolvedState::Downloading;
         displayState.statusText = "⬇️ 下载中";
@@ -370,8 +370,20 @@ void VideoSingleTab::refreshApiKeys()
     sora2Page->refreshApiKeys();
 }
 
+void VideoSingleTab::setSora2Submitting(bool submitting)
+{
+    sora2Submitting = submitting;
+    if (sora2Page) {
+        sora2Page->setSubmitEnabled(!submitting);
+    }
+}
+
 void VideoSingleTab::onSora2CreateTaskRequested(const QVariantMap& payload)
 {
+    if (sora2Submitting) {
+        return;
+    }
+
     const QString prompt = payload.value("prompt").toString().trimmed();
     if (prompt.isEmpty()) {
         QMessageBox::warning(this, "提示", "请输入提示词");
@@ -445,13 +457,6 @@ void VideoSingleTab::onSora2CreateTaskRequested(const QVariantMap& payload)
                 : serverUrls.first();
     }
 
-    ImgbbKey activeImgbbKey = DBManager::instance()->getActiveImgbbKey();
-    const bool needImgbb = isImageToVideo && apiFormat == "unified";
-    if (needImgbb && activeImgbbKey.apiKey.isEmpty()) {
-        QMessageBox::warning(this, "提示", "Sora2 图生视频需要先到设置页应用临时图床密钥");
-        return;
-    }
-
     QString tempTaskId = QString("temp_%1_%2")
         .arg(QDateTime::currentMSecsSinceEpoch())
         .arg(QRandomGenerator::global()->bounded(10000));
@@ -485,6 +490,7 @@ void VideoSingleTab::onSora2CreateTaskRequested(const QVariantMap& payload)
     }
 
     sora2PendingTasks.append({tempTaskId, selectedKey.apiKey, baseUrl});
+    setSora2Submitting(true);
 
     sora2Api->createVideo(
         selectedKey.apiKey,
@@ -497,7 +503,7 @@ void VideoSingleTab::onSora2CreateTaskRequested(const QVariantMap& payload)
         seconds,
         watermark,
         "",
-        activeImgbbKey.apiKey,
+        selectedKey.apiKey,
         true,
         true,
         apiFormat,
@@ -510,6 +516,8 @@ void VideoSingleTab::onSora2CreateTaskRequested(const QVariantMap& payload)
 
 void VideoSingleTab::onSora2VideoCreated(const QString& taskId, const QString& status)
 {
+    setSora2Submitting(false);
+
     QString resolvedStatus = status.trimmed();
     if (resolvedStatus.isEmpty()) {
         resolvedStatus = "pending";
@@ -537,12 +545,31 @@ void VideoSingleTab::onSora2VideoCreated(const QString& taskId, const QString& s
         showSora2RecoveryHint(this, taskId, "缺少轮询所需上下文");
     }
 
-    QMessageBox::information(this, "任务已提交",
-        "Sora2 视频生成任务已提交！\n\n请前往【生成历史记录】标签页查看任务状态。\n系统将自动轮询任务状态并下载完成的视频。");
+    QLabel *toast = new QLabel("✅已提交任务，请到生成历史记录查询任务", this);
+    toast->setStyleSheet(
+        "QLabel {"
+        "    background-color: #4CAF50;"
+        "    color: white;"
+        "    padding: 10px 20px;"
+        "    border-radius: 5px;"
+        "    font-size: 14px;"
+        "}"
+    );
+    toast->setAlignment(Qt::AlignCenter);
+    toast->setWindowFlags(Qt::ToolTip | Qt::FramelessWindowHint);
+    toast->setAttribute(Qt::WA_TranslucentBackground);
+
+    QPoint globalPos = mapToGlobal(rect().center());
+    toast->move(globalPos.x() - 140, globalPos.y() - 100);
+    toast->show();
+
+    QTimer::singleShot(3000, toast, &QLabel::deleteLater);
 }
 
 void VideoSingleTab::onSora2ApiError(const QString& error)
 {
+    setSora2Submitting(false);
+
     if (!sora2PendingTasks.isEmpty()) {
         const auto context = sora2PendingTasks.takeFirst();
         if (isRecoverableSubmitError(error)) {
@@ -853,6 +880,10 @@ VideoSingleHistoryTab::VideoSingleHistoryTab(QWidget *parent)
     // 连接TaskPollManager的状态更新信号
     connect(TaskPollManager::getInstance(), &TaskPollManager::taskStatusUpdated,
             this, &VideoSingleHistoryTab::onTaskStatusUpdated);
+    connect(TaskPollManager::getInstance(), &TaskPollManager::taskTimeout,
+            this, &VideoSingleHistoryTab::onTaskTimeout);
+    connect(TaskPollManager::getInstance(), &TaskPollManager::taskFailed,
+            this, &VideoSingleHistoryTab::onTaskFailed);
 
     // tooltip 3秒自动消失计时器
     tooltipHideTimer = new QTimer(this);
@@ -1872,11 +1903,14 @@ void VideoSingleHistoryTab::onTaskStatusUpdated(const QString& taskId, const QSt
     }
 
     // 遍历表格，找到对应任务并更新状态、进度、勾选框和按钮可用性
+    bool rowMatched = false;
     for (int row = 0; row < historyTable->rowCount(); ++row) {
         QTableWidgetItem *taskIdItem = historyTable->item(row, 2);
         if (!taskIdItem || taskIdItem->text() != taskId) {
             continue;
         }
+
+        rowMatched = true;
 
         QTableWidgetItem *statusItem = historyTable->item(row, 4);
         if (statusItem) {
@@ -1924,6 +1958,41 @@ void VideoSingleHistoryTab::onTaskStatusUpdated(const QString& taskId, const QSt
 
         break;
     }
+
+    if (!rowMatched) {
+        refreshHistory();
+    }
+}
+
+void VideoSingleHistoryTab::onTaskTimeout(const QString& taskId)
+{
+    onTaskStatusUpdated(taskId, "timeout", 0);
+
+    if (!isVisible() || notifiedTaskFailures.contains(taskId)) {
+        return;
+    }
+
+    notifiedTaskFailures.insert(taskId);
+    QMessageBox::warning(this, "任务超时",
+        QString("任务 %1 已超时，已按失败处理，请重试。")
+            .arg(taskId));
+}
+
+void VideoSingleHistoryTab::onTaskFailed(const QString& taskId, const QString& error)
+{
+    VideoTask task = DBManager::instance()->getTaskById(taskId);
+    const QString failedStatus = task.status.trimmed().isEmpty() ? "failed" : task.status;
+    onTaskStatusUpdated(taskId, failedStatus, task.progress);
+
+    if (!isVisible() || notifiedTaskFailures.contains(taskId)) {
+        return;
+    }
+
+    notifiedTaskFailures.insert(taskId);
+    const QString message = error.trimmed().isEmpty()
+        ? QString("任务 %1 失败，请重试。").arg(taskId)
+        : QString("任务 %1 失败，请重试。\n\n原因：%2").arg(taskId, error);
+    QMessageBox::warning(this, "任务失败", message);
 }
 
 void VideoSingleHistoryTab::onApiTaskStatusUpdated(const QString& taskId, const QString& status, const QString& videoUrl, int progress)

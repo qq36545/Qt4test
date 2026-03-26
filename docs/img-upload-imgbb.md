@@ -1,69 +1,56 @@
-# API 版本 1
-- Imgbb 的 API v1 允许您上传图片。
+# 图片上传接口说明（已切换 imageproxy）
 
-# 请求方法
-- API v1 调用可以使用 POST 或 GET 请求方法，但由于 GET 请求受限于 URL 的最大允许长度，建议优先使用 POST 方法。
+> 历史：旧版曾使用 imgbb v1。当前业务链路（Sora2 unified / Grok / WAN 复用上传）统一走 imageproxy。
 
-# 图片上传psot请求地址：
+## 当前协议
 
-https://api.imgbb.com/1/upload
+- 方法：`POST`
+- 地址：`https://imageproxy.zhongzhuan.chat/api/upload`
+- Header：`Authorization: Bearer <页面 API 密钥下拉值>`
+- Content-Type：`multipart/form-data`
+- 文件字段：`file`
+- 成功取值：优先 `data.url`
 
-# 参数
-key (必填)：API 密钥。
-image (必填)：二进制文件、base64 数据或图片 URL（最大 32 MB）。
-name (可选)：文件名；如果你使用 POST 和 multipart/form-data 上传文件，将会自动检测。
-expiration (可选)：如果您希望上传内容在一段时间后自动删除（以秒为单位，60-15552000），请启用此项。
+---
 
-# 示例调用：
-curl --location --request POST "https://api.imgbb.com/1/upload?expiration=600&key=YOUR_CLIENT_API_KEY" --form "image=R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"
+## 最小回归验收模板（手工）
 
-- 注意：上传本地文件时请始终使用 POST。使用 GET 时，由于编码字符或 URL 长度限制，URL 编码可能会更改 base64 源。
+### Case 1：Sora2 unified + 有图
+- 操作：在 Sora2 unified 模式选择一张参考图并提交。
+- 预期：
+  - 先请求 `POST https://imageproxy.zhongzhuan.chat/api/upload`
+  - 请求头含 `Authorization: Bearer <页面下拉 API Key>`
+  - 请求体为 `multipart/form-data` 且包含 `file`
+  - 上传成功后，创建视频请求 `images` 使用上传返回 URL（优先 `data.url`）
 
+### Case 2：Sora2 unified + 无图
+- 操作：不选图直接提交。
+- 预期：
+  - 不触发上传接口
+  - 直接进入创建视频请求与轮询链路
 
-# API 响应
-API v1 的响应会以 JSON 格式显示所有已上传图片的信息。
+### Case 3：无效 token / 401
+- 操作：使用无效 API Key 提交有图任务。
+- 预期：
+  - 上传请求失败，可见重试
+  - 最终上抛错误前缀为：`图片上传失败:`
+  - 提交流程结束后按钮恢复可点击（不锁死）
 
-在 JSON 响应中，响应头会包含状态码，便于你轻松判断请求是否成功。还会包含 status 属性。
+### Case 4：响应缺少 `data.url`
+- 操作：构造上传接口返回 200 但不含 `data.url`。
+- 预期：
+  - 最终上抛：`图片上传响应缺少data.url字段:`
+  - 不进入后续创建视频请求
 
-示例响应（JSON）：
+---
 
-{
-	"data": {
-		"id": "2ndCYJK",
-		"title": "c1f64245afb2",
-		"url_viewer": "https://ibb.co/2ndCYJK",
-		"url": "https://i.ibb.co/w04Prt6/c1f64245afb2.gif",
-		"display_url": "https://i.ibb.co/98W13PY/c1f64245afb2.gif",
-		"width":"1",
-		"height":"1",
-		"size": "42",
-		"time": "1552042565",
-		"expiration":"0",
-		"image": {
-			"filename": "c1f64245afb2.gif",
-			"name": "c1f64245afb2",
-			"mime": "image/gif",
-			"extension": "gif",
-			"url": "https://i.ibb.co/w04Prt6/c1f64245afb2.gif",
-		},
-		"thumb": {
-			"filename": "c1f64245afb2.gif",
-			"name": "c1f64245afb2",
-			"mime": "image/gif",
-			"extension": "gif",
-			"url": "https://i.ibb.co/2ndCYJK/c1f64245afb2.gif",
-		},
-		"medium": {
-			"filename": "c1f64245afb2.gif",
-			"name": "c1f64245afb2",
-			"mime": "image/gif",
-			"extension": "gif",
-			"url": "https://i.ibb.co/98W13PY/c1f64245afb2.gif",
-		},
-		"delete_url": "https://ibb.co/2ndCYJK/670a7e48ddcb85ac340c717a41047e5c"
-	},
-	"success": true,
-	"status": 200
-}
+## 验收记录（可复制）
 
-
+- 日期：
+- 提交分支：
+- 构建结果：
+- Case 1：通过 / 失败（备注）
+- Case 2：通过 / 失败（备注）
+- Case 3：通过 / 失败（备注）
+- Case 4：通过 / 失败（备注）
+- 结论：可发布 / 需修复

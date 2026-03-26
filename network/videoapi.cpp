@@ -56,7 +56,7 @@ void VideoAPI::createVideo(const QString &apiKey,
                            const QString &seconds,
                            bool watermark,
                            const QString &aspectRatio,
-                           const QString &imgbbApiKey,
+                           const QString &imageUploadApiKey,
                            bool enhancePrompt,
                            bool enableUpsample,
                            const QString &apiFormat,
@@ -74,7 +74,7 @@ void VideoAPI::createVideo(const QString &apiKey,
         currentRequest.prompt = prompt;
         currentRequest.aspectRatio = aspectRatio;
         currentRequest.size = size;
-        currentRequest.imgbbApiKey = imgbbApiKey;
+        currentRequest.imageUploadApiKey = imageUploadApiKey;
         currentRequest.localImagePaths = imagePaths;
         currentRequest.uploadedUrls.clear();
         currentRequest.uploadIndex = 0;
@@ -87,9 +87,9 @@ void VideoAPI::createVideo(const QString &apiKey,
         currentRequest.privateMode = false;
         currentRequest.watermark = watermark;
 
-        // 开始上传第一张图片到 imgbb；无图片则直接文生视频
+        // 开始上传第一张图片到公共图床；无图片则直接文生视频
         if (!imagePaths.isEmpty()) {
-            imageUploader->uploadToImgbb(imagePaths.first(), imgbbApiKey);
+            imageUploader->uploadToImgbb(imagePaths.first(), imageUploadApiKey);
         } else {
             createGrokVideo(apiKey, baseUrl, model, prompt, {}, aspectRatio, size, seconds.toInt());
         }
@@ -100,14 +100,14 @@ void VideoAPI::createVideo(const QString &apiKey,
         if (useOpenAIFormat) {
             createVeo3Video(apiKey, baseUrl, model, prompt, imagePaths, size, seconds, watermark, style, privateMode);
         } else {
-            // Sora2 统一格式：需要先上传图片到 imgbb 获取 URL（有图时）
+            // Sora2 统一格式：需要先上传图片获取 URL（有图时）
             currentRequest.apiKey = apiKey;
             currentRequest.baseUrl = baseUrl;
             currentRequest.model = model;
             currentRequest.prompt = prompt;
             currentRequest.aspectRatio = aspectRatio;
             currentRequest.size = size;
-            currentRequest.imgbbApiKey = imgbbApiKey;
+            currentRequest.imageUploadApiKey = imageUploadApiKey;
             currentRequest.localImagePaths = imagePaths;
             currentRequest.uploadedUrls.clear();
             currentRequest.uploadIndex = 0;
@@ -120,7 +120,7 @@ void VideoAPI::createVideo(const QString &apiKey,
             currentRequest.watermark = watermark;
 
             if (!imagePaths.isEmpty()) {
-                imageUploader->uploadToImgbb(imagePaths.first(), imgbbApiKey);
+                imageUploader->uploadToImgbb(imagePaths.first(), imageUploadApiKey);
             } else {
                 createVeo3UnifiedVideo(apiKey, baseUrl, model, prompt, QStringList(),
                                        aspectRatio, enhancePrompt, enableUpsample,
@@ -135,19 +135,19 @@ void VideoAPI::createVideo(const QString &apiKey,
         // 注意：调用方必须先调用 prepareWanRequest 设置完整参数
         if (!currentRequest.localImagePaths.isEmpty()) {
             imageUploader->uploadToImgbb(currentRequest.localImagePaths.first(), 
-                                          currentRequest.imgbbApiKey);
+                                          currentRequest.imageUploadApiKey);
         } else {
             emit errorOccurred("WAN 模型需要上传图片");
         }
     } else {
-        // VEO3 统一格式：需要先上传图片到 imgbb 获取 URL
+        // VEO3 统一格式：需要先上传图片获取 URL
         currentRequest.apiKey = apiKey;
         currentRequest.baseUrl = baseUrl;
         currentRequest.model = model;
         currentRequest.prompt = prompt;
         currentRequest.aspectRatio = aspectRatio;
         currentRequest.size = size;
-        currentRequest.imgbbApiKey = imgbbApiKey;
+        currentRequest.imageUploadApiKey = imageUploadApiKey;
         currentRequest.localImagePaths = imagePaths;
         currentRequest.uploadedUrls.clear();
         currentRequest.uploadIndex = 0;
@@ -160,7 +160,7 @@ void VideoAPI::createVideo(const QString &apiKey,
         currentRequest.watermark = watermark;
 
         if (!imagePaths.isEmpty()) {
-            imageUploader->uploadToImgbb(imagePaths.first(), imgbbApiKey);
+            imageUploader->uploadToImgbb(imagePaths.first(), imageUploadApiKey);
         } else {
             // 无图片直接调用
             createVeo3UnifiedVideo(apiKey, baseUrl, model, prompt, QStringList(),
@@ -520,7 +520,7 @@ void VideoAPI::onImageUploadSuccess(const QString &url)
     if (currentRequest.uploadIndex < currentRequest.localImagePaths.size()) {
         imageUploader->uploadToImgbb(
             currentRequest.localImagePaths[currentRequest.uploadIndex],
-            currentRequest.imgbbApiKey);
+            currentRequest.imageUploadApiKey);
     } else {
         // 所有图片上传完成，根据 targetMethod 分发
         if (currentRequest.targetMethod == "grok") {

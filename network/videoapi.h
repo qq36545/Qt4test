@@ -30,7 +30,7 @@ public:
                      const QString &seconds,
                      bool watermark,
                      const QString &aspectRatio = QString(),
-                     const QString &imgbbApiKey = QString(),
+                     const QString &imageUploadApiKey = QString(),
                      bool enhancePrompt = true,
                      bool enableUpsample = true,
                      const QString &apiFormat = QString(),
@@ -131,7 +131,7 @@ private:
         QString size;
         QString orientation;   // Sora2 unified: 方向
         QString durationText;  // Sora2 unified: 时长字符串
-        QString imgbbApiKey;
+        QString imageUploadApiKey;
         QStringList localImagePaths;
         QStringList uploadedUrls;
         int uploadIndex;
@@ -156,8 +156,8 @@ public:
     ImageUploader* getImageUploader() { return imageUploader; }
     
     // 公共方法：用于上传图片
-    void uploadImageToImgbb(const QString &localPath, const QString &imgbbApiKey) {
-        imageUploader->uploadToImgbb(localPath, imgbbApiKey);
+    void uploadImageToImgbb(const QString &localPath, const QString &imageUploadApiKey) {
+        imageUploader->uploadToImgbb(localPath, imageUploadApiKey);
     }
     
     // WAN 视频参数结构体

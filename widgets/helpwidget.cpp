@@ -128,7 +128,6 @@ void HelpWidget::updateThemeStyles()
     const QString textColor = isDarkTheme ? "#FFFFFF" : "#000000";
     const QString titleColor = textColor;
     const QString linkColor = isDarkTheme ? "#FF9F1A" : "#0369A1";
-    const QString linkHoverColor = linkColor;
     const QString dividerColor = isDarkTheme ? "rgba(255,255,255,0.28)" : "rgba(0,0,0,0.24)";
 
     titleLabel->setStyleSheet(QString("font-size: 30px; font-weight: 700; color: %1;").arg(titleColor));
@@ -138,7 +137,7 @@ void HelpWidget::updateThemeStyles()
         <div style="font-size:20px; line-height:1.8; color:%1; text-align:left;">
             <h2 style="font-size:20px; color:%2; margin:8px 0 10px 0;">🚀 快速开始</h2>
             <p style="font-size:20px; color:%1; margin:0 0 10px 0;">首次使用建议先完成下面两步配置，成功后即可开始批量生成。</p>
-            <hr style="border:none; border-top:1px solid %5; margin:16px 0;"/>
+            <hr style="border:none; border-top:1px solid %4; margin:16px 0;"/>
 
             <h3 style="font-size:20px; color:%2; margin:8px 0 10px 0;">✅ 必做两步</h3>
             <ol style="margin-left:20px; list-style-position: inside; color:%1; font-size:20px;">
@@ -149,16 +148,16 @@ void HelpWidget::updateThemeStyles()
                     配置临时图床密钥：点击<a href="https://g1hzbw0p4dd.feishu.cn/docx/WBlkdfh30otuWTxvhhucazUpnyf?from=from_copylink" style="color:%3; font-size:22px; font-weight:700; text-decoration:none;">这里</a>
                 </li>
             </ol>
-            <hr style="border:none; border-top:1px solid %5; margin:16px 0;"/>
+            <hr style="border:none; border-top:1px solid %4; margin:16px 0;"/>
 
             <h3 style="font-size:20px; color:%2; margin:8px 0 10px 0;">💬 常见支持</h3>
             <p style="font-size:20px; color:%1; margin:0 0 10px 0;">遇到问题可添加微信 <strong style="color:%1; font-weight:700;">312088415</strong>，拉你进群一起交流学习。</p>
-            <hr style="border:none; border-top:1px solid %5; margin:16px 0;"/>
+            <hr style="border:none; border-top:1px solid %4; margin:16px 0;"/>
 
             <h3 style="font-size:20px; color:%2; margin:8px 0 10px 0;">📚 更多教程</h3>
             <p style="font-size:20px; color:%1; margin:0;">完整教程集合：点击<a href="https://g1hzbw0p4dd.feishu.cn/docx/TBeZdghZhoG9yzxju06cTxFBntg?from=from_copylink" style="color:%3; font-size:22px; font-weight:700; text-decoration:none;">这里</a></p>
         </div>
-    )").arg(textColor, titleColor, linkColor, linkHoverColor, dividerColor);
+    )").arg(textColor, titleColor, linkColor, dividerColor);
 
     textBrowser->setHtml(htmlContent);
 }
