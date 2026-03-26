@@ -46,12 +46,30 @@ public slots:
 
 private slots:
     void onModelChanged(int index);
+    void onVeoSubmitSucceeded(const QString& modelName);
+    void onVeoSubmitFailed(const QString& modelName, const QString& error);
+    void onGrokSubmitSucceeded(const QString& modelName);
+    void onGrokSubmitFailed(const QString& modelName, const QString& error);
+    void onWanSubmitSucceeded(const QString& modelName);
+    void onWanSubmitFailed(const QString& modelName, const QString& error);
     void onSora2CreateTaskRequested(const QVariantMap& payload);
     void onSora2VideoCreated(const QString& taskId, const QString& status);
     void onSora2ImageUploadProgress(int current, int total);
     void onSora2ApiError(const QString& error);
 
 private:
+    struct SubmitDialogTheme {
+        bool isDark = false;
+        QString textColor;
+        QString bgColor;
+        QString borderColor;
+        QString accentBgColor;
+        QString accentTextColor;
+        QString buttonBgColor;
+        QString buttonHoverColor;
+        QString buttonTextColor;
+    };
+
     struct Sora2PendingContext {
         QString tempTaskId;
         QString apiKey;
@@ -60,6 +78,11 @@ private:
 
     void setupUI();
     void setSora2Submitting(bool submitting);
+    SubmitDialogTheme resolveSubmitDialogTheme() const;
+    void showUnifiedSubmitResultDialog(bool success,
+                                       const QString& title,
+                                       const QString& message,
+                                       const QString& detail = QString());
 
     QStackedWidget *stack;
     VeoGenPage *veoPage;

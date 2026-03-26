@@ -28,6 +28,8 @@ public:
 
 signals:
     void apiKeySelectionChanged(const QString& apiKeyValue);
+    void submitSucceeded(const QString& modelName);
+    void submitFailed(const QString& modelName, const QString& error);
 
 public slots:
     void refreshApiKeys();

@@ -970,8 +970,7 @@ void VeoGenPage::onVideoCreated(const QString &taskId, const QString &status)
     parametersModified = false;
     saveSettings();
 
-    QMessageBox::information(this, "任务已提交",
-        "视频生成任务已提交！\n\n请前往【生成历史记录】标签页查看任务状态。\n系统将自动轮询任务状态并下载完成的视频。");
+    emit submitSucceeded("VEO3视频");
     previewLabel->setText("💡 生成结果将在【生成历史记录】");
 }
 
@@ -1002,7 +1001,7 @@ void VeoGenPage::onApiError(const QString &error)
         DBManager::instance()->updateTaskStatus(currentTaskId, "failed", 0, "");
         DBManager::instance()->updateTaskErrorMessage(currentTaskId, userFacingError);
     }
-    QMessageBox::critical(this, "错误", QString("API 调用失败:\n%1").arg(userFacingError));
+    emit submitFailed("VEO3视频", userFacingError);
     previewLabel->setText("💡 生成结果将在【生成历史记录】");
 }
 

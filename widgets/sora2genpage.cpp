@@ -1507,55 +1507,15 @@ void Sora2GenPage::onSubmitSuccess(const QString &taskId)
     parametersModified = false;
     suppressDuplicateWarning = false;
 
-    if (!progressDialog) {
-        return;
+    if (progressDialog) {
+        progressDialog->accept();
     }
-
-    auto *statusLabel = progressDialog->findChild<QLabel*>("progressStatusLabel");
-    auto *progressBar = progressDialog->findChild<QProgressBar*>("submitProgressBar");
-    auto *hintLabel = progressDialog->findChild<QLabel*>("progressHintLabel");
-    auto *closeBtn = progressDialog->findChild<QPushButton*>();
-
-    if (statusLabel) {
-        statusLabel->setText("✅ 已成功提交！请到历史记录查看进度");
-        statusLabel->setStyleSheet("font-size: 15px; font-weight: bold; color: #4CAF50;");
-    }
-    if (progressBar) {
-        progressBar->setVisible(false);
-    }
-    if (hintLabel) {
-        hintLabel->setVisible(false);
-    }
-    if (closeBtn) {
-        closeBtn->setVisible(true);
-    }
-
-    QTimer::singleShot(3000, progressDialog, &QDialog::accept);
 }
 
 void Sora2GenPage::onSubmitError(const QString &error)
 {
-    if (!progressDialog) {
-        QMessageBox::warning(this, "提交失败", error);
-        return;
-    }
-
-    auto *statusLabel = progressDialog->findChild<QLabel*>("progressStatusLabel");
-    auto *progressBar = progressDialog->findChild<QProgressBar*>("submitProgressBar");
-    auto *hintLabel = progressDialog->findChild<QLabel*>("progressHintLabel");
-    auto *closeBtn = progressDialog->findChild<QPushButton*>();
-
-    if (statusLabel) {
-        statusLabel->setText("❌ 提交失败: " + error);
-        statusLabel->setStyleSheet("font-size: 15px; font-weight: bold; color: #f44336;");
-    }
-    if (progressBar) {
-        progressBar->setVisible(false);
-    }
-    if (hintLabel) {
-        hintLabel->setVisible(false);
-    }
-    if (closeBtn) {
-        closeBtn->setVisible(true);
+    Q_UNUSED(error);
+    if (progressDialog) {
+        progressDialog->accept();
     }
 }
