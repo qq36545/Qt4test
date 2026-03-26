@@ -243,9 +243,12 @@ void Sora2GenPage::setupUI()
     auto *promptHeaderLayout = new QHBoxLayout();
     auto *promptLabel = new QLabel("提示词:");
     promptLabel->setStyleSheet("font-size: 14px;");
-    auto *clearPromptButton = new QPushButton("清空文本");
+    clearPromptButton = new QPushButton("清空文本");
     clearPromptButton->setCursor(Qt::PointingHandCursor);
     connect(clearPromptButton, &QPushButton::clicked, this, [this]() {
+        if (isSubmitting) {
+            return;
+        }
         promptInput->clear();
     });
     promptHeaderLayout->addWidget(promptLabel);
@@ -273,6 +276,9 @@ void Sora2GenPage::setupUI()
     clearImagesButton = new QPushButton("清除");
     clearImagesButton->setCursor(Qt::PointingHandCursor);
     connect(clearImagesButton, &QPushButton::clicked, this, [this]() {
+        if (isSubmitting) {
+            return;
+        }
         uploadedImagePaths.clear();
         updateThumbnailGrid();
         queueSaveSettings();
@@ -445,6 +451,10 @@ void Sora2GenPage::showEvent(QShowEvent *event)
 
 bool Sora2GenPage::eventFilter(QObject *watched, QEvent *event)
 {
+    if (isSubmitting && event->type() == QEvent::MouseButtonPress) {
+        return true;
+    }
+
     if (event->type() == QEvent::FocusOut) {
         if (unifiedDurationCombo && unifiedDurationCombo->lineEdit() == watched) {
             validateDurationEditor(unifiedDurationCombo);
@@ -661,6 +671,10 @@ void Sora2GenPage::updateThumbnailGrid()
 
 void Sora2GenPage::removeReferenceImage(int index)
 {
+    if (isSubmitting) {
+        return;
+    }
+
     if (index < 0 || index >= uploadedImagePaths.size()) {
         return;
     }
@@ -685,6 +699,10 @@ void Sora2GenPage::removeReferenceImage(int index)
 
 void Sora2GenPage::replaceReferenceImage(int index)
 {
+    if (isSubmitting) {
+        return;
+    }
+
     if (index < 0 || index >= uploadedImagePaths.size()) {
         return;
     }
@@ -833,13 +851,38 @@ void Sora2GenPage::restoreDraftSettings()
 
 void Sora2GenPage::setSubmitEnabled(bool enabled)
 {
-    if (submitButton) {
-        submitButton->setEnabled(enabled);
-    }
+    setSubmitting(!enabled);
+}
+
+void Sora2GenPage::setSubmitting(bool submitting)
+{
+    isSubmitting = submitting;
+
+    if (submitButton) submitButton->setEnabled(!submitting);
+    if (clearPromptButton) clearPromptButton->setEnabled(!submitting);
+    if (clearImagesButton) clearImagesButton->setEnabled(!submitting);
+    if (unifiedFormatRadio) unifiedFormatRadio->setEnabled(!submitting);
+    if (openaiFormatRadio) openaiFormatRadio->setEnabled(!submitting);
+    if (variantCombo) variantCombo->setEnabled(!submitting);
+    if (apiKeyCombo) apiKeyCombo->setEnabled(!submitting);
+    if (serverCombo) serverCombo->setEnabled(!submitting);
+    if (unifiedSizeCombo) unifiedSizeCombo->setEnabled(!submitting);
+    if (unifiedOrientationCombo) unifiedOrientationCombo->setEnabled(!submitting);
+    if (unifiedDurationCombo) unifiedDurationCombo->setEnabled(!submitting);
+    if (openaiSecondsCombo) openaiSecondsCombo->setEnabled(!submitting);
+    if (openaiSizeCombo) openaiSizeCombo->setEnabled(!submitting);
+    if (openaiStyleCombo) openaiStyleCombo->setEnabled(!submitting);
+    if (watermarkCheckBox) watermarkCheckBox->setEnabled(!submitting);
+    if (privateCheckBox) privateCheckBox->setEnabled(!submitting);
+    if (promptInput) promptInput->setReadOnly(submitting);
 }
 
 void Sora2GenPage::onSubmitClicked()
 {
+    if (isSubmitting) {
+        return;
+    }
+
     const QString prompt = promptInput->toPlainText().trimmed();
     if (prompt.isEmpty()) {
         QMessageBox::warning(this, "提示", "请输入提示词");
@@ -884,6 +927,10 @@ void Sora2GenPage::onApiFormatChanged()
 
 void Sora2GenPage::onUploadImagesClicked()
 {
+    if (isSubmitting) {
+        return;
+    }
+
     const int maxImages = maxReferenceImages();
     if (uploadedImagePaths.size() >= maxImages) {
         QMessageBox::warning(this, "提示", QString("最多上传 %1 张参考图").arg(maxImages));

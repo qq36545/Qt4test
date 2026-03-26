@@ -65,6 +65,7 @@ private:
     QString calculateParamsHash() const;
     bool checkDuplicateSubmission();
     bool validateImgbbKey(QString &errorMsg) const;
+    void setSubmitting(bool submitting);
 
 protected:
     bool eventFilter(QObject *obj, QEvent *event) override;
@@ -122,6 +123,7 @@ protected:
     bool parametersModified;
     bool pendingSaveSettings;
     bool suppressAutoSave;
+    bool isSubmitting = false;
     QString lastSavedSettingsSnapshot;
 };
 

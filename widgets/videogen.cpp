@@ -103,49 +103,56 @@ VideoTaskDisplayState resolveVideoTaskDisplayState(const VideoTask& task)
     displayState.canDownload = false;
     displayState.resolvedState = VideoResolvedState::Unknown;
 
+    const QString rawStatus = task.status.trimmed();
+    const QString normalizedStatus = rawStatus.toLower();
+    const QString errorDetail = task.errorMessage.trimmed();
+
     if (displayState.hasLocalFile) {
         displayState.resolvedState = VideoResolvedState::CompletedLocal;
         displayState.statusText = "✅ 已完成";
         displayState.statusIcon = "✅";
-    } else if (task.status == "failed") {
+    } else if (normalizedStatus == "failed") {
         displayState.resolvedState = VideoResolvedState::Failed;
-        displayState.statusText = "❌ 失败";
+        displayState.statusText = errorDetail.isEmpty()
+            ? "生成失败"
+            : QString("生成失败，原因是：%1").arg(errorDetail);
         displayState.statusIcon = "❌";
-    } else if (task.status == "timeout") {
+    } else if (normalizedStatus == "timeout") {
         displayState.resolvedState = VideoResolvedState::Timeout;
-        displayState.statusText = "❌ 失败（超时）";
+        const QString timeoutReason = errorDetail.isEmpty() ? "任务超时" : errorDetail;
+        displayState.statusText = QString("生成失败，原因是：%1").arg(timeoutReason);
         displayState.statusIcon = "❌";
     } else if (task.downloadStatus == "downloading") {
         displayState.resolvedState = VideoResolvedState::Downloading;
-        displayState.statusText = "⬇️ 下载中";
+        displayState.statusText = "下载中";
         displayState.statusIcon = "⬇️";
-    } else if (task.status == "queued" || task.status == "pending") {
+    } else if (normalizedStatus == "queued" || normalizedStatus == "pending") {
         displayState.resolvedState = VideoResolvedState::Waiting;
-        displayState.statusText = "⏳ 等待中";
+        displayState.statusText = "排队中";
         displayState.statusIcon = "⏳";
-    } else if (task.status == "processing" || task.status == "video_generating") {
+    } else if (normalizedStatus == "processing" || normalizedStatus == "video_generating") {
         displayState.resolvedState = VideoResolvedState::Processing;
-        displayState.statusText = "🔄 处理中";
+        displayState.statusText = "处理中";
         displayState.statusIcon = "🔄";
-    } else if (task.status == "completed") {
+    } else if (normalizedStatus == "completed") {
         if (task.downloadStatus == "failed") {
             displayState.resolvedState = VideoResolvedState::DownloadFailed;
-            displayState.statusText = "⚠️ 下载失败";
+            displayState.statusText = "下载失败";
             displayState.statusIcon = "⚠️";
             displayState.canDownload = !task.videoUrl.isEmpty();
         } else if (!task.videoUrl.isEmpty()) {
             displayState.resolvedState = VideoResolvedState::PendingDownload;
-            displayState.statusText = "📥 已生成待下载";
+            displayState.statusText = "已生成待下载";
             displayState.statusIcon = "📥";
             displayState.canDownload = true;
         } else {
             displayState.resolvedState = VideoResolvedState::Processing;
-            displayState.statusText = "🔄 处理中";
+            displayState.statusText = "处理中";
             displayState.statusIcon = "🔄";
         }
     } else {
         displayState.resolvedState = VideoResolvedState::Unknown;
-        displayState.statusText = task.status;
+        displayState.statusText = rawStatus.isEmpty() ? "未知状态" : rawStatus;
         displayState.statusIcon = "❔";
     }
 
@@ -374,7 +381,7 @@ void VideoSingleTab::setSora2Submitting(bool submitting)
 {
     sora2Submitting = submitting;
     if (sora2Page) {
-        sora2Page->setSubmitEnabled(!submitting);
+        sora2Page->setSubmitting(submitting);
     }
 }
 
@@ -1201,12 +1208,7 @@ void VideoSingleHistoryTab::loadHistory(int offset, int limit)
             historyTable->setItem(row, 3, promptItem);
 
             // 状态
-            QString statusText = displayState.statusText;
-            // 检测temp-ID任务
-            if (isTempTaskId(task.taskId)) {
-                statusText = "⚠️ 待恢复";
-            }
-            QTableWidgetItem *statusItem = new QTableWidgetItem(statusText);
+            QTableWidgetItem *statusItem = new QTableWidgetItem(displayState.statusText);
             if (!task.errorMessage.isEmpty()) {
                 statusItem->setToolTip(task.errorMessage);
             }
@@ -1640,6 +1642,12 @@ void VideoSingleHistoryTab::showContextMenu(const QPoint &pos)
     contextMenu.setStyleSheet("QMenu { font-size: 14px; } QMenu::item { padding: 5px 20px; }");
     QAction *copyAction = contextMenu.addAction("📋 复制");
 
+    const VideoTask task = DBManager::instance()->getTaskById(taskId);
+    QAction *copyErrorAction = nullptr;
+    if (!task.errorMessage.trimmed().isEmpty()) {
+        copyErrorAction = contextMenu.addAction("📋 复制错误详情");
+    }
+
     // 如果是 temp-ID，添加修复选项
     QAction *fixAction = nullptr;
     if (isTempTaskId(taskId)) {
@@ -1666,6 +1674,9 @@ void VideoSingleHistoryTab::showContextMenu(const QPoint &pos)
             // 可选：显示提示
             // QMessageBox::information(this, "提示", "已复制到剪贴板");
         }
+    } else if (copyErrorAction && selectedAction == copyErrorAction) {
+        QClipboard *clipboard = QApplication::clipboard();
+        clipboard->setText(task.errorMessage.trimmed());
     } else if (fixAction && selectedAction == fixAction) {
         onFixTaskId(taskId);
     }

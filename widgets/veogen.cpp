@@ -386,6 +386,9 @@ void VeoGenPage::connectSignals()
 bool VeoGenPage::eventFilter(QObject *obj, QEvent *event)
 {
     if (event->type() == QEvent::MouseButtonPress) {
+        if (isSubmitting) {
+            return true;
+        }
         if (obj == imagePreviewLabel) {
             uploadImage();
             return true;
@@ -489,6 +492,30 @@ void VeoGenPage::onModelVariantChanged(int index)
     updateResolutionOptions(is4K, isVariant2);
 }
 
+void VeoGenPage::setSubmitting(bool submitting)
+{
+    isSubmitting = submitting;
+
+    if (generateButton) generateButton->setEnabled(!submitting);
+    if (resetButton) resetButton->setEnabled(!submitting);
+    if (uploadImageButton) uploadImageButton->setEnabled(!submitting);
+    if (uploadEndFrameButton) uploadEndFrameButton->setEnabled(!submitting);
+    if (uploadMiddleFrameButton) uploadMiddleFrameButton->setEnabled(!submitting);
+    if (clearImageButton) clearImageButton->setEnabled(!submitting);
+    if (clearEndFrameButton) clearEndFrameButton->setEnabled(!submitting);
+    if (clearMiddleFrameButton) clearMiddleFrameButton->setEnabled(!submitting);
+    if (variantType1Radio) variantType1Radio->setEnabled(!submitting);
+    if (variantType2Radio) variantType2Radio->setEnabled(!submitting);
+    if (modelVariantCombo) modelVariantCombo->setEnabled(!submitting);
+    if (resolutionCombo) resolutionCombo->setEnabled(!submitting);
+    if (durationCombo) durationCombo->setEnabled(!submitting);
+    if (watermarkCheckBox) watermarkCheckBox->setEnabled(!submitting);
+    if (enhancePromptCheckBox) enhancePromptCheckBox->setEnabled(!submitting);
+    if (enableUpsampleCheckBox) enableUpsampleCheckBox->setEnabled(!submitting);
+    if (aspectRatioCombo) aspectRatioCombo->setEnabled(!submitting);
+    if (promptInput) promptInput->setReadOnly(submitting);
+}
+
 void VeoGenPage::updateImageUploadUI(const QString &modelName)
 {
     bool isComponents = modelName.contains("components");
@@ -545,6 +572,9 @@ void VeoGenPage::updateResolutionOptions(bool is4K, bool isVariant2)
 
 void VeoGenPage::uploadImage()
 {
+    if (isSubmitting) {
+        return;
+    }
     QString modelVariant = modelVariantCombo->currentData().toString();
     bool isComponents = modelVariant.contains("components");
     bool isFrames = modelVariant.contains("frames");
@@ -567,6 +597,9 @@ void VeoGenPage::uploadImage()
 
 void VeoGenPage::uploadEndFrameImage()
 {
+    if (isSubmitting) {
+        return;
+    }
     if (!uploadedEndFrameImagePath.isEmpty()) {
         int ret = QMessageBox::question(this, "重新选择图片",
             "当前已有尾帧图片，是否重新选择？",
@@ -584,6 +617,9 @@ void VeoGenPage::uploadEndFrameImage()
 
 void VeoGenPage::uploadMiddleFrameImage()
 {
+    if (isSubmitting) {
+        return;
+    }
     if (!uploadedMiddleFrameImagePath.isEmpty()) {
         int ret = QMessageBox::question(this, "重新选择图片",
             "当前已有图片，是否重新选择？",
@@ -601,6 +637,9 @@ void VeoGenPage::uploadMiddleFrameImage()
 
 void VeoGenPage::clearImage(int index)
 {
+    if (isSubmitting) {
+        return;
+    }
     if (index < 0 || index >= uploadedImagePaths.size()) return;
     uploadedImagePaths[index] = QString();
     updateImagePreview();
@@ -789,6 +828,10 @@ void VeoGenPage::resetForm()
 
 void VeoGenPage::generateVideo()
 {
+    if (isSubmitting) {
+        return;
+    }
+
     QString prompt = promptInput->toPlainText().trimmed();
     if (prompt.isEmpty()) {
         QMessageBox::warning(this, "提示", "请输入视频生成提示词");
@@ -871,6 +914,7 @@ void VeoGenPage::generateVideo()
         bool enableUpsample = enableUpsampleCheckBox->isChecked();
         QString aspectRatio = aspectRatioCombo->currentData().toString();
 
+        setSubmitting(true);
         api->createVideo(
             apiKeyData.apiKey,
             server,
@@ -888,6 +932,7 @@ void VeoGenPage::generateVideo()
         );
     } else {
         // VEO3 Variant 1 OpenAI格式
+        setSubmitting(true);
         api->createVideo(
             apiKeyData.apiKey,
             server,
@@ -906,6 +951,7 @@ void VeoGenPage::generateVideo()
 void VeoGenPage::onVideoCreated(const QString &taskId, const QString &status)
 {
     Q_UNUSED(status);
+    setSubmitting(false);
     if (!currentTaskId.isEmpty() && currentTaskId != taskId) {
         DBManager::instance()->updateTaskId(currentTaskId, taskId);
     }
@@ -938,6 +984,7 @@ void VeoGenPage::onTaskStatusUpdated(const QString &taskId, const QString &statu
 
 void VeoGenPage::onApiError(const QString &error)
 {
+    setSubmitting(false);
     if (!currentTaskId.isEmpty()) {
         DBManager::instance()->updateTaskStatus(currentTaskId, "failed", 0, "");
         DBManager::instance()->updateTaskErrorMessage(currentTaskId, error);

@@ -43,7 +43,8 @@ WanGenPage::WanGenPage(QWidget *parent)
       parametersModified(false),
       pendingSaveSettings(false),
       suppressAutoSave(false),
-      audioUploading(false)
+      audioUploading(false),
+      isSubmitting(false)
 {
     api = new VideoAPI(this);
     connect(api, &VideoAPI::videoCreated, this, &WanGenPage::onVideoCreated);
@@ -376,6 +377,9 @@ void WanGenPage::connectSignals()
 bool WanGenPage::eventFilter(QObject *obj, QEvent *event)
 {
     if (event->type() == QEvent::MouseButtonPress) {
+        if (isSubmitting) {
+            return true;
+        }
         if (obj == imagePreviewLabel) {
             uploadImage();
             return true;
@@ -439,8 +443,33 @@ void WanGenPage::updateAudioWidgetVisibility(const QString &modelVariant)
     }
 }
 
+void WanGenPage::setSubmitting(bool submitting)
+{
+    isSubmitting = submitting;
+
+    if (generateButton) generateButton->setEnabled(!submitting);
+    if (resetButton) resetButton->setEnabled(!submitting);
+    if (uploadImageButton) uploadImageButton->setEnabled(!submitting);
+    if (clearImageButton) clearImageButton->setEnabled(!submitting);
+    if (modelVariantCombo) modelVariantCombo->setEnabled(!submitting);
+    if (durationCombo) durationCombo->setEnabled(!submitting);
+    if (resolutionCombo) resolutionCombo->setEnabled(!submitting);
+    if (templateCombo) templateCombo->setEnabled(!submitting);
+    if (promptExtendCheckBox) promptExtendCheckBox->setEnabled(!submitting);
+    if (seedInput) seedInput->setEnabled(!submitting);
+    if (watermarkCheckBox) watermarkCheckBox->setEnabled(!submitting);
+    if (audioCheckBox) audioCheckBox->setEnabled(!submitting);
+    if (audioUploadButton) audioUploadButton->setEnabled(!submitting);
+    if (clearAudioButton) clearAudioButton->setEnabled(!submitting);
+    if (promptInput) promptInput->setReadOnly(submitting);
+    if (negativePromptInput) negativePromptInput->setReadOnly(submitting);
+}
+
 void WanGenPage::uploadImage()
 {
+    if (isSubmitting) {
+        return;
+    }
     if (!uploadedImagePath.isEmpty()) {
         int ret = QMessageBox::question(this, "重新选择图片",
             "当前已有图片，是否重新选择？",
@@ -537,7 +566,7 @@ bool WanGenPage::validateImgbbKey(QString &errorMsg) const
 
 void WanGenPage::uploadAudio()
 {
-    if (audioUploading) return;
+    if (isSubmitting || audioUploading) return;
 
     QString filePath = QFileDialog::getOpenFileName(this, "选择音频文件",
         QString(), "音频文件 (*.mp3 *.wav *.m4a *.aac *.ogg);;所有文件 (*.*)");
@@ -573,6 +602,9 @@ void WanGenPage::uploadAudio()
 
 void WanGenPage::clearAudio()
 {
+    if (isSubmitting) {
+        return;
+    }
     uploadedAudioPath.clear();
     uploadedAudioUrl.clear();
     audioUploading = false;
@@ -598,6 +630,10 @@ void WanGenPage::resetForm()
 
 void WanGenPage::generateVideo()
 {
+    if (isSubmitting) {
+        return;
+    }
+
     QString prompt = promptInput->toPlainText().trimmed();
     if (prompt.isEmpty()) {
         QMessageBox::warning(this, "提示", "请输入视频生成提示词");
@@ -663,6 +699,7 @@ void WanGenPage::generateVideo()
 
     currentTaskId = tempTaskId;
     previewLabel->setText("⏳ 正在提交视频生成任务...");
+    setSubmitting(true);
 
     ImgbbKey activeImgbbKey = DBManager::instance()->getActiveImgbbKey();
 
@@ -689,6 +726,7 @@ void WanGenPage::generateVideo()
 void WanGenPage::onVideoCreated(const QString &taskId, const QString &status)
 {
     Q_UNUSED(status);
+    setSubmitting(false);
     if (!currentTaskId.isEmpty() && currentTaskId != taskId) {
         DBManager::instance()->updateTaskId(currentTaskId, taskId);
     }
@@ -721,6 +759,7 @@ void WanGenPage::onTaskStatusUpdated(const QString &taskId, const QString &statu
 
 void WanGenPage::onApiError(const QString &error)
 {
+    setSubmitting(false);
     if (!currentTaskId.isEmpty()) {
         DBManager::instance()->updateTaskStatus(currentTaskId, "failed", 0, "");
         DBManager::instance()->updateTaskErrorMessage(currentTaskId, error);

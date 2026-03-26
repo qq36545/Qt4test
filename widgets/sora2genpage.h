@@ -26,6 +26,7 @@ public:
     explicit Sora2GenPage(QWidget *parent = nullptr);
     void loadFromTask(const VideoTask &task);
     void setSubmitEnabled(bool enabled);
+    void setSubmitting(bool submitting);
 
 protected:
     void changeEvent(QEvent *event) override;
@@ -105,10 +106,12 @@ private:
     QCheckBox *privateCheckBox;
 
     QPushButton *submitButton;
+    QPushButton *clearPromptButton;
 
     QStringList uploadedImagePaths;
     int lastValidDuration = 10;
     bool syncingDuration = false;
+    bool isSubmitting = false;
     bool suppressAutoSave = false;
     bool pendingSaveSettings = false;
     QString lastSavedSettingsSnapshot;

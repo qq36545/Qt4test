@@ -59,6 +59,7 @@ private:
     bool validateImgbbKey(QString &errorMsg) const;
     QString selectAndValidateImageFile(const QString &dialogTitle);
     bool validateImageFile(const QString &filePath, QString &errorMsg) const;
+    void setSubmitting(bool submitting);
 
 protected:
     bool eventFilter(QObject *obj, QEvent *event) override;
@@ -103,6 +104,7 @@ protected:
     bool pendingSaveSettings;
     bool suppressAutoSave;
     bool audioUploading;
+    bool isSubmitting;
     QString lastSavedSettingsSnapshot;
     QString uploadedAudioPath;
     QString uploadedAudioUrl;
