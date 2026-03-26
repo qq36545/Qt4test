@@ -38,6 +38,7 @@ private slots:
     void onModelVariantChanged(int index);
     void onVideoCreated(const QString &taskId, const QString &status);
     void onTaskStatusUpdated(const QString &taskId, const QString &status, const QString &videoUrl, int progress);
+    void onImageUploadProgress(int current, int total);
     void onApiError(const QString &error);
     void onAnyParameterChanged();
 
@@ -57,6 +58,7 @@ private:
     QString calculateParamsHash() const;
     bool checkDuplicateSubmission();
     bool validateImageFile(const QString &filePath, QString &errorMsg) const;
+    void setSubmitting(bool submitting);
 
 protected:
     bool eventFilter(QObject *obj, QEvent *event) override;
@@ -90,6 +92,7 @@ protected:
     bool parametersModified;
     bool pendingSaveSettings;
     bool suppressAutoSave;
+    bool isSubmitting = false;
     QString lastSavedSettingsSnapshot;
 };
 

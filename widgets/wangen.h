@@ -41,6 +41,7 @@ private slots:
     void clearAudio();
     void onVideoCreated(const QString &taskId, const QString &status);
     void onTaskStatusUpdated(const QString &taskId, const QString &status, const QString &videoUrl, int progress);
+    void onImageUploadProgress(int current, int total);
     void onApiError(const QString &error);
     void onAnyParameterChanged();
 
@@ -59,6 +60,7 @@ private:
     bool validateImgbbKey(QString &errorMsg) const;
     QString selectAndValidateImageFile(const QString &dialogTitle);
     bool validateImageFile(const QString &filePath, QString &errorMsg) const;
+    void setSubmitting(bool submitting);
 
 protected:
     bool eventFilter(QObject *obj, QEvent *event) override;
@@ -103,6 +105,7 @@ protected:
     bool pendingSaveSettings;
     bool suppressAutoSave;
     bool audioUploading;
+    bool isSubmitting;
     QString lastSavedSettingsSnapshot;
     QString uploadedAudioPath;
     QString uploadedAudioUrl;

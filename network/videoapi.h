@@ -30,7 +30,7 @@ public:
                      const QString &seconds,
                      bool watermark,
                      const QString &aspectRatio = QString(),
-                     const QString &imgbbApiKey = QString(),
+                     const QString &imageUploadApiKey = QString(),
                      bool enhancePrompt = true,
                      bool enableUpsample = true,
                      const QString &apiFormat = QString(),
@@ -45,6 +45,9 @@ public:
                    const QString &modelName,
                    const QString &taskId);
 
+    static bool isQuotaInsufficientError(const QString &error);
+    static QString normalizeUserFacingError(const QString &error);
+
     // 下载视频
     void downloadVideo(const QString &apiKey,
                        const QString &baseUrl,
@@ -55,6 +58,7 @@ signals:
     void videoCreated(const QString &taskId, const QString &status);
     void taskStatusUpdated(const QString &taskId, const QString &status, const QString &videoUrl, int progress);
     void videoDownloaded(const QString &savePath);
+    void imageUploadProgress(int current, int total);
     void errorOccurred(const QString &error);
 
 private slots:
@@ -131,7 +135,7 @@ private:
         QString size;
         QString orientation;   // Sora2 unified: 方向
         QString durationText;  // Sora2 unified: 时长字符串
-        QString imgbbApiKey;
+        QString imageUploadApiKey;
         QStringList localImagePaths;
         QStringList uploadedUrls;
         int uploadIndex;
@@ -156,8 +160,8 @@ public:
     ImageUploader* getImageUploader() { return imageUploader; }
     
     // 公共方法：用于上传图片
-    void uploadImageToImgbb(const QString &localPath, const QString &imgbbApiKey) {
-        imageUploader->uploadToImgbb(localPath, imgbbApiKey);
+    void uploadImageToImgbb(const QString &localPath, const QString &imageUploadApiKey) {
+        imageUploader->uploadToImgbb(localPath, imageUploadApiKey);
     }
     
     // WAN 视频参数结构体

@@ -3,6 +3,7 @@
 #include <QFile>
 #include <QHttpMultiPart>
 #include <QFileInfo>
+#include <QMimeDatabase>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QUrlQuery>
@@ -20,6 +21,21 @@ static QString getDashscopeApiKey()
     }
     QSettings settings("ChickenAI", "VideoGen");
     return settings.value("dashscopeApiKey", "").toString();
+}
+
+static QString detectUploadMimeType(const QFileInfo &fileInfo)
+{
+    QMimeDatabase db;
+    QString detected = db.mimeTypeForFile(fileInfo).name();
+    if (detected.isEmpty() || detected == "application/octet-stream") {
+        const QString suffix = fileInfo.suffix().toLower();
+        if (suffix == "jpg" || suffix == "jpeg") detected = "image/jpeg";
+        else if (suffix == "png") detected = "image/png";
+        else if (suffix == "webp") detected = "image/webp";
+        else if (suffix == "bmp") detected = "image/bmp";
+        else detected = "image/jpeg";
+    }
+    return detected;
 }
 
 ImageUploader::ImageUploader(QObject *parent)
@@ -120,6 +136,7 @@ void ImageUploader::uploadToOss(const QJsonObject &policyData, const QString &fi
     file.close();
 
     QFileInfo fileInfo(filePath);
+    const QString uploadMimeType = detectUploadMimeType(fileInfo);
     const QString uploadDir = policyData["upload_dir"].toString();
     const QString key = uploadDir + "/" + fileInfo.fileName();
     const QString uploadHost = policyData["upload_host"].toString();
@@ -143,7 +160,7 @@ void ImageUploader::uploadToOss(const QJsonObject &policyData, const QString &fi
 
     body += "--" + boundary + "\r\n";
     body += "Content-Disposition: form-data; name=\"file\"; filename=\"" + fileInfo.fileName().toUtf8() + "\"\r\n";
-    body += "Content-Type: application/octet-stream\r\n\r\n";
+    body += "Content-Type: " + uploadMimeType.toUtf8() + "\r\n\r\n";
     body += fileData;
     body += "\r\n";
     body += "--" + boundary + "--\r\n";
@@ -185,63 +202,70 @@ void ImageUploader::onUploadToOssFinished()
     emit uploadSuccess(ossUrl);
 }
 
-void ImageUploader::uploadToImgbb(const QString &localPath, const QString &imgbbApiKey)
+void ImageUploader::uploadToImgbb(const QString &localPath, const QString &imageUploadApiKey)
 {
     if (!QFile::exists(localPath)) {
         emit uploadError("文件不存在: " + localPath);
         return;
     }
 
-    QFileInfo fi(localPath);
-    if (fi.size() > 32 * 1024 * 1024) {
-        emit uploadError("文件超过imgbb 32MB限制: " + localPath);
-        return;
-    }
-
     currentFilePath = localPath;
-    currentImgbbApiKey = imgbbApiKey;
+    currentImageUploadApiKey = imageUploadApiKey;
     currentRetry = 0;
     retryCanceled = false;
 
-    if (!progressDialog) {
-        progressDialog = new QProgressDialog(QString(), "取消重试", 0, 0);
-        progressDialog->setAutoClose(false);
-        progressDialog->setAutoReset(false);
-        progressDialog->setMinimumDuration(0);
-        progressDialog->setWindowModality(Qt::ApplicationModal);
-        connect(progressDialog, &QProgressDialog::canceled, this, &ImageUploader::cancelUpload);
-    }
-
-    progressDialog->setLabelText("正在上传图片...");
-    progressDialog->show();
-
-    startImgbbUploadRequest();
+    startPublicUploadRequest();
 }
 
-void ImageUploader::startImgbbUploadRequest()
+void ImageUploader::startPublicUploadRequest()
 {
-    QFile file(currentFilePath);
-    if (!file.open(QIODevice::ReadOnly)) {
+    // Capture old reply before it is overwritten by the new post() below.
+    // Qt re-enters the event loop during network operations, so we must ensure
+    // the old reply's stale finished() signal cannot reach onPublicUploadFinished
+    // via the new currentReply pointer.
+    QNetworkReply *oldReply = currentReply;
+    if (oldReply) {
+        disconnect(oldReply, &QNetworkReply::finished, this, &ImageUploader::onPublicUploadFinished);
+        // Deferred lambda: abort+delete the old reply after this function returns
+        // and the event loop is re-entered (post() below resets currentReply first).
+        QTimer::singleShot(0, this, [oldReply]() {
+            oldReply->abort();
+            oldReply->deleteLater();
+        });
+    }
+
+    QFile *file = new QFile(currentFilePath);
+    if (!file->open(QIODevice::ReadOnly)) {
+        delete file;
         if (progressDialog) progressDialog->hide();
         emit uploadError("无法打开文件: " + currentFilePath);
         return;
     }
 
-    QByteArray base64Data = file.readAll().toBase64();
-    file.close();
+    QFileInfo fi(currentFilePath);
+    const QString uploadMimeType = detectUploadMimeType(fi);
 
-    QUrl url(QString("https://api.imgbb.com/1/upload?key=%1").arg(currentImgbbApiKey));
+    QHttpMultiPart *multiPart = new QHttpMultiPart(QHttpMultiPart::FormDataType);
+    QHttpPart filePart;
+    filePart.setHeader(QNetworkRequest::ContentDispositionHeader,
+                       QVariant(QString("form-data; name=\"file\"; filename=\"%1\"").arg(fi.fileName())));
+    filePart.setHeader(QNetworkRequest::ContentTypeHeader, QVariant(uploadMimeType));
+    filePart.setBodyDevice(file);
+    file->setParent(multiPart);
+    multiPart->append(filePart);
+
+    QUrl url("https://imageproxy.zhongzhuan.chat/api/upload");
     QNetworkRequest request(url);
-    request.setHeader(QNetworkRequest::ContentTypeHeader, "application/x-www-form-urlencoded");
+    request.setRawHeader("Authorization", QString("Bearer %1").arg(currentImageUploadApiKey).toUtf8());
+    request.setRawHeader("Accept", "application/json");
     request.setTransferTimeout(120000);
 
-    QByteArray body = "image=" + QUrl::toPercentEncoding(QString::fromLatin1(base64Data));
-
-    currentReply = networkManager->post(request, body);
-    connect(currentReply, &QNetworkReply::finished, this, &ImageUploader::onImgbbUploadFinished);
+    currentReply = networkManager->post(request, multiPart);
+    multiPart->setParent(currentReply);
+    connect(currentReply, &QNetworkReply::finished, this, &ImageUploader::onPublicUploadFinished);
 }
 
-void ImageUploader::onImgbbUploadFinished()
+void ImageUploader::onPublicUploadFinished()
 {
     if (!currentReply) return;
 
@@ -265,15 +289,26 @@ void ImageUploader::onImgbbUploadFinished()
         }
 
         if (progressDialog) progressDialog->hide();
-        emit uploadError(QString("imgbb上传失败(HTTP %1): %2")
+        emit uploadError(QString("图片上传失败(HTTP %1): %2")
                          .arg(statusCode)
                          .arg(response.isEmpty() ? errorString : QString::fromUtf8(response)));
         return;
     }
 
+    QString imageUrl;
     QJsonDocument doc = QJsonDocument::fromJson(response);
-    QJsonObject root = doc.object();
-    QString imageUrl = root["data"].toObject()["url"].toString();
+    if (doc.isObject()) {
+        QJsonObject root = doc.object();
+        QJsonObject dataObj = root["data"].toObject();
+        imageUrl = dataObj["url"].toString();
+        if (imageUrl.isEmpty()) {
+            imageUrl = root["url"].toString();
+        }
+        if (imageUrl.isEmpty()) {
+            imageUrl = dataObj["display_url"].toString();
+        }
+    }
+
     if (imageUrl.isEmpty()) {
         if (currentRetry < maxRetries) {
             retryUpload();
@@ -281,12 +316,12 @@ void ImageUploader::onImgbbUploadFinished()
         }
 
         if (progressDialog) progressDialog->hide();
-        emit uploadError("imgbb响应缺少url字段: " + QString(response));
+        emit uploadError("图片上传响应缺少data.url字段: " + QString::fromUtf8(response));
         return;
     }
 
     if (progressDialog) progressDialog->hide();
-    qDebug() << "[ImageUploader] imgbb upload success:" << imageUrl;
+    qDebug() << "[ImageUploader] public upload success:" << imageUrl;
     emit uploadSuccess(imageUrl);
 }
 
@@ -298,7 +333,7 @@ void ImageUploader::retryUpload()
     emit retryAttempt(currentRetry, maxRetries);
 
     if (progressDialog) {
-        progressDialog->setLabelText(QString("API Error，正在重试第 %1/%2 次...")
+        progressDialog->setLabelText(QString("图片上传失败，正在重试第 %1/%2 次...")
                                      .arg(currentRetry)
                                      .arg(maxRetries));
         progressDialog->show();
@@ -310,7 +345,7 @@ void ImageUploader::retryUpload()
             if (progressDialog) progressDialog->hide();
             return;
         }
-        startImgbbUploadRequest();
+        startPublicUploadRequest();
     });
 }
 

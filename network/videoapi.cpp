@@ -9,6 +9,7 @@
 #include <QJsonArray>
 #include <QUrlQuery>
 #include <QDebug>
+#include <QRegularExpression>
 
 VideoAPI::VideoAPI(QObject *parent)
     : QObject(parent)
@@ -21,6 +22,46 @@ VideoAPI::VideoAPI(QObject *parent)
 
 VideoAPI::~VideoAPI()
 {
+}
+
+bool VideoAPI::isQuotaInsufficientError(const QString &error)
+{
+    const QString normalized = error.toLower();
+
+    if (normalized.contains("http 429")
+        || normalized.contains("status 429")
+        || normalized.contains("code 429")
+        || QRegularExpression(QStringLiteral("(^|\\D)429(\\D|$)")).match(normalized).hasMatch()) {
+        return true;
+    }
+
+    static const QStringList quotaKeywords = {
+        "insufficient quota",
+        "quota exceeded",
+        "quota has been exceeded",
+        "insufficient balance",
+        "balance not enough",
+        "exceeded your current quota",
+        "credit balance is too low",
+        "billing hard limit"
+    };
+
+    for (const QString &keyword : quotaKeywords) {
+        if (normalized.contains(keyword)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+QString VideoAPI::normalizeUserFacingError(const QString &error)
+{
+    if (isQuotaInsufficientError(error)) {
+        return QStringLiteral("用户额度不足，请前往API平台充值");
+    }
+
+    return error;
 }
 
 void VideoAPI::prepareWanRequest(const WanVideoParams &params)
@@ -56,7 +97,7 @@ void VideoAPI::createVideo(const QString &apiKey,
                            const QString &seconds,
                            bool watermark,
                            const QString &aspectRatio,
-                           const QString &imgbbApiKey,
+                           const QString &imageUploadApiKey,
                            bool enhancePrompt,
                            bool enableUpsample,
                            const QString &apiFormat,
@@ -74,7 +115,7 @@ void VideoAPI::createVideo(const QString &apiKey,
         currentRequest.prompt = prompt;
         currentRequest.aspectRatio = aspectRatio;
         currentRequest.size = size;
-        currentRequest.imgbbApiKey = imgbbApiKey;
+        currentRequest.imageUploadApiKey = imageUploadApiKey;
         currentRequest.localImagePaths = imagePaths;
         currentRequest.uploadedUrls.clear();
         currentRequest.uploadIndex = 0;
@@ -87,9 +128,9 @@ void VideoAPI::createVideo(const QString &apiKey,
         currentRequest.privateMode = false;
         currentRequest.watermark = watermark;
 
-        // 开始上传第一张图片到 imgbb；无图片则直接文生视频
+        // 开始上传第一张图片到公共图床；无图片则直接文生视频
         if (!imagePaths.isEmpty()) {
-            imageUploader->uploadToImgbb(imagePaths.first(), imgbbApiKey);
+            imageUploader->uploadToImgbb(imagePaths.first(), imageUploadApiKey);
         } else {
             createGrokVideo(apiKey, baseUrl, model, prompt, {}, aspectRatio, size, seconds.toInt());
         }
@@ -100,14 +141,14 @@ void VideoAPI::createVideo(const QString &apiKey,
         if (useOpenAIFormat) {
             createVeo3Video(apiKey, baseUrl, model, prompt, imagePaths, size, seconds, watermark, style, privateMode);
         } else {
-            // Sora2 统一格式：需要先上传图片到 imgbb 获取 URL（有图时）
+            // Sora2 统一格式：需要先上传图片获取 URL（有图时）
             currentRequest.apiKey = apiKey;
             currentRequest.baseUrl = baseUrl;
             currentRequest.model = model;
             currentRequest.prompt = prompt;
             currentRequest.aspectRatio = aspectRatio;
             currentRequest.size = size;
-            currentRequest.imgbbApiKey = imgbbApiKey;
+            currentRequest.imageUploadApiKey = imageUploadApiKey;
             currentRequest.localImagePaths = imagePaths;
             currentRequest.uploadedUrls.clear();
             currentRequest.uploadIndex = 0;
@@ -120,7 +161,7 @@ void VideoAPI::createVideo(const QString &apiKey,
             currentRequest.watermark = watermark;
 
             if (!imagePaths.isEmpty()) {
-                imageUploader->uploadToImgbb(imagePaths.first(), imgbbApiKey);
+                imageUploader->uploadToImgbb(imagePaths.first(), imageUploadApiKey);
             } else {
                 createVeo3UnifiedVideo(apiKey, baseUrl, model, prompt, QStringList(),
                                        aspectRatio, enhancePrompt, enableUpsample,
@@ -135,19 +176,19 @@ void VideoAPI::createVideo(const QString &apiKey,
         // 注意：调用方必须先调用 prepareWanRequest 设置完整参数
         if (!currentRequest.localImagePaths.isEmpty()) {
             imageUploader->uploadToImgbb(currentRequest.localImagePaths.first(), 
-                                          currentRequest.imgbbApiKey);
+                                          currentRequest.imageUploadApiKey);
         } else {
             emit errorOccurred("WAN 模型需要上传图片");
         }
     } else {
-        // VEO3 统一格式：需要先上传图片到 imgbb 获取 URL
+        // VEO3 统一格式：需要先上传图片获取 URL
         currentRequest.apiKey = apiKey;
         currentRequest.baseUrl = baseUrl;
         currentRequest.model = model;
         currentRequest.prompt = prompt;
         currentRequest.aspectRatio = aspectRatio;
         currentRequest.size = size;
-        currentRequest.imgbbApiKey = imgbbApiKey;
+        currentRequest.imageUploadApiKey = imageUploadApiKey;
         currentRequest.localImagePaths = imagePaths;
         currentRequest.uploadedUrls.clear();
         currentRequest.uploadIndex = 0;
@@ -160,7 +201,7 @@ void VideoAPI::createVideo(const QString &apiKey,
         currentRequest.watermark = watermark;
 
         if (!imagePaths.isEmpty()) {
-            imageUploader->uploadToImgbb(imagePaths.first(), imgbbApiKey);
+            imageUploader->uploadToImgbb(imagePaths.first(), imageUploadApiKey);
         } else {
             // 无图片直接调用
             createVeo3UnifiedVideo(apiKey, baseUrl, model, prompt, QStringList(),
@@ -298,7 +339,11 @@ void VideoAPI::createVeo3UnifiedVideo(const QString &apiKey,
         jsonObj["orientation"] = orientation;
     }
     if (!duration.isEmpty()) {
-        jsonObj["duration"] = duration;
+        bool ok = false;
+        int durationVal = duration.toInt(&ok);
+        if (ok && durationVal > 0) {
+            jsonObj["duration"] = durationVal;
+        }
     }
     jsonObj["watermark"] = watermark;
     jsonObj["private"] = privateMode;
@@ -516,11 +561,16 @@ void VideoAPI::onImageUploadSuccess(const QString &url)
     currentRequest.uploadedUrls.append(url);
     currentRequest.uploadIndex++;
 
+    const int totalImages = currentRequest.localImagePaths.size();
+    if (totalImages > 0) {
+        emit imageUploadProgress(currentRequest.uploadIndex, totalImages);
+    }
+
     // 检查是否还有更多图片需要上传
     if (currentRequest.uploadIndex < currentRequest.localImagePaths.size()) {
         imageUploader->uploadToImgbb(
             currentRequest.localImagePaths[currentRequest.uploadIndex],
-            currentRequest.imgbbApiKey);
+            currentRequest.imageUploadApiKey);
     } else {
         // 所有图片上传完成，根据 targetMethod 分发
         if (currentRequest.targetMethod == "grok") {

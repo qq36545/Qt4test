@@ -56,6 +56,22 @@ bool isTempTaskId(const QString& taskId)
     return taskId.startsWith("temp_") || taskId.startsWith("temp-");
 }
 
+bool isRecoverableSubmitError(const QString& error)
+{
+    const QString normalized = error.trimmed();
+    return normalized.contains("可能已创建")
+           || normalized.contains("timeout", Qt::CaseInsensitive)
+           || normalized.contains("超时");
+}
+
+void showSora2RecoveryHint(QWidget* parent, const QString& taskId, const QString& reason)
+{
+    QMessageBox::warning(parent, "提示",
+        QString("任务已创建（%1），但%2，未自动启动轮询。\n"
+                "请前往历史记录使用\"修复任务ID\"进行恢复。")
+            .arg(taskId, reason));
+}
+
 enum class VideoResolvedState {
     CompletedLocal,
     Failed,
@@ -87,49 +103,56 @@ VideoTaskDisplayState resolveVideoTaskDisplayState(const VideoTask& task)
     displayState.canDownload = false;
     displayState.resolvedState = VideoResolvedState::Unknown;
 
+    const QString rawStatus = task.status.trimmed();
+    const QString normalizedStatus = rawStatus.toLower();
+    const QString errorDetail = task.errorMessage.trimmed();
+
     if (displayState.hasLocalFile) {
         displayState.resolvedState = VideoResolvedState::CompletedLocal;
         displayState.statusText = "✅ 已完成";
         displayState.statusIcon = "✅";
-    } else if (task.status == "failed") {
+    } else if (normalizedStatus == "failed") {
         displayState.resolvedState = VideoResolvedState::Failed;
-        displayState.statusText = "❌ 失败";
+        displayState.statusText = errorDetail.isEmpty()
+            ? "生成失败"
+            : QString("生成失败，原因是：%1").arg(errorDetail);
         displayState.statusIcon = "❌";
-    } else if (task.status == "timeout") {
+    } else if (normalizedStatus == "timeout") {
         displayState.resolvedState = VideoResolvedState::Timeout;
-        displayState.statusText = "⏱️ 超时";
-        displayState.statusIcon = "⏱️";
+        const QString timeoutReason = errorDetail.isEmpty() ? "任务超时" : errorDetail;
+        displayState.statusText = QString("生成失败，原因是：%1").arg(timeoutReason);
+        displayState.statusIcon = "❌";
     } else if (task.downloadStatus == "downloading") {
         displayState.resolvedState = VideoResolvedState::Downloading;
-        displayState.statusText = "⬇️ 下载中";
+        displayState.statusText = "下载中";
         displayState.statusIcon = "⬇️";
-    } else if (task.status == "queued" || task.status == "pending") {
+    } else if (normalizedStatus == "queued" || normalizedStatus == "pending") {
         displayState.resolvedState = VideoResolvedState::Waiting;
-        displayState.statusText = "⏳ 等待中";
+        displayState.statusText = "排队中";
         displayState.statusIcon = "⏳";
-    } else if (task.status == "processing" || task.status == "video_generating") {
+    } else if (normalizedStatus == "processing" || normalizedStatus == "video_generating") {
         displayState.resolvedState = VideoResolvedState::Processing;
-        displayState.statusText = "🔄 处理中";
+        displayState.statusText = "处理中";
         displayState.statusIcon = "🔄";
-    } else if (task.status == "completed") {
+    } else if (normalizedStatus == "completed") {
         if (task.downloadStatus == "failed") {
             displayState.resolvedState = VideoResolvedState::DownloadFailed;
-            displayState.statusText = "⚠️ 下载失败";
+            displayState.statusText = "下载失败";
             displayState.statusIcon = "⚠️";
             displayState.canDownload = !task.videoUrl.isEmpty();
         } else if (!task.videoUrl.isEmpty()) {
             displayState.resolvedState = VideoResolvedState::PendingDownload;
-            displayState.statusText = "📥 已生成待下载";
+            displayState.statusText = "已生成待下载";
             displayState.statusIcon = "📥";
             displayState.canDownload = true;
         } else {
             displayState.resolvedState = VideoResolvedState::Processing;
-            displayState.statusText = "🔄 处理中";
+            displayState.statusText = "处理中";
             displayState.statusIcon = "🔄";
         }
     } else {
         displayState.resolvedState = VideoResolvedState::Unknown;
-        displayState.statusText = task.status;
+        displayState.statusText = rawStatus.isEmpty() ? "未知状态" : rawStatus;
         displayState.statusIcon = "❔";
     }
 
@@ -287,6 +310,8 @@ VideoSingleTab::VideoSingleTab(QWidget *parent)
             this, &VideoSingleTab::onSora2CreateTaskRequested);
     connect(sora2Api, &VideoAPI::videoCreated,
             this, &VideoSingleTab::onSora2VideoCreated);
+    connect(sora2Api, &VideoAPI::imageUploadProgress,
+            this, &VideoSingleTab::onSora2ImageUploadProgress);
     connect(sora2Api, &VideoAPI::errorOccurred,
             this, &VideoSingleTab::onSora2ApiError);
 }
@@ -354,8 +379,20 @@ void VideoSingleTab::refreshApiKeys()
     sora2Page->refreshApiKeys();
 }
 
+void VideoSingleTab::setSora2Submitting(bool submitting)
+{
+    sora2Submitting = submitting;
+    if (sora2Page) {
+        sora2Page->setSubmitting(submitting);
+    }
+}
+
 void VideoSingleTab::onSora2CreateTaskRequested(const QVariantMap& payload)
 {
+    if (sora2Submitting) {
+        return;
+    }
+
     const QString prompt = payload.value("prompt").toString().trimmed();
     if (prompt.isEmpty()) {
         QMessageBox::warning(this, "提示", "请输入提示词");
@@ -429,13 +466,6 @@ void VideoSingleTab::onSora2CreateTaskRequested(const QVariantMap& payload)
                 : serverUrls.first();
     }
 
-    ImgbbKey activeImgbbKey = DBManager::instance()->getActiveImgbbKey();
-    const bool needImgbb = isImageToVideo && apiFormat == "unified";
-    if (needImgbb && activeImgbbKey.apiKey.isEmpty()) {
-        QMessageBox::warning(this, "提示", "Sora2 图生视频需要先到设置页应用临时图床密钥");
-        return;
-    }
-
     QString tempTaskId = QString("temp_%1_%2")
         .arg(QDateTime::currentMSecsSinceEpoch())
         .arg(QRandomGenerator::global()->bounded(10000));
@@ -468,9 +498,11 @@ void VideoSingleTab::onSora2CreateTaskRequested(const QVariantMap& payload)
         return;
     }
 
-    sora2CurrentTaskId = tempTaskId;
-    sora2CurrentApiKey = selectedKey.apiKey;
-    sora2CurrentBaseUrl = baseUrl;
+    sora2PendingTasks.append({tempTaskId, selectedKey.apiKey, baseUrl});
+    setSora2Submitting(true);
+    if (sora2Page) {
+        sora2Page->setStatusHint("⏳ 正在提交视频生成任务...");
+    }
 
     sora2Api->createVideo(
         selectedKey.apiKey,
@@ -483,7 +515,7 @@ void VideoSingleTab::onSora2CreateTaskRequested(const QVariantMap& payload)
         seconds,
         watermark,
         "",
-        activeImgbbKey.apiKey,
+        selectedKey.apiKey,
         true,
         true,
         apiFormat,
@@ -496,31 +528,86 @@ void VideoSingleTab::onSora2CreateTaskRequested(const QVariantMap& payload)
 
 void VideoSingleTab::onSora2VideoCreated(const QString& taskId, const QString& status)
 {
-    Q_UNUSED(status);
-
-    if (!sora2CurrentTaskId.isEmpty() && sora2CurrentTaskId != taskId) {
-        DBManager::instance()->updateTaskId(sora2CurrentTaskId, taskId);
+    setSora2Submitting(false);
+    if (sora2Page) {
+        sora2Page->clearStatusHint();
     }
 
-    sora2CurrentTaskId = taskId;
-    DBManager::instance()->updateTaskStatus(taskId, "pending", 0, "");
-
-    if (!sora2CurrentApiKey.isEmpty() && !sora2CurrentBaseUrl.isEmpty()) {
-        TaskPollManager::getInstance()->startPolling(taskId, "video_single", sora2CurrentApiKey, sora2CurrentBaseUrl, "Sora2视频");
+    QString resolvedStatus = status.trimmed();
+    if (resolvedStatus.isEmpty()) {
+        resolvedStatus = "pending";
     }
 
-    QMessageBox::information(this, "任务已提交",
-        "Sora2 视频生成任务已提交！\n\n请前往【生成历史记录】标签页查看任务状态。\n系统将自动轮询任务状态并下载完成的视频。");
+    if (sora2PendingTasks.isEmpty()) {
+        qWarning() << "[Sora2] Missing pending context for created task:" << taskId;
+        DBManager::instance()->updateTaskStatus(taskId, resolvedStatus, 0, "");
+        showSora2RecoveryHint(this, taskId, "本地上下文丢失");
+        return;
+    }
+
+    const auto context = sora2PendingTasks.takeFirst();
+
+    if (context.tempTaskId != taskId) {
+        DBManager::instance()->updateTaskId(context.tempTaskId, taskId);
+    }
+
+    DBManager::instance()->updateTaskStatus(taskId, resolvedStatus, 0, "");
+
+    if (sora2Page) {
+        sora2Page->onSubmitSuccess(taskId);
+    }
+
+    if (!context.apiKey.isEmpty() && !context.baseUrl.isEmpty()) {
+        TaskPollManager::getInstance()->startPolling(taskId, "video_single", context.apiKey, context.baseUrl, "Sora2视频");
+    } else {
+        qWarning() << "[Sora2] Missing API context for polling, task:" << taskId;
+        showSora2RecoveryHint(this, taskId, "缺少轮询所需上下文");
+    }
+}
+
+void VideoSingleTab::onSora2ImageUploadProgress(int current, int total)
+{
+    if (sora2Page) {
+        sora2Page->setStatusHint(QString("⏳ 正在上传第%1张/共%2张").arg(current).arg(total));
+        sora2Page->updateProgress(current, total,
+            QString("正在上传图片 %1/%2").arg(current).arg(total));
+    }
+    if (!sora2PendingTasks.isEmpty()) {
+        const auto &context = sora2PendingTasks.first();
+        if (!context.tempTaskId.isEmpty()) {
+            DBManager::instance()->updateTaskStatus(
+                context.tempTaskId,
+                QString("uploading_images:%1/%2").arg(current).arg(total),
+                0,
+                "");
+        }
+    }
 }
 
 void VideoSingleTab::onSora2ApiError(const QString& error)
 {
-    if (!sora2CurrentTaskId.isEmpty()) {
-        DBManager::instance()->updateTaskStatus(sora2CurrentTaskId, "failed", 0, "");
-        DBManager::instance()->updateTaskErrorMessage(sora2CurrentTaskId, error);
+    const QString userFacingError = VideoAPI::normalizeUserFacingError(error);
+    setSora2Submitting(false);
+    if (sora2Page) {
+        sora2Page->clearStatusHint();
     }
 
-    QMessageBox::critical(this, "错误", QString("Sora2 API 调用失败:\n%1").arg(error));
+    if (!sora2PendingTasks.isEmpty()) {
+        const auto context = sora2PendingTasks.takeFirst();
+        if (isRecoverableSubmitError(error)) {
+            DBManager::instance()->updateTaskStatus(context.tempTaskId, "pending", 0, "");
+            DBManager::instance()->updateTaskErrorMessage(context.tempTaskId, userFacingError);
+        } else {
+            DBManager::instance()->updateTaskStatus(context.tempTaskId, "failed", 0, "");
+            DBManager::instance()->updateTaskErrorMessage(context.tempTaskId, userFacingError);
+        }
+    }
+
+    if (sora2Page) {
+        sora2Page->onSubmitError(userFacingError);
+    }
+
+    QMessageBox::critical(this, "错误", QString("Sora2 API 调用失败:\n%1").arg(userFacingError));
 }
 
 void VideoSingleTab::loadFromTask(const VideoTask& task)
@@ -819,6 +906,10 @@ VideoSingleHistoryTab::VideoSingleHistoryTab(QWidget *parent)
     // 连接TaskPollManager的状态更新信号
     connect(TaskPollManager::getInstance(), &TaskPollManager::taskStatusUpdated,
             this, &VideoSingleHistoryTab::onTaskStatusUpdated);
+    connect(TaskPollManager::getInstance(), &TaskPollManager::taskTimeout,
+            this, &VideoSingleHistoryTab::onTaskTimeout);
+    connect(TaskPollManager::getInstance(), &TaskPollManager::taskFailed,
+            this, &VideoSingleHistoryTab::onTaskFailed);
 
     // tooltip 3秒自动消失计时器
     tooltipHideTimer = new QTimer(this);
@@ -1136,12 +1227,7 @@ void VideoSingleHistoryTab::loadHistory(int offset, int limit)
             historyTable->setItem(row, 3, promptItem);
 
             // 状态
-            QString statusText = displayState.statusText;
-            // 检测temp-ID任务
-            if (isTempTaskId(task.taskId)) {
-                statusText = "⚠️ 待恢复";
-            }
-            QTableWidgetItem *statusItem = new QTableWidgetItem(statusText);
+            QTableWidgetItem *statusItem = new QTableWidgetItem(displayState.statusText);
             if (!task.errorMessage.isEmpty()) {
                 statusItem->setToolTip(task.errorMessage);
             }
@@ -1575,6 +1661,12 @@ void VideoSingleHistoryTab::showContextMenu(const QPoint &pos)
     contextMenu.setStyleSheet("QMenu { font-size: 14px; } QMenu::item { padding: 5px 20px; }");
     QAction *copyAction = contextMenu.addAction("📋 复制");
 
+    const VideoTask task = DBManager::instance()->getTaskById(taskId);
+    QAction *copyErrorAction = nullptr;
+    if (!task.errorMessage.trimmed().isEmpty()) {
+        copyErrorAction = contextMenu.addAction("📋 复制错误详情");
+    }
+
     // 如果是 temp-ID，添加修复选项
     QAction *fixAction = nullptr;
     if (isTempTaskId(taskId)) {
@@ -1601,6 +1693,9 @@ void VideoSingleHistoryTab::showContextMenu(const QPoint &pos)
             // 可选：显示提示
             // QMessageBox::information(this, "提示", "已复制到剪贴板");
         }
+    } else if (copyErrorAction && selectedAction == copyErrorAction) {
+        QClipboard *clipboard = QApplication::clipboard();
+        clipboard->setText(task.errorMessage.trimmed());
     } else if (fixAction && selectedAction == fixAction) {
         onFixTaskId(taskId);
     }
@@ -1838,11 +1933,14 @@ void VideoSingleHistoryTab::onTaskStatusUpdated(const QString& taskId, const QSt
     }
 
     // 遍历表格，找到对应任务并更新状态、进度、勾选框和按钮可用性
+    bool rowMatched = false;
     for (int row = 0; row < historyTable->rowCount(); ++row) {
         QTableWidgetItem *taskIdItem = historyTable->item(row, 2);
         if (!taskIdItem || taskIdItem->text() != taskId) {
             continue;
         }
+
+        rowMatched = true;
 
         QTableWidgetItem *statusItem = historyTable->item(row, 4);
         if (statusItem) {
@@ -1890,6 +1988,41 @@ void VideoSingleHistoryTab::onTaskStatusUpdated(const QString& taskId, const QSt
 
         break;
     }
+
+    if (!rowMatched) {
+        refreshHistory();
+    }
+}
+
+void VideoSingleHistoryTab::onTaskTimeout(const QString& taskId)
+{
+    onTaskStatusUpdated(taskId, "timeout", 0);
+
+    if (!isVisible() || notifiedTaskFailures.contains(taskId)) {
+        return;
+    }
+
+    notifiedTaskFailures.insert(taskId);
+    QMessageBox::warning(this, "任务超时",
+        QString("任务 %1 已超时，已按失败处理，请重试。")
+            .arg(taskId));
+}
+
+void VideoSingleHistoryTab::onTaskFailed(const QString& taskId, const QString& error)
+{
+    VideoTask task = DBManager::instance()->getTaskById(taskId);
+    const QString failedStatus = task.status.trimmed().isEmpty() ? "failed" : task.status;
+    onTaskStatusUpdated(taskId, failedStatus, task.progress);
+
+    if (!isVisible() || notifiedTaskFailures.contains(taskId)) {
+        return;
+    }
+
+    notifiedTaskFailures.insert(taskId);
+    const QString message = error.trimmed().isEmpty()
+        ? QString("任务 %1 失败，请重试。").arg(taskId)
+        : QString("任务 %1 失败，请重试。\n\n原因：%2").arg(taskId, error);
+    QMessageBox::warning(this, "任务失败", message);
 }
 
 void VideoSingleHistoryTab::onApiTaskStatusUpdated(const QString& taskId, const QString& status, const QString& videoUrl, int progress)

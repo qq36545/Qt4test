@@ -19,6 +19,7 @@
 #include <QHBoxLayout>
 #include <QTextEdit>
 #include <QVariantMap>
+#include <QList>
 
 // 前向声明
 struct VideoTask;
@@ -47,10 +48,18 @@ private slots:
     void onModelChanged(int index);
     void onSora2CreateTaskRequested(const QVariantMap& payload);
     void onSora2VideoCreated(const QString& taskId, const QString& status);
+    void onSora2ImageUploadProgress(int current, int total);
     void onSora2ApiError(const QString& error);
 
 private:
+    struct Sora2PendingContext {
+        QString tempTaskId;
+        QString apiKey;
+        QString baseUrl;
+    };
+
     void setupUI();
+    void setSora2Submitting(bool submitting);
 
     QStackedWidget *stack;
     VeoGenPage *veoPage;
@@ -59,9 +68,8 @@ private:
     Sora2GenPage *sora2Page;
     QComboBox *modelCombo;
     VideoAPI *sora2Api;
-    QString sora2CurrentTaskId;
-    QString sora2CurrentApiKey;
-    QString sora2CurrentBaseUrl;
+    QList<Sora2PendingContext> sora2PendingTasks;
+    bool sora2Submitting = false;
 };
 
 // 批量视频生成 Tab
@@ -117,6 +125,8 @@ private slots:
     void onSelectAllChanged(int state);  // 全选/取消全选
     void onCheckBoxStateChanged();  // 单个勾选框状态变化
     void onTaskStatusUpdated(const QString& taskId, const QString& status, int progress);  // 任务状态更新（TaskPollManager）
+    void onTaskTimeout(const QString& taskId);  // 任务超时处理
+    void onTaskFailed(const QString& taskId, const QString& error);  // 任务失败处理
     void onApiTaskStatusUpdated(const QString& taskId, const QString& status, const QString& videoUrl, int progress);  // 任务状态更新（Veo3API）
     void onQueryError(const QString& error);  // 查询错误处理
 
@@ -149,6 +159,7 @@ private:
     QString currentRefreshingTaskId;  // 当前正在刷新的任务ID
     QTimer* tooltipHideTimer;  // 状态tooltip 3秒自动消失计时器
     bool hasShownRecoveryPrompt;  // 是否已显示过恢复提示
+    QSet<QString> notifiedTaskFailures;  // 已提示失败/超时的任务ID（防重复）
 };
 
 // 历史记录容器 Widget (4 tab)

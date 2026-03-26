@@ -16,6 +16,7 @@ class QRadioButton;
 class QButtonGroup;
 class QGridLayout;
 class QShowEvent;
+class QDialog;
 struct VideoTask;
 
 class Sora2GenPage : public QWidget
@@ -25,6 +26,16 @@ class Sora2GenPage : public QWidget
 public:
     explicit Sora2GenPage(QWidget *parent = nullptr);
     void loadFromTask(const VideoTask &task);
+    void setSubmitEnabled(bool enabled);
+    void setSubmitting(bool submitting);
+    void setStatusHint(const QString &text);
+    void clearStatusHint();
+
+    // 进度对话框相关（供外部调用）
+    void showProgressDialog();
+    void updateProgress(int current, int total, const QString &status);
+    void onSubmitSuccess(const QString &taskId);
+    void onSubmitError(const QString &error);
 
 protected:
     void changeEvent(QEvent *event) override;
@@ -43,6 +54,7 @@ private slots:
     void onSubmitClicked();
     void onApiFormatChanged();
     void onUploadImagesClicked();
+    void onAnyParameterChanged();
 
 private:
     void setupUI();
@@ -73,6 +85,8 @@ private:
     void saveSettings();
     void loadSettings();
     QString buildSettingsSnapshot() const;
+    QString calculateParamsHash() const;
+    bool checkDuplicateSubmission();
 
 private:
     QRadioButton *unifiedFormatRadio;
@@ -104,13 +118,22 @@ private:
     QCheckBox *privateCheckBox;
 
     QPushButton *submitButton;
+    QPushButton *resetButton;
+    QLabel *statusHintLabel;
+    QPushButton *clearPromptButton;
 
     QStringList uploadedImagePaths;
     int lastValidDuration = 10;
     bool syncingDuration = false;
+    bool isSubmitting = false;
     bool suppressAutoSave = false;
     bool pendingSaveSettings = false;
     QString lastSavedSettingsSnapshot;
+    QString lastSubmittedParamsHash;
+    bool suppressDuplicateWarning = false;
+    bool parametersModified = false;
+
+    QDialog *progressDialog = nullptr;
 };
 
 #endif // SORA2GENPAGE_H

@@ -28,6 +28,7 @@ GrokGenPage::GrokGenPage(QWidget *parent)
     api = new VideoAPI(this);
     connect(api, &VideoAPI::videoCreated, this, &GrokGenPage::onVideoCreated);
     connect(api, &VideoAPI::taskStatusUpdated, this, &GrokGenPage::onTaskStatusUpdated);
+    connect(api, &VideoAPI::imageUploadProgress, this, &GrokGenPage::onImageUploadProgress);
     connect(api, &VideoAPI::errorOccurred, this, &GrokGenPage::onApiError);
 
     setupUI();
@@ -229,6 +230,9 @@ void GrokGenPage::connectSignals()
 bool GrokGenPage::eventFilter(QObject *obj, QEvent *event)
 {
     if (event->type() == QEvent::MouseButtonPress) {
+        if (isSubmitting) {
+            return true;
+        }
         if (obj == thumbnailContainer) {
             QMouseEvent *mouseEvent = static_cast<QMouseEvent *>(event);
             const QPoint pos = mouseEvent->pos();
@@ -285,6 +289,19 @@ void GrokGenPage::onModelVariantChanged(int index)
     Q_UNUSED(index);
 }
 
+void GrokGenPage::setSubmitting(bool submitting)
+{
+    isSubmitting = submitting;
+
+    if (generateButton) generateButton->setEnabled(!submitting);
+    if (resetButton) resetButton->setEnabled(!submitting);
+    if (clearImagesButton) clearImagesButton->setEnabled(!submitting);
+    if (modelVariantCombo) modelVariantCombo->setEnabled(!submitting);
+    if (resolutionCombo) resolutionCombo->setEnabled(!submitting);
+    if (sizeCombo) sizeCombo->setEnabled(!submitting);
+    if (promptInput) promptInput->setReadOnly(submitting);
+}
+
 int GrokGenPage::maxReferenceImages() const
 {
     return 10;
@@ -338,6 +355,9 @@ void GrokGenPage::updateThumbnailGrid()
 
 void GrokGenPage::onUploadImagesClicked()
 {
+    if (isSubmitting) {
+        return;
+    }
     const int maxImages = maxReferenceImages();
     if (uploadedImagePaths.size() >= maxImages) {
         QMessageBox::information(this, "提示", QString("最多上传 %1 张参考图").arg(maxImages));
@@ -476,6 +496,9 @@ void GrokGenPage::resetForm()
 
 void GrokGenPage::generateVideo()
 {
+    if (isSubmitting) {
+        return;
+    }
     QString prompt = promptInput->toPlainText().trimmed();
     if (prompt.isEmpty()) {
         QMessageBox::warning(this, "提示", "请输入视频生成提示词");
@@ -554,6 +577,7 @@ void GrokGenPage::generateVideo()
 
     currentTaskId = tempTaskId;
     previewLabel->setText("⏳ 正在提交视频生成任务...");
+    setSubmitting(true);
 
     api->createVideo(
         apiKeyData.apiKey,
@@ -573,6 +597,7 @@ void GrokGenPage::generateVideo()
 void GrokGenPage::onVideoCreated(const QString &taskId, const QString &status)
 {
     Q_UNUSED(status);
+    setSubmitting(false);
     if (!currentTaskId.isEmpty() && currentTaskId != taskId) {
         DBManager::instance()->updateTaskId(currentTaskId, taskId);
     }
@@ -603,13 +628,26 @@ void GrokGenPage::onTaskStatusUpdated(const QString &taskId, const QString &stat
     Q_UNUSED(progress);
 }
 
+void GrokGenPage::onImageUploadProgress(int current, int total)
+{
+    previewLabel->setText(QString("⏳ 正在上传第%1张/共%2张").arg(current).arg(total));
+    if (!currentTaskId.isEmpty()) {
+        DBManager::instance()->updateTaskStatus(currentTaskId,
+                                                QString("uploading_images:%1/%2").arg(current).arg(total),
+                                                0,
+                                                "");
+    }
+}
+
 void GrokGenPage::onApiError(const QString &error)
 {
+    const QString userFacingError = VideoAPI::normalizeUserFacingError(error);
+    setSubmitting(false);
     if (!currentTaskId.isEmpty()) {
         DBManager::instance()->updateTaskStatus(currentTaskId, "failed", 0, "");
-        DBManager::instance()->updateTaskErrorMessage(currentTaskId, error);
+        DBManager::instance()->updateTaskErrorMessage(currentTaskId, userFacingError);
     }
-    QMessageBox::critical(this, "错误", QString("API 调用失败:\n%1").arg(error));
+    QMessageBox::critical(this, "错误", QString("API 调用失败:\n%1").arg(userFacingError));
     previewLabel->setText("💡 生成结果将在【生成历史记录】");
 }
 
