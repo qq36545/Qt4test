@@ -1,36 +1,36 @@
 {
-  "version": "1.0.2",
-  "versionCode": 103,
+  "version": "1.0.2.4",
+  "versionCode": 104,
   "updateType": "optional",
   "forceReason": "",
-  "releaseDate": "2026-03-23",
-  "releaseNotes": "1. 发布 1.0.2.2（macOS Intel 本地包 + CI 构建 Windows/macOS ARM）\n2. 统一版本来源为 version.txt\n3. 回填 windows_x64 与 macos_arm64 的真实大小和 sha256",
+  "releaseDate": "2026-03-27",
+  "releaseNotes": "1. 修复已知问题\n2. 优化用户体验",
   "minSupportedVersion": "1.0.0",
   "downloadUrls": {
     "macos_arm64": {
-      "github": "https://github.com/qq36545/Qt4test/releases/download/v1.0.2.2/ChickenAI-1.0.2.2-macos-arm64.dmg",
+      "github": "https://github.com/qq36545/Qt4test/releases/download/v1.0.2.4/ChickenAI-1.0.2.4-macos-arm64.dmg",
       "gitee": "",
       "cloudflare": ""
     },
     "macos_intel": {
-      "github": "https://github.com/qq36545/Qt4test/releases/download/v1.0.2.2/ChickenAI-1.0.2.2-macos-x86_64.dmg",
+      "github": "https://github.com/qq36545/Qt4test/releases/download/v1.0.2.4/ChickenAI-1.0.2.4-macos-x86_64.dmg",
       "gitee": "",
       "cloudflare": ""
     },
     "windows_x64": {
-      "github": "https://github.com/qq36545/Qt4test/releases/download/v1.0.2.2/ChickenAI-1.0.2.2-win64-setup.exe",
+      "github": "https://github.com/qq36545/Qt4test/releases/download/v1.0.2.4/ChickenAI-1.0.2.4-win64-setup.exe",
       "gitee": "",
       "cloudflare": ""
     }
   },
   "fileSize": {
-    "macos_arm64": 48591160,
-    "macos_intel": 47037626,
-    "windows_x64": 47285466
+    "macos_arm64": 0,
+    "macos_intel": 0,
+    "windows_x64": 0
   },
   "sha256": {
-    "macos_arm64": "89858435a6b1662ca8169465cc13fd410c039940fc0386ed5a2a43e6606468af",
-    "macos_intel": "22363f0bb2359646e8550f7efce4fec03077cca5637e1cf544f0eaef398a35f2",
-    "windows_x64": "4f3666af532f915d372cb7be09657c1fde44af08c46abbaaebe593790a5444a0"
+    "macos_arm64": "",
+    "macos_intel": "",
+    "windows_x64": ""
   }
 }
