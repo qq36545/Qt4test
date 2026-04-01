@@ -156,6 +156,7 @@ void MainWindow::setupSidebar()
     historyButton->hide();  // 隐藏历史记录按钮
     sidebarLayout->addStretch();
     sidebarLayout->addWidget(helpButton);
+    helpButton->hide();  // 隐藏使用帮助按钮
     sidebarLayout->addWidget(themeButton);
 }
 
