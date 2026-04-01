@@ -152,6 +152,7 @@ private slots:
     void onRetryDownload(const QString& taskId);
     void onRetryQuery(const QString& taskId);
     void onRegenerate(const QString& taskId);
+    void onDownloadVideo(const QString& taskId);
     void showContextMenu(const QPoint &pos);  // 显示右键菜单
     void onDeleteSelected();  // 删除选中的记录
     void onSelectAllChanged(int state);  // 全选/取消全选

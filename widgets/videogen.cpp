@@ -1569,12 +1569,15 @@ void VideoSingleHistoryTab::loadHistory(int offset, int limit)
 
             QPushButton *viewBtn = new QPushButton("查看");
             QPushButton *browseBtn = new QPushButton("浏览");
+            QPushButton *downloadBtn = new QPushButton("下载");
             QPushButton *retryDownloadBtn = new QPushButton("重新下载");
             QPushButton *refreshBtn = new QPushButton("刷新");
             QPushButton *regenerateBtn = new QPushButton("重新生成");
 
             viewBtn->setMaximumWidth(60);
             browseBtn->setMaximumWidth(60);
+            downloadBtn->setMinimumWidth(60);
+            downloadBtn->setMaximumWidth(60);
             retryDownloadBtn->setMinimumWidth(80);
             retryDownloadBtn->setMaximumWidth(80);
             refreshBtn->setMaximumWidth(60);
@@ -1589,6 +1592,13 @@ void VideoSingleHistoryTab::loadHistory(int offset, int limit)
             if (!displayState.canBrowse) {
                 browseBtn->setToolTip("本地视频不可用");
             }
+
+            bool canDownload = !task.videoUrl.trimmed().isEmpty();
+            downloadBtn->setEnabled(canDownload);
+            if (!canDownload) {
+                downloadBtn->setToolTip("该任务尚未提供视频链接");
+            }
+
             const bool showRetryDownload = shouldShowRetryDownloadButton(displayState);
             retryDownloadBtn->setVisible(showRetryDownload);
             if (!showRetryDownload) {
@@ -1605,6 +1615,9 @@ void VideoSingleHistoryTab::loadHistory(int offset, int limit)
             connect(browseBtn, &QPushButton::clicked, [this, task]() {
                 onBrowseFile(task.taskId);
             });
+            connect(downloadBtn, &QPushButton::clicked, [this, task]() {
+                onDownloadVideo(task.taskId);
+            });
             connect(retryDownloadBtn, &QPushButton::clicked, [this, task]() {
                 onRetryDownload(task.taskId);
             });
@@ -1617,6 +1630,7 @@ void VideoSingleHistoryTab::loadHistory(int offset, int limit)
 
             btnLayout->addWidget(viewBtn);
             btnLayout->addWidget(browseBtn);
+            btnLayout->addWidget(downloadBtn);
             if (showRetryDownload) {
                 btnLayout->addWidget(retryDownloadBtn);
             }
@@ -1687,12 +1701,15 @@ void VideoSingleHistoryTab::loadHistory(int offset, int limit)
 
             // 操作按钮
             QHBoxLayout* btnLayout = new QHBoxLayout();
+            btnLayout->setSpacing(2);
             QPushButton* viewBtn = new QPushButton("查看");
             QPushButton* browseBtn = new QPushButton("浏览");
-            QPushButton* retryDownloadBtn = new QPushButton("重新下载");
-            viewBtn->setMaximumWidth(60);
-            browseBtn->setMaximumWidth(60);
-            retryDownloadBtn->setMaximumWidth(60);
+            QPushButton* downloadBtn = new QPushButton("下载");
+            QPushButton* retryDownloadBtn = new QPushButton("重下");
+            viewBtn->setMaximumWidth(42);
+            browseBtn->setMaximumWidth(42);
+            downloadBtn->setMaximumWidth(42);
+            retryDownloadBtn->setMaximumWidth(42);
 
             viewBtn->setEnabled(displayState.canPlay);
             if (!displayState.canPlay) {
@@ -1702,6 +1719,13 @@ void VideoSingleHistoryTab::loadHistory(int offset, int limit)
             if (!displayState.canBrowse) {
                 browseBtn->setToolTip("本地视频不可用");
             }
+
+            bool canDownloadCard = !task.videoUrl.trimmed().isEmpty();
+            downloadBtn->setEnabled(canDownloadCard);
+            if (!canDownloadCard) {
+                downloadBtn->setToolTip("该任务尚未提供视频链接");
+            }
+
             const bool showRetryDownload = shouldShowRetryDownloadButton(displayState);
             retryDownloadBtn->setVisible(showRetryDownload);
             if (!showRetryDownload) {
@@ -1714,12 +1738,16 @@ void VideoSingleHistoryTab::loadHistory(int offset, int limit)
             connect(browseBtn, &QPushButton::clicked, [this, task]() {
                 onBrowseFile(task.taskId);
             });
+            connect(downloadBtn, &QPushButton::clicked, [this, task]() {
+                onDownloadVideo(task.taskId);
+            });
             connect(retryDownloadBtn, &QPushButton::clicked, [this, task]() {
                 onRetryDownload(task.taskId);
             });
 
             btnLayout->addWidget(viewBtn);
             btnLayout->addWidget(browseBtn);
+            btnLayout->addWidget(downloadBtn);
             if (showRetryDownload) {
                 btnLayout->addWidget(retryDownloadBtn);
             }
@@ -1935,6 +1963,49 @@ void VideoSingleHistoryTab::onRegenerate(const QString& taskId)
     } else {
         QMessageBox::critical(this, "错误", "无法获取单个视频生成标签页");
     }
+}
+
+void VideoSingleHistoryTab::onDownloadVideo(const QString& taskId)
+{
+    // 获取当前选择的密钥（重发下载需要用到）
+    if (!apiKeyCombo || apiKeyCombo->currentIndex() < 0) {
+        QMessageBox::warning(this, "错误", "请先选择一个API密钥");
+        return;
+    }
+
+    int apiKeyId = apiKeyCombo->currentData().toInt();
+    if (apiKeyId <= 0) {
+        QMessageBox::warning(this, "错误", "无效的API密钥");
+        return;
+    }
+
+    ApiKey selectedKey = DBManager::instance()->getApiKey(apiKeyId);
+    if (selectedKey.apiKey.isEmpty()) {
+        QMessageBox::warning(this, "错误", "未找到选择的API密钥");
+        return;
+    }
+
+    QString baseUrl = serverCombo->currentData().toString();
+    if (baseUrl.isEmpty()) {
+        QMessageBox::warning(this, "错误", "请选择服务器");
+        return;
+    }
+
+    // 根据taskId查询获取VideoTask
+    VideoTask task = DBManager::instance()->getTaskById(taskId);
+    if (task.videoUrl.isEmpty()) {
+        QMessageBox::warning(this, "提示", "该记录没有可用的视频链接");
+        return;
+    }
+
+    // 写入系统剪切板
+    QApplication::clipboard()->setText(task.videoUrl);
+
+    // 冒泡提示用户
+    QToolTip::showText(QCursor::pos(), "视频url链接已经在剪切板，你也可以粘贴到浏览器手动下载");
+
+    // 复用 TaskPollManager 将任务推入下载流程覆盖本地视频文件
+    TaskPollManager::getInstance()->triggerDownload(task.taskId, task.videoUrl, selectedKey.apiKey, baseUrl, task.taskType);
 }
 
 void VideoSingleHistoryTab::showContextMenu(const QPoint &pos)
